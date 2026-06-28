@@ -1,0 +1,624 @@
+import { fetchAPI } from "@/lib/api";
+import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { ChevronLeft, ChevronRight, Plus, X, Search, Calendar } from "lucide-react";
+import { format, startOfWeek, endOfWeek, eachDayOfInterval, startOfMonth, endOfMonth, isSameMonth, isSameDay } from "date-fns";
+import { es } from "date-fns/locale";
+import AdminLayout from "./AdminLayout";
+
+interface Professional { id: string; name: string; color: string; initial: string; }
+interface Client { id: string; name: string; phone: string; }
+interface Service { id: string; name: string; duration: number; price: number; }
+interface Appointment {
+  id: string; date: string; time: string; duration: number; price: number;
+  status: string; clientName: string; professionalColor: string;
+  professionalName: string; serviceName: string; notes?: string;
+}
+
+const hours = Array.from({ length: 14 }, (_, i) => `${String(i + 7).padStart(2, "0")}:00`);
+const viewModes = [{ id: "dia", label: "Día" }, { id: "semana", label: "Semana" }, { id: "mes", label: "Mes" }];
+const STATUS_COLORS: Record<string, string> = {
+  agendado: "bg-primary/20 border-primary/40 text-primary",
+  completado: "bg-emerald-500/20 border-emerald-500/40 text-emerald-400",
+  cancelado: "bg-red-500/20 border-red-500/40 text-red-400",
+};
+
+function NewTurnModal({ onClose, defaultDate, defaultTime = "10:00", onCreated }: { onClose: () => void; defaultDate: string; defaultTime?: string; onCreated: () => void }) {
+  const [professionals, setProfessionals] = useState<Professional[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
+  const [clientSearch, setClientSearch] = useState("");
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [professionalId, setProfessionalId] = useState("");
+  const [serviceId, setServiceId] = useState("");
+  const [date, setDate] = useState(defaultDate);
+  const [time, setTime] = useState(defaultTime);
+  const [price, setPrice] = useState("0");
+  const [duration, setDuration] = useState("60");
+  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    fetchAPI("/api/data/professionals").then(r => r.json()).then(setProfessionals).catch(console.error);
+    fetchAPI("/api/data/clients").then(r => r.json()).then(setClients).catch(console.error);
+    fetchAPI("/api/data/services").then(r => r.json()).then(setServices).catch(console.error);
+  }, []);
+
+  const filteredClients = clients.filter(c =>
+    c.name.toLowerCase().includes(clientSearch.toLowerCase()) || c.phone.includes(clientSearch)
+  );
+
+  const handleServiceChange = (id: string) => {
+    setServiceId(id);
+    const srv = services.find(s => s.id === id);
+    if (srv) { setPrice(String(srv.price)); setDuration(String(srv.duration)); }
+  };
+
+  const handleCreate = async () => {
+    if (!selectedClient || !professionalId || !serviceId || !date || !time) {
+      setError("Completá todos los campos obligatorios"); return;
+    }
+    setSaving(true); setError("");
+    try {
+      const res = await fetchAPI("/api/data/appointments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId: selectedClient.id, professionalId, serviceId, date, time, duration, price, notes }),
+      });
+      if (!res.ok) throw new Error();
+      onCreated();
+      onClose();
+    } catch {
+      setError("Error al crear el turno");
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+      <motion.div initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }}
+        className="bg-card border border-border rounded-sm w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <h2 className="text-sm font-semibold text-foreground">Nuevo turno</h2>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X size={16} /></button>
+        </div>
+        <div className="p-5 space-y-4">
+          {/* Client */}
+          <div>
+            <label className="text-[9px] font-bold tracking-[0.2em] uppercase text-muted-foreground block mb-1.5">Cliente *</label>
+            {selectedClient ? (
+              <div className="flex items-center justify-between p-2.5 bg-primary/10 border border-primary/30 rounded-sm">
+                <span className="text-xs text-foreground font-medium">{selectedClient.name} — {selectedClient.phone}</span>
+                <button onClick={() => { setSelectedClient(null); setClientSearch(""); }} className="text-muted-foreground hover:text-primary"><X size={12} /></button>
+              </div>
+            ) : (
+              <div>
+                <div className="relative">
+                  <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <input value={clientSearch} onChange={e => setClientSearch(e.target.value)} placeholder="Buscar cliente..."
+                    className="w-full bg-background border border-border rounded-sm pl-8 pr-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-primary" />
+                </div>
+                {clientSearch && filteredClients.length > 0 && (
+                  <div className="mt-1 border border-border rounded-sm bg-card overflow-hidden max-h-32 overflow-y-auto">
+                    {filteredClients.slice(0, 5).map(c => (
+                      <button key={c.id} onClick={() => { setSelectedClient(c); setClientSearch(""); }}
+                        className="w-full text-left px-3 py-2 text-xs hover:bg-accent/10 flex justify-between">
+                        <span className="font-medium">{c.name}</span>
+                        <span className="text-muted-foreground">{c.phone}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          {/* Service */}
+          <div>
+            <label className="text-[9px] font-bold tracking-[0.2em] uppercase text-muted-foreground block mb-1.5">Servicio *</label>
+            <select value={serviceId} onChange={e => handleServiceChange(e.target.value)}
+              className="w-full bg-background border border-border rounded-sm px-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-primary">
+              <option value="">Elegí un servicio</option>
+              {services.map(s => <option key={s.id} value={s.id}>{s.name} — ${s.price.toLocaleString("es-AR")}</option>)}
+            </select>
+          </div>
+          {/* Professional */}
+          <div>
+            <label className="text-[9px] font-bold tracking-[0.2em] uppercase text-muted-foreground block mb-1.5">Profesional *</label>
+            <select value={professionalId} onChange={e => setProfessionalId(e.target.value)}
+              className="w-full bg-background border border-border rounded-sm px-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-primary">
+              <option value="">Elegí una profesional</option>
+              {professionals.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+          {/* Date & Time */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[9px] font-bold tracking-[0.2em] uppercase text-muted-foreground block mb-1.5">Fecha *</label>
+              <input type="date" value={date} onChange={e => setDate(e.target.value)}
+                className="w-full bg-background border border-border rounded-sm px-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-primary" />
+            </div>
+            <div>
+              <label className="text-[9px] font-bold tracking-[0.2em] uppercase text-muted-foreground block mb-1.5">Hora *</label>
+              <input type="time" value={time} onChange={e => setTime(e.target.value)}
+                className="w-full bg-background border border-border rounded-sm px-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-primary" />
+            </div>
+          </div>
+          {/* Duration & Price */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[9px] font-bold tracking-[0.2em] uppercase text-muted-foreground block mb-1.5">Duración (min)</label>
+              <input type="number" value={duration} onChange={e => setDuration(e.target.value)}
+                className="w-full bg-background border border-border rounded-sm px-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-primary" />
+            </div>
+            <div>
+              <label className="text-[9px] font-bold tracking-[0.2em] uppercase text-muted-foreground block mb-1.5">Precio $</label>
+              <input type="number" value={price} onChange={e => setPrice(e.target.value)}
+                className="w-full bg-background border border-border rounded-sm px-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-primary" />
+            </div>
+          </div>
+          {/* Notes */}
+          <div>
+            <label className="text-[9px] font-bold tracking-[0.2em] uppercase text-muted-foreground block mb-1.5">Notas</label>
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Observaciones..."
+              className="w-full bg-background border border-border rounded-sm px-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-primary resize-none" />
+          </div>
+          {error && <p className="text-xs text-red-400">{error}</p>}
+        </div>
+        <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-border">
+          <button onClick={onClose} className="text-xs text-muted-foreground hover:text-foreground px-4 py-2">Cancelar</button>
+          <button onClick={handleCreate} disabled={saving}
+            className="bg-primary text-primary-foreground text-xs font-semibold px-5 py-2 rounded-sm hover:bg-primary/90 disabled:opacity-50">
+            {saving ? "Creando..." : "Crear turno"}
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function EditTurnModal({ app, onClose, onUpdated }: { app: Appointment; onClose: () => void; onUpdated: () => void }) {
+  const [status, setStatus] = useState(app.status || "agendado");
+  const [notes, setNotes] = useState(app.notes || "");
+  const [paymentMethod, setPaymentMethod] = useState((app as any).paymentMethod || "Efectivo");
+  const [saving, setSaving] = useState(false);
+
+  const handleUpdate = async () => {
+    setSaving(true);
+    try {
+      await fetchAPI(`/api/data/appointments/${app.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          status, 
+          notes,
+          paymentMethod: status === "completado" ? paymentMethod : null
+        })
+      });
+      onUpdated();
+      onClose();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+      <motion.div initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }}
+        className="bg-card border border-border rounded-sm w-full max-w-sm">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <h2 className="text-sm font-semibold text-foreground">Detalle del turno</h2>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X size={16} /></button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div>
+            <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted-foreground mb-1">Cliente</p>
+            <p className="text-sm text-foreground font-medium">{app.clientName}</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted-foreground mb-1">Servicio</p>
+              <p className="text-sm text-foreground">{app.serviceName}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted-foreground mb-1">Profesional</p>
+              <p className="text-sm text-foreground">{app.professionalName}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted-foreground mb-1">Fecha y Hora</p>
+              <p className="text-sm text-foreground">{app.date} a las {app.time}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted-foreground mb-1">Precio</p>
+              <p className="text-sm text-foreground">${app.price}</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted-foreground block mb-1.5">Estado</label>
+              <select value={status} onChange={e => setStatus(e.target.value)}
+                className="w-full bg-background border border-border rounded-sm px-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-primary">
+                <option value="agendado">Agendado</option>
+                <option value="completado">Completado</option>
+                <option value="cancelado">Cancelado</option>
+              </select>
+            </div>
+            {status === "completado" && (
+              <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}>
+                <label className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted-foreground block mb-1.5 text-emerald-500">Método de pago</label>
+                <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}
+                  className="w-full bg-background border border-emerald-500/50 rounded-sm px-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-emerald-500">
+                  <option value="Efectivo">Efectivo</option>
+                  <option value="Transferencia">Transferencia</option>
+                  <option value="Tarjeta">Tarjeta</option>
+                  <option value="Mercado Pago">Mercado Pago</option>
+                </select>
+              </motion.div>
+            )}
+          </div>
+          <div>
+            <label className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted-foreground block mb-1.5">Notas</label>
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Opcional..."
+              className="w-full bg-background border border-border rounded-sm px-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-primary resize-none" />
+          </div>
+        </div>
+        <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-border">
+          <button onClick={onClose} className="text-xs text-muted-foreground hover:text-foreground px-4 py-2">Cancelar</button>
+          <button onClick={handleUpdate} disabled={saving}
+            className="bg-primary text-primary-foreground text-xs font-semibold px-5 py-2 rounded-sm hover:bg-primary/90 disabled:opacity-50">
+            {saving ? "Guardando..." : "Guardar cambios"}
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+export default function Agenda() {
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [viewMode, setViewMode] = useState("dia");
+  const [activeProfessional, setActiveProfessional] = useState("all");
+  const [user, setUser] = useState<{id: string, name: string, role: string} | null>(null);
+  const [showModal, setShowModal] = useState(false);
+  const [selectedSlotDate, setSelectedSlotDate] = useState<string | null>(null);
+  const [selectedSlotTime, setSelectedSlotTime] = useState<string | null>(null);
+  const [editingApp, setEditingApp] = useState<Appointment | null>(null);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [professionals, setProfessionals] = useState<Professional[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchAll = async (silent = false) => {
+    if (!silent) setLoading(true);
+    try {
+      const [profsRes, appsRes] = await Promise.all([
+        fetchAPI("/api/data/professionals"),
+        fetchAPI("/api/data/appointments"),
+      ]);
+      setProfessionals(await profsRes.json());
+      setAppointments(await appsRes.json());
+    } catch (err) { console.error(err); }
+    finally { if (!silent) setLoading(false); }
+  };
+
+  useEffect(() => {
+    const userStr = localStorage.getItem("user");
+    if (userStr) {
+      const parsedUser = JSON.parse(userStr);
+      setUser(parsedUser);
+      if (parsedUser.role.toLowerCase() !== "admin") {
+        setActiveProfessional(parsedUser.id);
+      }
+    }
+    fetchAll();
+    
+    const intervalId = setInterval(() => {
+      fetchAll(true);
+    }, 15000);
+    return () => clearInterval(intervalId);
+  }, []);
+
+  const isAdmin = user?.role?.toLowerCase() === "admin";
+
+  const todayStr = currentDate.toISOString().split("T")[0];
+  const dateLabel = currentDate.toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  const dateCapitalized = dateLabel.charAt(0).toUpperCase() + dateLabel.slice(1);
+
+  const dayApps = appointments.filter(a => {
+    const matchDate = a.date === todayStr;
+    const matchProf = activeProfessional === "all" || a.professionalName === professionals.find(p => p.id === activeProfessional)?.name;
+    return matchDate && matchProf;
+  });
+
+  // Google Calendar style layout calculation
+  interface PosApp extends Appointment {
+    top: number;
+    height: number;
+    startMin: number;
+    endMin: number;
+    column: number;
+    totalColumns: number;
+  }
+
+  const appsWithPos: PosApp[] = dayApps.map(app => {
+    const [h, m] = app.time.split(":").map(Number);
+    const startMin = (h - 7) * 60 + m;
+    const endMin = startMin + app.duration;
+    return { ...app, startMin, endMin, top: (startMin / 60) * 64, height: (app.duration / 60) * 64, column: 0, totalColumns: 1 };
+  }).sort((a, b) => a.startMin - b.startMin);
+
+  const groups: PosApp[][] = [];
+  let currentGroup: PosApp[] = [];
+  let groupEnd = 0;
+
+  for (const app of appsWithPos) {
+    if (app.startMin < groupEnd) {
+      currentGroup.push(app);
+      groupEnd = Math.max(groupEnd, app.endMin);
+    } else {
+      if (currentGroup.length > 0) groups.push(currentGroup);
+      currentGroup = [app];
+      groupEnd = app.endMin;
+    }
+  }
+  if (currentGroup.length > 0) groups.push(currentGroup);
+
+  for (const group of groups) {
+    const columns: PosApp[][] = [];
+    for (const app of group) {
+      let placed = false;
+      for (let i = 0; i < columns.length; i++) {
+        const col = columns[i];
+        const lastAppInCol = col[col.length - 1];
+        if (lastAppInCol.endMin <= app.startMin) {
+          col.push(app);
+          app.column = i;
+          placed = true;
+          break;
+        }
+      }
+      if (!placed) {
+        app.column = columns.length;
+        columns.push([app]);
+      }
+    }
+    for (const app of group) {
+      app.totalColumns = columns.length;
+    }
+  }
+
+  return (
+    <AdminLayout title="Agenda" subtitle="Turnos del día"
+      actions={
+        <button onClick={() => setShowModal(true)}
+          className="flex items-center gap-2 bg-primary text-primary-foreground text-xs font-semibold tracking-wide px-4 py-2 rounded-sm hover:bg-primary/90">
+          <Plus size={13} /> Nuevo turno
+        </button>
+      }>
+      {/* Toolbar */}
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        {/* Date nav */}
+        <div className="flex items-center gap-2 bg-card border border-border rounded-sm px-3 py-2">
+          <button onClick={() => { 
+              const d = new Date(currentDate); 
+              if (viewMode === "dia") d.setDate(d.getDate() - 1);
+              else if (viewMode === "semana") d.setDate(d.getDate() - 7);
+              else d.setMonth(d.getMonth() - 1);
+              setCurrentDate(d); 
+            }}
+            className="text-muted-foreground hover:text-foreground"><ChevronLeft size={14} /></button>
+          <span className="text-xs font-medium text-foreground px-1">
+            {viewMode === "dia" ? dateCapitalized : viewMode === "semana" ? `Semana del ${format(startOfWeek(currentDate, { weekStartsOn: 1 }), "d 'de' MMM", { locale: es })}` : format(currentDate, "MMMM yyyy", { locale: es }).replace(/^\w/, c => c.toUpperCase())}
+          </span>
+          <button onClick={() => { 
+              const d = new Date(currentDate); 
+              if (viewMode === "dia") d.setDate(d.getDate() + 1);
+              else if (viewMode === "semana") d.setDate(d.getDate() + 7);
+              else d.setMonth(d.getMonth() + 1);
+              setCurrentDate(d); 
+            }}
+            className="text-muted-foreground hover:text-foreground"><ChevronRight size={14} /></button>
+        </div>
+        <button onClick={() => setCurrentDate(new Date())}
+          className="text-xs text-muted-foreground border border-border px-3 py-2 rounded-sm hover:text-foreground hover:border-primary/50">
+          Hoy
+        </button>
+        {/* View mode */}
+        <div className="flex items-center bg-card border border-border rounded-sm overflow-hidden">
+          {viewModes.map(mode => (
+            <button key={mode.id} onClick={() => setViewMode(mode.id)}
+              className={`px-3 py-2 text-xs font-medium transition-colors ${viewMode === mode.id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+              {mode.label}
+            </button>
+          ))}
+        </div>
+        {/* Professional filter */}
+        {isAdmin && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <button onClick={() => setActiveProfessional("all")}
+              className={`px-3 py-1.5 rounded-full text-[10px] font-medium border transition-all ${activeProfessional === "all" ? "bg-primary text-white border-transparent" : "border-border text-muted-foreground"}`}>
+              Todos
+            </button>
+            {professionals.map(p => (
+              <button key={p.id} onClick={() => setActiveProfessional(p.id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-medium border transition-all ${activeProfessional === p.id ? "text-white border-transparent" : "border-border text-muted-foreground"}`}
+                style={activeProfessional === p.id ? { backgroundColor: p.color } : {}}>
+                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: p.color }} />
+                {p.name.split(" ")[0]}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Calendar grid */}
+      <div className="bg-card border border-border rounded-sm overflow-hidden">
+        {loading ? (
+          <div className="py-20 text-center text-sm text-muted-foreground">Cargando turnos...</div>
+        ) : viewMode === "mes" ? (
+          <div className="flex flex-col">
+            <div className="grid grid-cols-7 border-b border-border bg-muted/20">
+              {['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'].map(d => (
+                <div key={d} className="py-2 text-center text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{d}</div>
+              ))}
+            </div>
+            <div className="grid grid-cols-7 auto-rows-[120px]">
+              {eachDayOfInterval({ start: startOfWeek(startOfMonth(currentDate), { weekStartsOn: 1 }), end: endOfWeek(endOfMonth(currentDate), { weekStartsOn: 1 }) }).map((day, i) => {
+                const dayStr = format(day, "yyyy-MM-dd");
+                const dayApps = appointments.filter(a => a.date === dayStr && (activeProfessional === "all" || a.professionalName === professionals.find(p => p.id === activeProfessional)?.name));
+                return (
+                  <div key={i} onClick={() => { setCurrentDate(day); setViewMode("dia"); }}
+                    className={`border-b border-r border-border p-1.5 overflow-y-auto cursor-pointer hover:bg-accent/10 transition-colors ${!isSameMonth(day, currentDate) ? "bg-muted/10 opacity-50" : ""}`}>
+                    <div className={`text-[10px] font-medium mb-1.5 w-6 h-6 flex items-center justify-center rounded-full ${isSameDay(day, new Date()) ? "bg-primary text-primary-foreground shadow-sm" : "text-foreground"}`}>
+                      {format(day, "d")}
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      {dayApps.map(app => {
+                        const profColor = app.professionalColor || professionals.find(p => p.name === app.professionalName)?.color || "hsl(var(--primary))";
+                        const isAgendado = app.status === "agendado" || !app.status;
+                        return (
+                          <div key={app.id} onClick={(e) => { e.stopPropagation(); setEditingApp(app); }}
+                            className={`text-[9px] px-1.5 py-1 rounded-sm truncate border shadow-sm ${!isAgendado ? STATUS_COLORS[app.status] : ""}`}
+                            style={isAgendado ? { backgroundColor: `${profColor}30`, borderColor: `${profColor}60`, color: "white" } : {}}>
+                            <span className="font-semibold">{app.time}</span> {app.clientName}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : viewMode === "semana" ? (
+          <div className="flex bg-card">
+            <div className="w-14 flex-shrink-0 border-r border-border pt-10">
+              {hours.map(h => (
+                <div key={h} className="h-16 flex items-start justify-end pr-2 pt-1"><span className="text-[10px] text-muted-foreground">{h}</span></div>
+              ))}
+            </div>
+            <div className="flex-1 grid grid-cols-7">
+              {eachDayOfInterval({ start: startOfWeek(currentDate, { weekStartsOn: 1 }), end: endOfWeek(currentDate, { weekStartsOn: 1 }) }).map((day, i) => {
+                const dayStr = format(day, "yyyy-MM-dd");
+                const dApps = appointments.filter(a => a.date === dayStr && (activeProfessional === "all" || a.professionalName === professionals.find(p => p.id === activeProfessional)?.name));
+                const dAppsWithPos = dApps.map(app => {
+                  const [h, m] = app.time.split(":").map(Number);
+                  const startMin = (h - 7) * 60 + m;
+                  return { ...app, startMin, endMin: startMin + app.duration, top: (startMin / 60) * 64, height: (app.duration / 60) * 64 };
+                }).sort((a, b) => a.startMin - b.startMin);
+                
+                return (
+                  <div key={i} className="border-r border-border relative">
+                    <div className="h-10 border-b border-border flex flex-col items-center justify-center sticky top-0 bg-card z-20">
+                      <span className="text-[9px] text-muted-foreground uppercase font-medium">{format(day, "EEE", { locale: es })}</span>
+                      <span className={`text-[11px] font-bold ${isSameDay(day, new Date()) ? "text-primary" : "text-foreground"}`}>{format(day, "d")}</span>
+                    </div>
+                    <div className="relative min-h-[896px]">
+                      <div className="absolute inset-0 flex flex-col z-0 pointer-events-none">
+                        {hours.map(h => <div key={h} className="h-16 border-b border-border/30 w-full" />)}
+                      </div>
+                      <div className="absolute inset-0 flex flex-col z-0">
+                        {hours.map((h, j) => (
+                          <div key={h} className="h-16 hover:bg-accent/5 cursor-pointer group" onClick={() => { setSelectedSlotDate(dayStr); setSelectedSlotTime(h); setShowModal(true); }} />
+                        ))}
+                      </div>
+                      {dAppsWithPos.map(app => {
+                         const isAgendado = app.status === "agendado" || !app.status;
+                         const profColor = app.professionalColor || professionals.find(p => p.name === app.professionalName)?.color || "hsl(var(--primary))";
+                         return (
+                          <div key={app.id} onClick={(e) => { e.stopPropagation(); setEditingApp(app); }}
+                            className={`absolute rounded-sm border px-1.5 py-1 flex flex-col justify-start overflow-hidden shadow-sm transition-all hover:z-10 z-10 cursor-pointer ${!isAgendado ? STATUS_COLORS[app.status] : ""}`}
+                            style={{ top: `${app.top}px`, height: `${app.height}px`, left: "2px", right: "2px", ...(isAgendado ? { backgroundColor: `${profColor}40`, borderColor: `${profColor}90`, color: "#ffffff" } : {}) }}>
+                            <p className="text-[9px] font-semibold truncate leading-tight drop-shadow-md">{app.clientName}</p>
+                            <p className="text-[8px] opacity-90 truncate leading-tight mt-0.5 drop-shadow-md">{app.serviceName}</p>
+                          </div>
+                         );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <div className="flex">
+            {/* Time column */}
+            <div className="w-16 flex-shrink-0 border-r border-border">
+              {hours.map(h => (
+                <div key={h} className="h-16 flex items-start justify-end pr-3 pt-1">
+                  <span className="text-[10px] text-muted-foreground">{h}</span>
+                </div>
+              ))}
+            </div>
+            {/* Events area */}
+            <div className="flex-1 relative bg-card min-h-[896px]">
+              {/* Background grid */}
+              <div className="absolute inset-0 pointer-events-none flex flex-col">
+                {hours.map(h => (
+                  <div key={h} className="h-16 border-b border-border/30 w-full" />
+                ))}
+              </div>
+              
+              {/* Interactive slots */}
+              <div className="absolute inset-0 flex flex-col z-0">
+                {hours.map((h, i) => (
+                  <div key={h} className="h-16 hover:bg-accent/5 cursor-pointer flex items-center justify-center group"
+                    onClick={() => { setSelectedSlotDate(todayStr); setSelectedSlotTime(h); setShowModal(true); }}>
+                    <span className="opacity-0 group-hover:opacity-100 text-[10px] text-muted-foreground">+ Nuevo turno</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Absolutely positioned events */}
+              {appsWithPos.map(app => {
+                const width = 100 / app.totalColumns;
+                const left = app.column * width;
+                const isAgendado = app.status === "agendado" || !app.status;
+                const profColor = app.professionalColor || professionals.find(p => p.name === app.professionalName)?.color || "hsl(var(--primary))";
+                
+                return (
+                  <div key={app.id}
+                    onClick={(e) => { e.stopPropagation(); setEditingApp(app); }}
+                    className={`absolute rounded-sm border px-2 py-1 flex flex-col justify-start overflow-hidden shadow-sm transition-all hover:z-10 z-10 cursor-pointer ${!isAgendado ? STATUS_COLORS[app.status] : ""}`}
+                    style={{
+                      top: `${app.top}px`,
+                      height: `${app.height}px`,
+                      left: `calc(${left}% + 4px)`,
+                      width: `calc(${width}% - 8px)`,
+                      ...(isAgendado ? {
+                        backgroundColor: `${profColor}40`,
+                        borderColor: `${profColor}90`,
+                        color: "#ffffff",
+                      } : {})
+                    }}
+                  >
+                    <p className="text-[10px] font-semibold truncate leading-tight drop-shadow-md">{app.clientName}</p>
+                    <p className="text-[9px] opacity-90 truncate leading-tight mt-0.5 drop-shadow-md">{app.serviceName}</p>
+                    <p className="text-[8px] opacity-75 truncate leading-tight mt-0.5 drop-shadow-md">{app.time} · {app.professionalName}</p>
+                  </div>
+                );
+              })}
+
+              {dayApps.length === 0 && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
+                  <div className="text-center">
+                    <Calendar size={32} className="text-muted-foreground/30 mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground">No hay turnos para este día</p>
+                    <p className="text-xs text-muted-foreground/60 mt-1">Hacé clic en cualquier hora para agregar uno</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <AnimatePresence>
+        {showModal && <NewTurnModal onClose={() => setShowModal(false)} defaultDate={selectedSlotDate || todayStr} defaultTime={selectedSlotTime || "10:00"} onCreated={fetchAll} />}
+        {editingApp && <EditTurnModal app={editingApp} onClose={() => setEditingApp(null)} onUpdated={fetchAll} />}
+      </AnimatePresence>
+    </AdminLayout>
+  );
+}

@@ -1,0 +1,26 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "VpOU-W3dWonIN2bpGbU60"
+uri = "file://artifacts/barber-mt/public/images/interior.jpg"
+type = "image"
+title = "premium urban barbershop interior dark moody lighting"
+
+[[outputs]]
+id = "ALGftQj5dvLgn3m0vb3Ws"
+uri = "file://artifacts/barber-mt/public/images/haircut.jpg"
+type = "image"
+title = "barber cutting hair with scissors premium quality"
+
+[[outputs]]
+id = "sOoEsRL7sBJlErSL8uYKA"
+uri = "file://artifacts/barber-mt/public/images/beard.jpg"
+type = "image"
+title = "barber trimming beard premium styling"
+
+[[outputs]]
+id = "9MLfhlVjwd2Up9uEDlHDg"
+uri = "file://artifacts/barber-mt/public/images/tools.jpg"
+type = "image"
+title = "barber tools scissors clippers on dark background"
