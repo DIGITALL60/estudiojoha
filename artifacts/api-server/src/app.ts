@@ -16,11 +16,30 @@ import vouchersRouter from "./routes/vouchers.js";
 
 const app = express();
 
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://localhost:5000",
+  process.env.FRONTEND_URL ?? "",
+].filter(Boolean);
+
 app.use(pinoHttp({ logger }));
-app.use(cors());
+app.use(cors({
+  origin: (origin, cb) => {
+    // Allow requests with no origin (mobile apps, curl, Railway healthcheck)
+    if (!origin) return cb(null, true);
+    if (allowedOrigins.some(o => origin.startsWith(o)) || origin.endsWith(".vercel.app")) {
+      return cb(null, true);
+    }
+    cb(new Error(`CORS: origin ${origin} not allowed`));
+  },
+  credentials: true,
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+
+// Health check for Railway
+app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
 
 // Initialize WhatsApp Baileys
 initWhatsApp().catch(err => {

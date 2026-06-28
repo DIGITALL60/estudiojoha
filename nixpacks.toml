@@ -1,0 +1,9 @@
+{
+  "providers": ["node"],
+  "buildCommand": "npm install -g pnpm && pnpm install && pnpm --filter @workspace/db... install && node artifacts/api-server/build.mjs",
+  "startCommand": "node --enable-source-maps artifacts/api-server/dist/index.mjs",
+  "variables": {
+    "NODE_ENV": "production",
+    "PORT": "5000"
+  }
+}

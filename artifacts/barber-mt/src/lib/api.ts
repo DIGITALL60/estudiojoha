@@ -1,22 +1,26 @@
 export async function fetchAPI(url: string, options: RequestInit = {}) {
   const token = localStorage.getItem("token");
-  
+
   const headers = new Headers(options.headers);
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
   }
-  
-  const response = await fetch(url, {
+
+  // In production, use the Railway API URL from env variable
+  // In dev, use relative URL (proxied by Vite)
+  const API_BASE = import.meta.env.VITE_API_URL ?? "";
+  const fullUrl = url.startsWith("/api") ? `${API_BASE}${url}` : url;
+
+  const response = await fetch(fullUrl, {
     ...options,
     headers,
   });
-  
+
   if (response.status === 401) {
-    // Optionally trigger a logout if token is expired
     localStorage.removeItem("token");
     localStorage.removeItem("user");
-    window.location.href = "/admin"; // Redirect to login
+    window.location.href = "/admin";
   }
-  
+
   return response;
 }

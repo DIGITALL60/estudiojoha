@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "set DATABASE_URL=C:\\Users\\Carlos\\Desktop\\PROYECTOS 2026\\estudiojoha-main\\estudiojoha-main\\lib\\db\\sqlite.db&& set NODE_ENV=development&& pnpm run build && pnpm run start",
+    "dev": "cross-env DATABASE_URL=../../lib/db/sqlite.db NODE_ENV=development node ./build.mjs && node --enable-source-maps ./dist/index.mjs",
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
