@@ -10,7 +10,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const dbPath = process.env.DATABASE_URL ?? path.join(__dirname, "../sqlite.db");
-const sqlite = new Database(dbPath);
+export const sqlite = new Database(dbPath);
 export const db = drizzle(sqlite, { schema });
 
 export * from "./schema";
+
