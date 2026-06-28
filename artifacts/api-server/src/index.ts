@@ -132,22 +132,23 @@ async function seedIfEmpty() {
 
     // Seed services if empty (checked independently)
     const existingSrvs = db.select().from(services).all();
-    if (existingSrvs.length === 0) {
+    if (existingSrvs.length <= 5) { db.delete(services).run(); // Force update since we are upgrading from 5 placeholders
+      db.delete(services).run(); // Delete old placeholders safely
       logger.info("Seeding services...");
       db.insert(services).values([
         // ── DEPILACIÓN DEFINITIVA - Sesiones ─────────────────────────
-        { id: randomUUID(), name: "Sesión Individual 5 min", category: "Depilación Definitiva", duration: 5, price: 0 },
-        { id: randomUUID(), name: "Sesión Individual 10 min", category: "Depilación Definitiva", duration: 10, price: 0 },
-        { id: randomUUID(), name: "Sesión Individual 15 min", category: "Depilación Definitiva", duration: 15, price: 0 },
-        { id: randomUUID(), name: "Pack x10 Sesiones de 5 min", category: "Depilación Definitiva", duration: 50, price: 0 },
-        { id: randomUUID(), name: "Pack x10 Sesiones de 10 min", category: "Depilación Definitiva", duration: 100, price: 0 },
-        { id: randomUUID(), name: "Pack x10 Sesiones de 15 min", category: "Depilación Definitiva", duration: 150, price: 0 },
-        { id: randomUUID(), name: "Bronceado Saludable", category: "Depilación Definitiva", duration: 30, price: 4000 },
+        { id: randomUUID(), name: "Sesión Individual 5 min", category: "Depi Definitiva", duration: 5, price: 0 },
+        { id: randomUUID(), name: "Sesión Individual 10 min", category: "Depi Definitiva", duration: 10, price: 0 },
+        { id: randomUUID(), name: "Sesión Individual 15 min", category: "Depi Definitiva", duration: 15, price: 0 },
+        { id: randomUUID(), name: "Pack x10 Sesiones de 5 min", category: "Depi Definitiva", duration: 50, price: 0 },
+        { id: randomUUID(), name: "Pack x10 Sesiones de 10 min", category: "Depi Definitiva", duration: 100, price: 0 },
+        { id: randomUUID(), name: "Pack x10 Sesiones de 15 min", category: "Depi Definitiva", duration: 150, price: 0 },
+        { id: randomUUID(), name: "Bronceado Saludable", category: "Depi Definitiva", duration: 30, price: 4000 },
         // ── DEPILACIÓN DEFINITIVA - Combos ────────────────────────────
-        { id: randomUUID(), name: "Combo 1: Cav completo + Tiro de cola + Media pierna + Axilas", category: "Depilación Definitiva", duration: 30, price: 19000 },
-        { id: randomUUID(), name: "Combo 2: Cav completo + Tiro de cola + Piernas completas + Axilas", category: "Depilación Definitiva", duration: 30, price: 21000 },
-        { id: randomUUID(), name: "Combo 3: Cav completo + Tiro de cola + Media pierna + Axilas + Bozo + Linea alba", category: "Depilación Definitiva", duration: 30, price: 24000 },
-        { id: randomUUID(), name: "Combo 4: Bozo + Mentón + Frente + Mandíbula/Papada", category: "Depilación Definitiva", duration: 15, price: 13000 },
+        { id: randomUUID(), name: "Combo 1: Cav completo + Tiro de cola + Media pierna + Axilas", category: "Depi Definitiva", duration: 30, price: 19000 },
+        { id: randomUUID(), name: "Combo 2: Cav completo + Tiro de cola + Piernas completas + Axilas", category: "Depi Definitiva", duration: 30, price: 21000 },
+        { id: randomUUID(), name: "Combo 3: Cav completo + Tiro de cola + Media pierna + Axilas + Bozo + Linea alba", category: "Depi Definitiva", duration: 30, price: 24000 },
+        { id: randomUUID(), name: "Combo 4: Bozo + Mentón + Frente + Mandíbula/Papada", category: "Depi Definitiva", duration: 15, price: 13000 },
         // ── DEPILACIÓN DEFINITIVA - Zonas ─────────────────────────────
         { id: randomUUID(), name: "Frente", category: "Depilación Definitiva", duration: 5, price: 5000 },
         { id: randomUUID(), name: "Entrecejo", category: "Depilación Definitiva", duration: 5, price: 3500 },
@@ -245,10 +246,10 @@ async function seedIfEmpty() {
         { id: randomUUID(), name: "Reconstrucción Uña del Pie (esculpida)", category: "Sector Pies", duration: 15, price: 4500 },
         { id: randomUUID(), name: "Retiro de otro salón + Servicio nuevo (pies)", category: "Sector Pies", duration: 15, price: 4500 },
         // ── COMBINADOS ────────────────────────────────────────────────
-        { id: randomUUID(), name: "Esmalte Tradi Manos y Pies Simultáneo (Liso)", category: "Cat�logo Eventos", duration: 60, price: 0 },
-        { id: randomUUID(), name: "Esmalte Semi Manos y Pies Simultáneo (Liso)", category: "Cat�logo Eventos", duration: 90, price: 0 },
-        { id: randomUUID(), name: "Soft Lisas + Semi Liso Pies", category: "Cat�logo Eventos", duration: 150, price: 0 },
-        { id: randomUUID(), name: "Esmalte Semi Manos y Pies Simultáneo (French)", category: "Cat�logo Eventos", duration: 90, price: 0 },
+        { id: randomUUID(), name: "Esmalte Tradi Manos y Pies Simultáneo (Liso)", category: "Cat�logo Eventos", duration: 60, price: 0 },
+        { id: randomUUID(), name: "Esmalte Semi Manos y Pies Simultáneo (Liso)", category: "Cat�logo Eventos", duration: 90, price: 0 },
+        { id: randomUUID(), name: "Soft Lisas + Semi Liso Pies", category: "Cat�logo Eventos", duration: 150, price: 0 },
+        { id: randomUUID(), name: "Esmalte Semi Manos y Pies Simultáneo (French)", category: "Cat�logo Eventos", duration: 90, price: 0 },
       ]).run();
       logger.info("Services seeded.");
     }
@@ -274,5 +275,4 @@ app.listen(port, async (err) => {
   logger.info({ port }, "Server listening");
   await seedIfEmpty();
 });
-
 
