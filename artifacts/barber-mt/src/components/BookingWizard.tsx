@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { X, CheckCircle2, ChevronDown, MapPin, Instagram, MessageCircle, Clock } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { fetchAPI } from "@/lib/api";
 
 interface Service { id: string; name: string; category: string; duration: number; price: number; }
 interface Professional { id: string; name: string; role: string; color: string; initial: string; }
@@ -33,15 +34,15 @@ export default function BookingWizard({ onClose }: BookingWizardProps) {
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
-    fetch("/api/data/services").then(r => r.json()).then(setServices).catch(console.error);
-    fetch("/api/data/professionals").then(r => r.json()).then(setProfessionals).catch(console.error);
-    fetch("/api/data/professional-services").then(r => r.json()).then(setProfessionalServices).catch(console.error);
+    fetchAPI("/api/data/services").then(r => r.json()).then(setServices).catch(console.error);
+    fetchAPI("/api/data/professionals").then(r => r.json()).then(setProfessionals).catch(console.error);
+    fetchAPI("/api/data/professional-services").then(r => r.json()).then(setProfessionalServices).catch(console.error);
   }, []);
 
   // Professional schedules
   useEffect(() => {
     if (selectedProfessional) {
-      fetch(`/api/data/schedules`)
+      fetchAPI(`/api/data/schedules`)
         .then(r => r.json())
         .then(data => {
           const filtered = data.filter((s: any) => s.professionalId === selectedProfessional.id);
@@ -56,7 +57,7 @@ export default function BookingWizard({ onClose }: BookingWizardProps) {
     if (selectedDate && selectedProfessional && selectedServices.length > 0) {
       setLoadingTimes(true);
       const totalDuration = selectedServices.reduce((acc, s) => acc + s.duration, 0);
-      fetch(`/api/bookings/availability?date=${selectedDate}&professionalId=${selectedProfessional.id}&serviceDuration=${totalDuration}`)
+      fetchAPI(`/api/bookings/availability?date=${selectedDate}&professionalId=${selectedProfessional.id}&serviceDuration=${totalDuration}`)
         .then(r => r.json())
         .then(data => {
           setAvailableTimes(data.availableTimes || []);
@@ -118,7 +119,7 @@ export default function BookingWizard({ onClose }: BookingWizardProps) {
     if (!voucherCode) return;
     setVoucherStatus("validating");
     try {
-      const res = await fetch("/api/vouchers/validate", {
+      const res = await fetchAPI("/api/vouchers/validate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code: voucherCode })
@@ -154,7 +155,7 @@ export default function BookingWizard({ onClose }: BookingWizardProps) {
         }
       }
       
-      const res = await fetch("/api/bookings", {
+      const res = await fetchAPI("/api/bookings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

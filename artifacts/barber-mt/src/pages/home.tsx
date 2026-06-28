@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import LogoIcon from "@/components/LogoIcon";
 import BookingWizard from "@/components/BookingWizard";
+import { fetchAPI } from "@/lib/api";
 
 const fadeUp: Variants = {
   hidden: { opacity: 0, y: 28 },
@@ -22,7 +23,7 @@ export default function Home() {
   const [, navigate] = useLocation();
 
   useEffect(() => {
-    fetch("/api/data/services")
+    fetchAPI("/api/data/services")
       .then(res => res.json())
       .then(data => {
         const grouped = data.reduce((acc: any, service: any) => {
