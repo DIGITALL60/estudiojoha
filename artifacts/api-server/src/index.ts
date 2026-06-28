@@ -168,12 +168,12 @@ async function seedIfEmpty() {
         { id: randomUUID(), name: "Cavado Completo", category: "Depilación Definitiva", duration: 15, price: 8000 },
         { id: randomUUID(), name: "Tiro de Cola", category: "Depilación Definitiva", duration: 15, price: 5500 },
         // ── FACIAL ────────────────────────────────────────────────────
-        { id: randomUUID(), name: "Limpieza Facial Básica (mascarilla de regalo)", category: "Facial", duration: 30, price: 26000 },
-        { id: randomUUID(), name: "Limpieza Facial Profunda con máscaras", category: "Facial", duration: 60, price: 28000 },
-        { id: randomUUID(), name: "Limpieza Facial Profunda Anti Age", category: "Facial", duration: 90, price: 35000 },
-        { id: randomUUID(), name: "Peeling Químico", category: "Facial", duration: 45, price: 35000 },
-        { id: randomUUID(), name: "Aparatología Facial (Crío Radiofrecuencia - HIMFU)", category: "Facial", duration: 60, price: 30000 },
-        { id: randomUUID(), name: "Aparatología Corporal (Crío Radiofrecuencia - HIMFU)", category: "Facial", duration: 60, price: 30000 },
+        { id: randomUUID(), name: "Limpieza Facial Básica (mascarilla de regalo)", category: "Sector Facial", duration: 30, price: 26000 },
+        { id: randomUUID(), name: "Limpieza Facial Profunda con máscaras", category: "Sector Facial", duration: 60, price: 28000 },
+        { id: randomUUID(), name: "Limpieza Facial Profunda Anti Age", category: "Sector Facial", duration: 90, price: 35000 },
+        { id: randomUUID(), name: "Peeling Químico", category: "Sector Facial", duration: 45, price: 35000 },
+        { id: randomUUID(), name: "Aparatología Facial (Crío Radiofrecuencia - HIMFU)", category: "Sector Facial", duration: 60, price: 30000 },
+        { id: randomUUID(), name: "Aparatología Corporal (Crío Radiofrecuencia - HIMFU)", category: "Sector Facial", duration: 60, price: 30000 },
         // ── CEJAS Y PESTAÑAS ──────────────────────────────────────────
         { id: randomUUID(), name: "Diseño + Perfilado de Cejas (pinza/bandas)", category: "Cejas y Pestañas", duration: 30, price: 19500 },
         { id: randomUUID(), name: "Mantenimiento de Perfilado (cada 15 días)", category: "Cejas y Pestañas", duration: 20, price: 16500 },
@@ -228,27 +228,27 @@ async function seedIfEmpty() {
         { id: randomUUID(), name: "Retiro de Softgel + Soft Nuevas", category: "Uñas", duration: 30, price: 5000 },
         { id: randomUUID(), name: "Retiro de Softgel de otro salón + Calcio", category: "Uñas", duration: 75, price: 18000 },
         // ── PIES - Belleza Básica ─────────────────────────────────────
-        { id: randomUUID(), name: "Belleza de Pies Básica (sin esmaltado)", category: "Pies", duration: 30, price: 17000 },
-        { id: randomUUID(), name: "Belleza de Pies Básica + Esmaltado Tradi Liso", category: "Pies", duration: 45, price: 18500 },
-        { id: randomUUID(), name: "Belleza de Pies Básica + Esmaltado Tradi Liso OPI", category: "Pies", duration: 45, price: 20000 },
-        { id: randomUUID(), name: "Belleza de Pies Básica + Esmaltado Tradi French", category: "Pies", duration: 45, price: 21000 },
-        { id: randomUUID(), name: "Belleza de Pies Básica + Esmaltado Tradi French OPI", category: "Pies", duration: 60, price: 22000 },
-        { id: randomUUID(), name: "Belleza de Pies Básica + Esmaltado Semi Liso", category: "Pies", duration: 60, price: 20000 },
-        { id: randomUUID(), name: "Belleza de Pies Básica + Esmaltado Semi French", category: "Pies", duration: 60, price: 21000 },
+        { id: randomUUID(), name: "Belleza de Pies Básica (sin esmaltado)", category: "Sector Pies", duration: 30, price: 17000 },
+        { id: randomUUID(), name: "Belleza de Pies Básica + Esmaltado Tradi Liso", category: "Sector Pies", duration: 45, price: 18500 },
+        { id: randomUUID(), name: "Belleza de Pies Básica + Esmaltado Tradi Liso OPI", category: "Sector Pies", duration: 45, price: 20000 },
+        { id: randomUUID(), name: "Belleza de Pies Básica + Esmaltado Tradi French", category: "Sector Pies", duration: 45, price: 21000 },
+        { id: randomUUID(), name: "Belleza de Pies Básica + Esmaltado Tradi French OPI", category: "Sector Pies", duration: 60, price: 22000 },
+        { id: randomUUID(), name: "Belleza de Pies Básica + Esmaltado Semi Liso", category: "Sector Pies", duration: 60, price: 20000 },
+        { id: randomUUID(), name: "Belleza de Pies Básica + Esmaltado Semi French", category: "Sector Pies", duration: 60, price: 21000 },
         // ── PIES - Premium ────────────────────────────────────────────
-        { id: randomUUID(), name: "Pies Premium (EXF + Cremas + Torno) sin esmaltado", category: "Pies", duration: 60, price: 21000 },
-        { id: randomUUID(), name: "Pies Premium + Esmaltado Tradi Liso", category: "Pies", duration: 75, price: 22000 },
-        { id: randomUUID(), name: "Pies Premium + Esmaltado Tradi French", category: "Pies", duration: 90, price: 23000 },
-        { id: randomUUID(), name: "Pies Premium + Esmaltado Semi Liso", category: "Pies", duration: 75, price: 23000 },
-        { id: randomUUID(), name: "Pies Premium + Esmaltado Semi French", category: "Pies", duration: 90, price: 24000 },
-        { id: randomUUID(), name: "Premium Adicional al Servicio Básico (EXF + Crema + Torno en talón)", category: "Pies", duration: 20, price: 11000 },
-        { id: randomUUID(), name: "Reconstrucción Uña del Pie (esculpida)", category: "Pies", duration: 15, price: 4500 },
-        { id: randomUUID(), name: "Retiro de otro salón + Servicio nuevo (pies)", category: "Pies", duration: 15, price: 4500 },
+        { id: randomUUID(), name: "Pies Premium (EXF + Cremas + Torno) sin esmaltado", category: "Sector Pies", duration: 60, price: 21000 },
+        { id: randomUUID(), name: "Pies Premium + Esmaltado Tradi Liso", category: "Sector Pies", duration: 75, price: 22000 },
+        { id: randomUUID(), name: "Pies Premium + Esmaltado Tradi French", category: "Sector Pies", duration: 90, price: 23000 },
+        { id: randomUUID(), name: "Pies Premium + Esmaltado Semi Liso", category: "Sector Pies", duration: 75, price: 23000 },
+        { id: randomUUID(), name: "Pies Premium + Esmaltado Semi French", category: "Sector Pies", duration: 90, price: 24000 },
+        { id: randomUUID(), name: "Premium Adicional al Servicio Básico (EXF + Crema + Torno en talón)", category: "Sector Pies", duration: 20, price: 11000 },
+        { id: randomUUID(), name: "Reconstrucción Uña del Pie (esculpida)", category: "Sector Pies", duration: 15, price: 4500 },
+        { id: randomUUID(), name: "Retiro de otro salón + Servicio nuevo (pies)", category: "Sector Pies", duration: 15, price: 4500 },
         // ── COMBINADOS ────────────────────────────────────────────────
-        { id: randomUUID(), name: "Esmalte Tradi Manos y Pies Simultáneo (Liso)", category: "Combinados", duration: 60, price: 0 },
-        { id: randomUUID(), name: "Esmalte Semi Manos y Pies Simultáneo (Liso)", category: "Combinados", duration: 90, price: 0 },
-        { id: randomUUID(), name: "Soft Lisas + Semi Liso Pies", category: "Combinados", duration: 150, price: 0 },
-        { id: randomUUID(), name: "Esmalte Semi Manos y Pies Simultáneo (French)", category: "Combinados", duration: 90, price: 0 },
+        { id: randomUUID(), name: "Esmalte Tradi Manos y Pies Simultáneo (Liso)", category: "Cat�logo Eventos", duration: 60, price: 0 },
+        { id: randomUUID(), name: "Esmalte Semi Manos y Pies Simultáneo (Liso)", category: "Cat�logo Eventos", duration: 90, price: 0 },
+        { id: randomUUID(), name: "Soft Lisas + Semi Liso Pies", category: "Cat�logo Eventos", duration: 150, price: 0 },
+        { id: randomUUID(), name: "Esmalte Semi Manos y Pies Simultáneo (French)", category: "Cat�logo Eventos", duration: 90, price: 0 },
       ]).run();
       logger.info("Services seeded.");
     }
@@ -274,4 +274,5 @@ app.listen(port, async (err) => {
   logger.info({ port }, "Server listening");
   await seedIfEmpty();
 });
+
 

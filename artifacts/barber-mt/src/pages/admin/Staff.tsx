@@ -1,7 +1,7 @@
 import { fetchAPI } from "@/lib/api";
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Star, UserCog, Mail, Phone, Clock, X, Check, Save, AlertCircle, Percent } from "lucide-react";
+import { Plus, Star, UserCog, Mail, Phone, Clock, X, Check, Save, AlertCircle, Percent, Trash2 } from "lucide-react";
 import AdminLayout from "./AdminLayout";
 
 interface Professional {
@@ -285,6 +285,17 @@ export default function Staff() {
     }
   };
 
+  const handleDelete = async (member: Professional) => {
+    if (!window.confirm(`¿Eliminar a ${member.name} del staff? Esta acción no se puede deshacer.`)) return;
+    try {
+      const res = await fetchAPI(`/api/data/professionals/${member.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
+      setMembers(prev => prev.filter(m => m.id !== member.id));
+    } catch {
+      alert("No se pudo eliminar el profesional. Verificá la conexión.");
+    }
+  };
+
   const handleNewStaff = () => {
     setEditing({
       id: "",
@@ -349,12 +360,24 @@ export default function Staff() {
                     </div>
                   </div>
                 </div>
-                <button
-                  onClick={() => setEditing(member)}
-                  className="opacity-0 group-hover:opacity-100 w-7 h-7 flex items-center justify-center rounded-sm text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all"
-                >
-                  <UserCog size={13} />
-                </button>
+                <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-all">
+                  <button
+                    onClick={() => setEditing(member)}
+                    className="w-7 h-7 flex items-center justify-center rounded-sm text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all"
+                    title="Editar"
+                  >
+                    <UserCog size={13} />
+                  </button>
+                  {member.role !== "Admin" && (
+                    <button
+                      onClick={() => handleDelete(member)}
+                      className="w-7 h-7 flex items-center justify-center rounded-sm text-muted-foreground hover:text-red-400 hover:bg-red-400/10 transition-all"
+                      title="Eliminar"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Info */}
