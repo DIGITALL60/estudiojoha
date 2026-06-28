@@ -116,9 +116,10 @@ function initSchema() {
 
 async function seedIfEmpty() {
   try {
-    const existing = db.select().from(professionals).all();
-    if (existing.length === 0) {
-      logger.info("Database is empty - seeding initial data...");
+    // Seed professionals if empty
+    const existingProfs = db.select().from(professionals).all();
+    if (existingProfs.length === 0) {
+      logger.info("Seeding professionals...");
       db.insert(professionals).values([
         { id: randomUUID(), name: "Estudio JohaMolinero", role: "Admin", color: "#7c3aed", initial: "EJ", email: "estudiojminterno2@gmail.com", phone: "5493510000000", username: "admin", password: "123456789" },
         { id: randomUUID(), name: "Guada García", role: "Staff", color: "#db2777", initial: "GG", email: "guada@example.com", phone: "5493510000001" },
@@ -126,6 +127,13 @@ async function seedIfEmpty() {
         { id: randomUUID(), name: "Ángela Alcaraz", role: "Staff", color: "#d97706", initial: "AA", email: "angela@example.com", phone: "5493510000003" },
         { id: randomUUID(), name: "Depilación Definitiva", role: "Staff", color: "#16a34a", initial: "DD", email: "depi@example.com", phone: "5493510000004" },
       ]).run();
+      logger.info("Professionals seeded. Admin: admin / 123456789");
+    }
+
+    // Seed services if empty (checked independently)
+    const existingSrvs = db.select().from(services).all();
+    if (existingSrvs.length === 0) {
+      logger.info("Seeding services...");
       db.insert(services).values([
         { id: randomUUID(), name: "Manicuría Simple", category: "Uñas", duration: 45, price: 4500 },
         { id: randomUUID(), name: "Esmaltado Semipermanente", category: "Uñas", duration: 90, price: 6000 },
@@ -133,12 +141,13 @@ async function seedIfEmpty() {
         { id: randomUUID(), name: "Limpieza Facial Básica", category: "Facial", duration: 60, price: 5000 },
         { id: randomUUID(), name: "Limpieza Facial Profunda", category: "Facial", duration: 90, price: 7200 },
       ]).run();
-      logger.info("Initial seed complete. Admin user: admin / 123456789");
+      logger.info("Services seeded.");
     }
   } catch (err) {
     logger.error({ err }, "Auto-seed failed");
   }
 }
+
 
 const rawPort = process.env["PORT"] || "5000";
 const port = Number(rawPort);
