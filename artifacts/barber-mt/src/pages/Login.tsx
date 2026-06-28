@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { useLocation } from "wouter";
-import { Lock, User, UserCog, ChevronRight, AlertCircle } from "lucide-react";
+import { Lock, User, ChevronRight, AlertCircle } from "lucide-react";
 import LogoIcon from "@/components/LogoIcon";
+import { fetchAPI } from "@/lib/api";
+
 
 export default function Login() {
   const [username, setUsername] = useState("");
@@ -22,7 +24,8 @@ export default function Login() {
     setError("");
 
     try {
-      const res = await fetch("/api/auth/login", {
+      const res = await fetchAPI("/api/auth/login", {
+
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
