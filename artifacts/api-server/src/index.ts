@@ -1,7 +1,14 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { db, professionals, services } from "@workspace/db";
+import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { randomUUID } from "crypto";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 
 async function seedIfEmpty() {
   try {
@@ -39,5 +46,16 @@ app.listen(port, async (err) => {
   }
 
   logger.info({ port }, "Server listening");
+
+  // Run DB migrations first (creates tables if they don't exist)
+  try {
+    const migrationsFolder = path.join(__dirname, "../../lib/db/drizzle");
+    migrate(db, { migrationsFolder });
+    logger.info("Database migrations applied successfully");
+  } catch (err) {
+    logger.error({ err }, "Database migration failed");
+  }
+
   await seedIfEmpty();
+
 });
