@@ -134,8 +134,9 @@ export default function Home() {
           <img 
             src="/hero-premium.jpg" 
             alt="Estudio Joha Molinero" 
-            className="absolute inset-0 w-full h-full object-cover opacity-40"
+            className="absolute inset-0 w-full h-full object-cover opacity-30 mix-blend-luminosity"
           />
+          <div className="absolute inset-0 bg-gradient-to-br from-[hsl(270_20%_8%)] via-[hsl(300_10%_6%)] to-[hsl(340_15%_5%)] opacity-70 mix-blend-multiply" />
           <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] rounded-full bg-primary/20 blur-[120px]" />
           <div className="absolute bottom-0 right-0 w-[400px] h-[400px] rounded-full bg-[hsl(300_30%_30%)]/20 blur-[100px]" />
           <div

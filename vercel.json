@@ -4,14 +4,10 @@
   "outputDirectory": "artifacts/barber-mt/dist/public",
   "installCommand": "npm install -g pnpm && pnpm install",
   "framework": null,
-  "routes": [
+  "rewrites": [
     {
-      "src": "^/assets/(.*)",
-      "dest": "/assets/$1"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/index.html"
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ],
   "headers": [
