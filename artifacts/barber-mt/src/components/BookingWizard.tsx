@@ -48,9 +48,8 @@ export default function BookingWizard({ onClose, initialServiceId, publicInfo: p
   const [success, setSuccess] = useState(false);
   const [initialized, setInitialized] = useState(false);
 
-  // Oferta de turno alternativo con 5% OFF
-  const [altTimeOffer, setAltTimeOffer] = useState<string | null>(null);
-  const [altOfferDismissed, setAltOfferDismissed] = useState(false);
+  // Turno especial del día con 5% OFF
+  const [featuredSlotDismissed, setFeaturedSlotDismissed] = useState(false);
   const [altDiscountApplied, setAltDiscountApplied] = useState(false);
 
   const loadData = () => {
@@ -113,6 +112,8 @@ export default function BookingWizard({ onClose, initialServiceId, publicInfo: p
         .then(data => {
           setAvailableTimes(data.availableTimes || []);
           setSelectedTime("");
+          setFeaturedSlotDismissed(false);
+          setAltDiscountApplied(false);
         })
         .catch(console.error)
         .finally(() => setLoadingTimes(false));
@@ -504,103 +505,128 @@ export default function BookingWizard({ onClose, initialServiceId, publicInfo: p
                 </div>
 
                 {selectedDate && (
-                  <div className="pt-4">
+                  <div className="pt-4 space-y-4">
                     {loadingTimes ? (
                       <p className="text-xs text-muted-foreground animate-pulse text-center py-4">Cargando horarios...</p>
                     ) : availableTimes.length === 0 ? (
                       <p className="text-xs text-muted-foreground text-center py-4">No hay horarios disponibles para esta fecha.</p>
-                    ) : (
-                      <div className="grid grid-cols-3 gap-3">
-                        {availableTimes.map(t => (
-                          <button
-                            key={t}
-                            onClick={() => {
-                              setSelectedTime(t);
-                              setAltOfferDismissed(false);
-                              setAltDiscountApplied(false);
-                              // Buscar un turno alternativo (siguiente o anterior disponible)
-                              const idx = availableTimes.indexOf(t);
-                              const alt = availableTimes[idx + 1] ?? availableTimes[idx - 1] ?? null;
-                              setAltTimeOffer(alt !== t ? alt : null);
-                            }}
-                            className={`py-3 rounded-xl text-sm font-medium border transition-all ${
-                              selectedTime === t ? "bg-primary border-primary text-primary-foreground" : "bg-transparent border-border/50 hover:border-primary/50 text-foreground"
-                            }`}
-                          >
-                            {t}
-                          </button>
-                        ))}
-                      </div>
+                    ) : (() => {
+                      // Elegir el turno especial: el que está al ~40% de la lista (media mañana)
+                      const featuredIdx = Math.max(0, Math.floor(availableTimes.length * 0.4));
+                      const featuredSlot = availableTimes[featuredIdx];
 
-                      {/* Banner de oferta de turno alternativo */}
-                      <AnimatePresence>
-                        {selectedTime && altTimeOffer && !altOfferDismissed && (
-                          <motion.div
-                            initial={{ opacity: 0, y: 12, scale: 0.97 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, y: 8, scale: 0.97 }}
-                            transition={{ duration: 0.3, ease: "easeOut" }}
-                            className="mt-4 rounded-2xl border border-primary/40 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent p-4 relative overflow-hidden"
-                          >
-                            {/* Brillo decorativo */}
-                            <div className="absolute -top-4 -right-4 w-24 h-24 bg-primary/10 rounded-full blur-xl pointer-events-none" />
+                      return (
+                        <>
+                          {/* Card de turno especial con 5% OFF */}
+                          <AnimatePresence>
+                            {!featuredSlotDismissed && (
+                              <motion.div
+                                initial={{ opacity: 0, y: -10, scale: 0.97 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                exit={{ opacity: 0, y: -6, scale: 0.97 }}
+                                transition={{ duration: 0.35, ease: "easeOut" }}
+                                className="rounded-2xl border border-primary/50 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent p-4 relative overflow-hidden"
+                              >
+                                {/* Destellos decorativos */}
+                                <div className="absolute -top-6 -right-6 w-28 h-28 bg-primary/15 rounded-full blur-2xl pointer-events-none" />
+                                <div className="absolute bottom-0 left-0 w-16 h-16 bg-primary/10 rounded-full blur-xl pointer-events-none" />
 
-                            <div className="flex items-start gap-3">
-                              <div className="w-9 h-9 rounded-xl bg-primary/20 flex items-center justify-center flex-shrink-0 mt-0.5">
-                                <Sparkles size={16} className="text-primary" />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <span className="text-xs font-bold text-primary uppercase tracking-wide">Oferta especial</span>
-                                  <span className="text-[10px] font-bold bg-primary text-primary-foreground px-1.5 py-0.5 rounded-full flex items-center gap-1">
-                                    <Tag size={8} /> 5% OFF
-                                  </span>
+                                <button
+                                  onClick={() => setFeaturedSlotDismissed(true)}
+                                  className="absolute top-3 right-3 text-muted-foreground hover:text-foreground transition-colors"
+                                  aria-label="Cerrar oferta"
+                                >
+                                  <X size={14} />
+                                </button>
+
+                                <div className="flex items-center gap-3 mb-3">
+                                  <div className="w-8 h-8 rounded-xl bg-primary/25 flex items-center justify-center flex-shrink-0">
+                                    <Sparkles size={14} className="text-primary" />
+                                  </div>
+                                  <div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[11px] font-bold text-primary uppercase tracking-wider">Turno especial del día</span>
+                                      <span className="text-[10px] font-black bg-primary text-primary-foreground px-2 py-0.5 rounded-full flex items-center gap-1">
+                                        <Tag size={8} /> 5% OFF
+                                      </span>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground mt-0.5">¡Solo por hoy en este horario!</p>
+                                  </div>
                                 </div>
-                                <p className="text-sm text-foreground font-medium leading-snug">
-                                  ¿Podés a las <span className="text-primary font-bold">{altTimeOffer}</span>?
-                                </p>
-                                <p className="text-xs text-muted-foreground mt-0.5">
-                                  Ese horario nos viene perfecto y te damos 5% de descuento 🎁
-                                </p>
-                                <div className="flex gap-2 mt-3">
+
+                                <div className="flex items-center justify-between gap-3">
+                                  <div>
+                                    <p className="text-2xl font-serif font-bold text-foreground">{featuredSlot}</p>
+                                    <p className="text-xs text-muted-foreground">
+                                      Reservá este turno y pagás {(selectedServices.reduce((a,s)=>a+s.price,0)*0.95).toLocaleString("es-AR", {maximumFractionDigits:0})} en vez de ${selectedServices.reduce((a,s)=>a+s.price,0).toLocaleString("es-AR")}
+                                    </p>
+                                  </div>
                                   <button
                                     onClick={() => {
-                                      setSelectedTime(altTimeOffer);
+                                      setSelectedTime(featuredSlot);
                                       setAltDiscountApplied(true);
-                                      setAltOfferDismissed(true);
+                                      setFeaturedSlotDismissed(true);
                                     }}
-                                    className="flex-1 bg-primary text-primary-foreground text-xs font-bold py-2 px-3 rounded-xl hover:bg-primary/90 transition-colors"
+                                    className="flex-shrink-0 bg-primary text-primary-foreground text-xs font-bold py-2.5 px-4 rounded-xl hover:bg-primary/90 transition-all hover:scale-105 active:scale-95"
                                   >
-                                    ¡Sí, me quedo con las {altTimeOffer}!
-                                  </button>
-                                  <button
-                                    onClick={() => setAltOfferDismissed(true)}
-                                    className="text-xs text-muted-foreground border border-border/50 px-3 py-2 rounded-xl hover:border-primary/30 transition-colors"
-                                  >
-                                    No, gracias
+                                    ¡Lo tomo!
                                   </button>
                                 </div>
-                              </div>
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
 
-                      {/* Confirmación de descuento aplicado */}
-                      <AnimatePresence>
-                        {altDiscountApplied && (
-                          <motion.div
-                            initial={{ opacity: 0, y: 8 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0 }}
-                            className="mt-3 flex items-center gap-2 text-xs text-emerald-400 bg-emerald-400/10 border border-emerald-400/20 rounded-xl px-3 py-2"
-                          >
-                            <CheckCircle2 size={13} />
-                            ¡5% de descuento aplicado por el cambio de horario!
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    )}
+                          {/* Confirmación de descuento aplicado */}
+                          <AnimatePresence>
+                            {altDiscountApplied && (
+                              <motion.div
+                                initial={{ opacity: 0, y: -6 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0 }}
+                                className="flex items-center gap-2 text-xs text-emerald-400 bg-emerald-400/10 border border-emerald-400/20 rounded-xl px-3 py-2.5"
+                              >
+                                <CheckCircle2 size={13} />
+                                <span>¡5% de descuento aplicado! Turno: <strong>{selectedTime}</strong></span>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+
+                          {/* Grilla de todos los turnos */}
+                          <div className="grid grid-cols-3 gap-3">
+                            {availableTimes.map(t => {
+                              const isFeatured = t === featuredSlot && !featuredSlotDismissed;
+                              const isSelected = selectedTime === t;
+                              return (
+                                <button
+                                  key={t}
+                                  onClick={() => {
+                                    setSelectedTime(t);
+                                    if (t === featuredSlot && !featuredSlotDismissed) {
+                                      setAltDiscountApplied(true);
+                                      setFeaturedSlotDismissed(true);
+                                    } else if (t !== featuredSlot) {
+                                      setAltDiscountApplied(false);
+                                    }
+                                  }}
+                                  className={`relative py-3 rounded-xl text-sm font-medium border transition-all ${
+                                    isSelected
+                                      ? "bg-primary border-primary text-primary-foreground"
+                                      : isFeatured
+                                      ? "border-primary/60 bg-primary/8 text-primary hover:bg-primary/15"
+                                      : "bg-transparent border-border/50 hover:border-primary/50 text-foreground"
+                                  }`}
+                                >
+                                  {isFeatured && (
+                                    <span className="absolute -top-2 left-1/2 -translate-x-1/2 text-[8px] font-black bg-primary text-primary-foreground px-1.5 py-0.5 rounded-full whitespace-nowrap">5% OFF</span>
+                                  )}
+                                  {t}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
                 )}
               </div>
