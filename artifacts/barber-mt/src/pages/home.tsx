@@ -135,9 +135,8 @@ export default function Home() {
             className="absolute inset-0 bg-cover bg-center bg-no-repeat"
             style={{ backgroundImage: "url('/studio-alt.jpg')" }}
           />
-          <div className="absolute inset-0 bg-background/80" />
-          <div className="absolute inset-0 bg-gradient-to-br from-[hsl(270_20%_8%)]/80 via-[hsl(300_10%_6%)]/80 to-[hsl(340_15%_5%)]/90" />
-          <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] rounded-full bg-primary/15 blur-[120px]" />
+          <div className="absolute inset-0 bg-gradient-to-br from-[hsl(270_20%_8%)]/60 via-[hsl(300_10%_6%)]/70 to-[hsl(340_15%_5%)]/90" />
+          <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] rounded-full bg-primary/20 blur-[120px]" />
           <div className="absolute bottom-0 right-0 w-[400px] h-[400px] rounded-full bg-[hsl(300_30%_30%)]/20 blur-[100px]" />
           <div
             className="absolute inset-0 opacity-[0.035]"
