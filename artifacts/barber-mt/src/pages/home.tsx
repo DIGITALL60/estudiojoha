@@ -133,7 +133,7 @@ export default function Home() {
         <div className="absolute inset-0 z-0">
           <div 
             className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-            style={{ backgroundImage: "url('/studio-alt.jpg')" }}
+            style={{ backgroundImage: "url('/hero-premium.jpg')" }}
           />
           <div className="absolute inset-0 bg-gradient-to-br from-[hsl(270_20%_8%)]/60 via-[hsl(300_10%_6%)]/70 to-[hsl(340_15%_5%)]/90" />
           <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] rounded-full bg-primary/20 blur-[120px]" />
@@ -325,7 +325,7 @@ export default function Home() {
       <section className="relative w-full h-[60vh] min-h-[400px] flex items-center justify-center overflow-hidden border-y border-border/40">
         <div 
           className="absolute inset-0 bg-cover bg-center bg-no-repeat bg-fixed"
-          style={{ backgroundImage: "url('/studio-alt.jpg')" }}
+          style={{ backgroundImage: "url('/hero-premium.jpg')" }}
         />
         <div className="absolute inset-0 bg-background/50 backdrop-blur-[2px]" />
         <div className="absolute inset-0 bg-gradient-to-t from-background via-background/20 to-background" />
