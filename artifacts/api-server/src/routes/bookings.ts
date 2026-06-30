@@ -16,7 +16,6 @@ router.post("/", validate(createBookingSchema), async (req, res) => {
     const { client, appointment } = req.body;
 
     const appointmentId = randomUUID();
-    let finalClientId = "";
 
     const availability = await isTimeSlotAvailable(
       appointment.date,
@@ -28,79 +27,57 @@ router.post("/", validate(createBookingSchema), async (req, res) => {
       return res.status(409).json({ error: availability.reason || "Horario no disponible" });
     }
 
-    await db.transaction(async (tx) => {
-      // 1. Find or create client
-      let existingClient = await tx
-        .select()
-        .from(clients)
-        .where(eq(clients.phone, client.phone))
-        .limit(1);
+    // 1. Find or create client
+    const existingClients = db.select().from(clients).where(eq(clients.phone, client.phone)).all();
+    const existingClient = existingClients[0];
+    let clientId = existingClient?.id;
 
-      let clientId = existingClient[0]?.id;
-
-      if (!clientId) {
-        clientId = randomUUID();
-        await tx.insert(clients).values({
-          id: clientId,
-          name: client.name,
-          phone: client.phone,
-          birthday: client.birthday || null,
-          createdAt: new Date(),
-        });
-      } else {
-        // Update birthday if provided and missing
-        if (client.birthday && !existingClient[0].birthday) {
-          await tx
-            .update(clients)
-            .set({ birthday: client.birthday })
-            .where(eq(clients.id, clientId));
-        }
-      }
-      
-      finalClientId = clientId;
-
-      // 2. Create appointment
-      let finalNotes = appointment.notes || "";
-      if (appointment.voucherCode) {
-        finalNotes = finalNotes ? `${finalNotes}\n(Voucher usado: ${appointment.voucherCode})` : `(Voucher usado: ${appointment.voucherCode})`;
-      }
-
-      await tx.insert(appointments).values({
-        id: appointmentId,
-        clientId,
-        professionalId: appointment.professionalId,
-        serviceId: appointment.serviceId,
-        date: appointment.date,
-        time: appointment.time,
-        duration: appointment.duration,
-        price: appointment.price,
-        status: "agendado",
-        notes: finalNotes || null,
+    if (!clientId) {
+      clientId = randomUUID();
+      db.insert(clients).values({
+        id: clientId,
+        name: client.name,
+        phone: client.phone,
+        birthday: client.birthday || null,
         createdAt: new Date(),
-      });
+      }).run();
+    } else if (client.birthday && !existingClient.birthday) {
+      db.update(clients).set({ birthday: client.birthday }).where(eq(clients.id, clientId)).run();
+    }
 
-      if (appointment.voucherCode) {
-        await tx
-          .update(vouchers)
-          .set({ isActive: false })
-          .where(eq(vouchers.code, appointment.voucherCode.toUpperCase()));
-      }
-    });
+    // 2. Create appointment
+    let finalNotes = appointment.notes || "";
+    if (appointment.voucherCode) {
+      finalNotes = finalNotes
+        ? `${finalNotes}\n(Voucher usado: ${appointment.voucherCode})`
+        : `(Voucher usado: ${appointment.voucherCode})`;
+    }
 
-    // 3. Fetch details for messages
-    const [prof] = await db
-      .select()
-      .from(professionals)
-      .where(eq(professionals.id, appointment.professionalId))
-      .limit(1);
+    db.insert(appointments).values({
+      id: appointmentId,
+      clientId,
+      professionalId: appointment.professionalId,
+      serviceId: appointment.serviceId,
+      date: appointment.date,
+      time: appointment.time,
+      duration: appointment.duration,
+      price: appointment.price,
+      status: "agendado",
+      notes: finalNotes || null,
+      createdAt: new Date(),
+    }).run();
 
-    const [srv] = await db
-      .select()
-      .from(services)
-      .where(eq(services.id, appointment.serviceId))
-      .limit(1);
+    // 3. Deactivate voucher if used
+    if (appointment.voucherCode) {
+      db.update(vouchers)
+        .set({ isActive: false })
+        .where(eq(vouchers.code, appointment.voucherCode.toUpperCase()))
+        .run();
+    }
 
-    // 4. Fetch admin (role = Admin)
+    // 4. Fetch details for messages
+    const [prof] = await db.select().from(professionals).where(eq(professionals.id, appointment.professionalId)).limit(1);
+    const [srv] = await db.select().from(services).where(eq(services.id, appointment.serviceId)).limit(1);
     const allProfessionals = await db.select().from(professionals);
     const admin = allProfessionals.find(p => p.role?.toLowerCase() === "admin");
 
@@ -109,9 +86,7 @@ router.post("/", validate(createBookingSchema), async (req, res) => {
     const businessAddress = await getSetting("business_address", "Río Segundo, Córdoba");
     const whatsappEnabled = await getBoolSetting("whatsapp_notif");
 
-    // ─────────────────────────────────────────────────
     // 5. Send WhatsApp Notifications (Non-blocking)
-    // ─────────────────────────────────────────────────
     const clientMsg =
       `¡Hola ${client.name}! 👋\n\n` +
       `Tu turno en *Estudio Joha Molinero* está confirmado ✅\n\n` +
