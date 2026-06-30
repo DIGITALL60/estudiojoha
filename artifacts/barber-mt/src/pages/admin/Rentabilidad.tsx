@@ -13,12 +13,18 @@ interface AppointmentRow {
 export default function Rentabilidad() {
   const [loading, setLoading] = useState(true);
   const [appointments, setAppointments] = useState<AppointmentRow[]>([]);
+  const [expenses, setExpenses] = useState<{ id: string; amount: number; date: string; concept: string }[]>([]);
   const [filter, setFilter] = useState<"Semana" | "Mes" | "Trimestre" | "Año">("Mes");
 
   useEffect(() => {
-    fetchAPI("/api/data/appointments")
-      .then(r => r.json())
-      .then(data => setAppointments(data.filter((a: any) => a.status === "completado")))
+    Promise.all([
+      fetchAPI("/api/data/appointments").then(r => r.json()),
+      fetchAPI("/api/data/expenses").then(r => r.json()),
+    ])
+      .then(([apps, exps]) => {
+        setAppointments(apps.filter((a: any) => a.status === "completado"));
+        setExpenses(exps);
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
@@ -47,7 +53,31 @@ export default function Rentabilidad() {
 
   const filteredApps = getFilteredApps();
 
+  const filterByPeriod = (dateStr: string) => {
+    const d = new Date(dateStr + "T00:00:00");
+    const now = new Date();
+    if (filter === "Año") return d.getFullYear() === now.getFullYear();
+    if (filter === "Mes") return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+    if (filter === "Semana") {
+      const start = new Date(now);
+      start.setDate(now.getDate() - now.getDay());
+      const end = new Date(start);
+      end.setDate(start.getDate() + 6);
+      return d >= start && d <= end;
+    }
+    if (filter === "Trimestre") {
+      const quarter = Math.floor(now.getMonth() / 3);
+      const appQuarter = Math.floor(d.getMonth() / 3);
+      return d.getFullYear() === now.getFullYear() && appQuarter === quarter;
+    }
+    return true;
+  };
+
+  const filteredExpenses = expenses.filter(e => filterByPeriod(e.date));
+
   const ingresos = filteredApps.reduce((sum, a) => sum + a.price, 0);
+  const egresos = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
+  const utilidad = ingresos - egresos;
   const ventas = filteredApps.length;
   const ticketPromedio = ventas > 0 ? ingresos / ventas : 0;
 
@@ -93,15 +123,19 @@ export default function Rentabilidad() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         <div className="bg-card border border-border/50 rounded-xl p-5 relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 to-transparent pointer-events-none" />
           <span className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground block mb-2 relative z-10">Ingresos</span>
           <span className="text-3xl font-light text-foreground relative z-10">$ {ingresos.toLocaleString("es-AR")}</span>
         </div>
         <div className="bg-card border border-border/50 rounded-xl p-5">
-          <span className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground block mb-2">Ventas</span>
-          <span className="text-3xl font-light text-foreground">{ventas}</span>
+          <span className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground block mb-2">Egresos</span>
+          <span className="text-3xl font-light text-red-400">$ {egresos.toLocaleString("es-AR")}</span>
+        </div>
+        <div className="bg-card border border-border/50 rounded-xl p-5">
+          <span className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground block mb-2">Utilidad neta</span>
+          <span className={`text-3xl font-light ${utilidad >= 0 ? "text-emerald-400" : "text-red-400"}`}>$ {utilidad.toLocaleString("es-AR")}</span>
         </div>
         <div className="bg-card border border-border/50 rounded-xl p-5">
           <span className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground block mb-2">Ticket Promedio</span>

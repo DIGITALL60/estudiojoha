@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { vouchers } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
+import { requireAuth } from "../middlewares/auth.js";
 
 const router = Router();
 
@@ -37,7 +38,7 @@ router.post("/validate", async (req, res) => {
 });
 
 // Create multiple vouchers (used by Reactivacion / Cumpleaños)
-router.post("/bulk-create", async (req, res) => {
+router.post("/bulk-create", requireAuth, async (req, res) => {
   try {
     const { codes, discountType, discountValue } = req.body;
     

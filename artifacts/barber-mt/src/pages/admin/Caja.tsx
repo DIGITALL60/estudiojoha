@@ -1,7 +1,7 @@
 import { fetchAPI } from "@/lib/api";
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { ChevronLeft, ChevronRight, Download, Wallet } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Wallet, Plus, Trash2 } from "lucide-react";
 import AdminLayout from "./AdminLayout";
 
 interface AppointmentRow {
@@ -9,21 +9,35 @@ interface AppointmentRow {
   clientName: string; professionalName: string; serviceName: string; paymentMethod: string;
 }
 
+interface ExpenseRow {
+  id: string; concept: string; amount: number; category: string; date: string;
+}
+
 export default function Caja() {
   const [appointments, setAppointments] = useState<AppointmentRow[]>([]);
+  const [expenses, setExpenses] = useState<ExpenseRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [newExpense, setNewExpense] = useState({ concept: "", amount: "", category: "General" });
+  const [showExpenseForm, setShowExpenseForm] = useState(false);
 
   // Set today to match local date
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
 
-  useEffect(() => {
+  const loadData = () => {
     setLoading(true);
-    fetchAPI("/api/data/appointments")
-      .then(r => r.json())
-      .then(setAppointments)
+    Promise.all([
+      fetchAPI("/api/data/appointments").then(r => r.json()),
+      fetchAPI("/api/data/expenses").then(r => r.json()),
+    ])
+      .then(([apps, exps]) => {
+        setAppointments(apps);
+        setExpenses(exps);
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, []);
+  };
+
+  useEffect(() => { loadData(); }, []);
 
   const todayApps = appointments.filter(a => a.date === selectedDate);
   const completedApps = todayApps.filter(a => a.status === "completado");
@@ -32,6 +46,37 @@ export default function Caja() {
   const cobrado = completedApps.reduce((sum, a) => sum + a.price, 0);
   const pendiente = pendingApps.reduce((sum, a) => sum + a.price, 0);
   const ventasDelDia = completedApps.length;
+
+  const dayExpenses = expenses.filter(e => e.date === selectedDate);
+  const totalEgresos = dayExpenses.reduce((sum, e) => sum + e.amount, 0);
+  const neto = cobrado - totalEgresos;
+
+  const handleAddExpense = async () => {
+    if (!newExpense.concept || !newExpense.amount) return;
+    try {
+      await fetchAPI("/api/data/expenses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          concept: newExpense.concept,
+          amount: Number(newExpense.amount),
+          category: newExpense.category,
+          date: selectedDate,
+        }),
+      });
+      setNewExpense({ concept: "", amount: "", category: "General" });
+      setShowExpenseForm(false);
+      loadData();
+    } catch {
+      alert("Error al registrar egreso");
+    }
+  };
+
+  const handleDeleteExpense = async (id: string) => {
+    if (!confirm("¿Eliminar este egreso?")) return;
+    await fetchAPI(`/api/data/expenses/${id}`, { method: "DELETE" });
+    loadData();
+  };
 
   const byMethod = completedApps.reduce((acc, a) => {
     const method = a.paymentMethod || "Efectivo";
@@ -92,20 +137,81 @@ export default function Caja() {
         </div>
       }
     >
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
         <div className="bg-card border border-border/50 rounded-xl p-5 flex flex-col justify-center relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent pointer-events-none" />
           <span className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground mb-2 relative z-10">Cobrado</span>
           <span className="text-2xl font-bold text-foreground relative z-10">$ {cobrado.toLocaleString("es-AR")}</span>
         </div>
         <div className="bg-card border border-border/50 rounded-xl p-5 flex flex-col justify-center">
-          <span className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground mb-2">Pendiente</span>
-          <span className="text-2xl font-bold text-foreground">$ {pendiente.toLocaleString("es-AR")}</span>
+          <span className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground mb-2">Egresos</span>
+          <span className="text-2xl font-bold text-red-400">$ {totalEgresos.toLocaleString("es-AR")}</span>
         </div>
         <div className="bg-card border border-border/50 rounded-xl p-5 flex flex-col justify-center">
-          <span className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground mb-2">Ventas del día</span>
-          <span className="text-2xl font-bold text-foreground">{ventasDelDia}</span>
+          <span className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground mb-2">Neto del día</span>
+          <span className={`text-2xl font-bold ${neto >= 0 ? "text-emerald-400" : "text-red-400"}`}>$ {neto.toLocaleString("es-AR")}</span>
         </div>
+        <div className="bg-card border border-border/50 rounded-xl p-5 flex flex-col justify-center">
+          <span className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground mb-2">Pendiente / Ventas</span>
+          <span className="text-2xl font-bold text-foreground">$ {pendiente.toLocaleString("es-AR")} · {ventasDelDia}</span>
+        </div>
+      </div>
+
+      <div className="bg-card border border-border/50 rounded-xl p-5 mb-8">
+        <div className="flex items-center justify-between mb-4">
+          <span className="text-[10px] uppercase tracking-widest font-bold text-foreground">Egresos del día</span>
+          <button
+            onClick={() => setShowExpenseForm(!showExpenseForm)}
+            className="flex items-center gap-1 text-xs text-primary hover:text-primary/80"
+          >
+            <Plus size={12} /> Registrar egreso
+          </button>
+        </div>
+        {showExpenseForm && (
+          <div className="flex flex-wrap gap-2 mb-4 p-3 bg-background border border-border/50 rounded-lg">
+            <input
+              placeholder="Concepto"
+              value={newExpense.concept}
+              onChange={e => setNewExpense(f => ({ ...f, concept: e.target.value }))}
+              className="flex-1 min-w-[120px] bg-card border border-border rounded-sm px-3 py-2 text-xs"
+            />
+            <input
+              type="number"
+              placeholder="Monto $"
+              value={newExpense.amount}
+              onChange={e => setNewExpense(f => ({ ...f, amount: e.target.value }))}
+              className="w-28 bg-card border border-border rounded-sm px-3 py-2 text-xs"
+            />
+            <select
+              value={newExpense.category}
+              onChange={e => setNewExpense(f => ({ ...f, category: e.target.value }))}
+              className="bg-card border border-border rounded-sm px-3 py-2 text-xs"
+            >
+              {["General", "Insumos", "Alquiler", "Sueldos", "Marketing"].map(c => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+            <button onClick={handleAddExpense} className="bg-primary text-primary-foreground text-xs px-4 py-2 rounded-sm">Guardar</button>
+          </div>
+        )}
+        {dayExpenses.length > 0 ? (
+          <div className="space-y-2">
+            {dayExpenses.map(e => (
+              <div key={e.id} className="flex items-center justify-between text-xs py-2 border-b border-border/20 last:border-0">
+                <div>
+                  <span className="font-medium text-foreground">{e.concept}</span>
+                  <span className="text-muted-foreground ml-2">· {e.category}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="font-semibold text-red-400">$ {e.amount.toLocaleString("es-AR")}</span>
+                  <button onClick={() => handleDeleteExpense(e.id)} className="text-muted-foreground hover:text-red-400"><Trash2 size={12} /></button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">Sin egresos registrados para este día.</p>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">

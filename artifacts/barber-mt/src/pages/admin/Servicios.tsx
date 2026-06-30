@@ -200,6 +200,7 @@ function ServiceModal({
 export default function Servicios() {
   const [services, setServices] = useState<Service[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [serviceProducts, setServiceProducts] = useState<{ serviceId: string; productId: string; amount: number }[]>([]);
   const [reports, setReports] = useState<{
     totalRevenue: number;
     paidSales: number;
@@ -217,11 +218,13 @@ export default function Servicios() {
     Promise.all([
       fetchAPI("/api/data/services").then(r => r.json()),
       fetchAPI("/api/data/products").then(r => r.json()),
+      fetchAPI("/api/data/service-products").then(r => r.json()),
       fetchAPI("/api/data/reports/services-30d").then(r => r.json())
     ])
-    .then(([svcs, prods, reps]) => {
+    .then(([svcs, prods, recipeLinks, reps]) => {
       setServices(svcs);
       setProducts(prods);
+      setServiceProducts(recipeLinks);
       setReports(reps);
     })
     .catch(console.error)
@@ -248,6 +251,13 @@ export default function Servicios() {
 
   const handleNewService = () => {
     setEditing({ id: "", name: "", category: "", duration: 60, price: 0, cod: "", recipes: [] });
+  };
+
+  const openEditService = (service: Service) => {
+    const recipes = serviceProducts
+      .filter(sp => sp.serviceId === service.id)
+      .map(sp => ({ productId: sp.productId, amount: sp.amount }));
+    setEditing({ ...service, recipes });
   };
 
   const filtered = services.filter(s =>
@@ -413,7 +423,7 @@ export default function Servicios() {
 
                   {/* Actions */}
                   <div className="flex items-center gap-2 mt-5">
-                    <button onClick={() => setEditing(service)} className="flex-1 flex items-center justify-center gap-2 bg-background border border-border/50 hover:bg-accent/5 transition-colors py-2 rounded-lg text-xs font-semibold text-foreground">
+                    <button onClick={() => openEditService(service)} className="flex-1 flex items-center justify-center gap-2 bg-background border border-border/50 hover:bg-accent/5 transition-colors py-2 rounded-lg text-xs font-semibold text-foreground">
                       <Edit2 size={12} /> Editar
                     </button>
                     <button onClick={() => handleDelete(service.id)} className="flex items-center justify-center gap-2 bg-background border border-border/50 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20 transition-colors px-4 py-2 rounded-lg text-xs font-semibold text-muted-foreground">

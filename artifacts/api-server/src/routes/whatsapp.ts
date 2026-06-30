@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { currentQR, isConnected, sendWhatsAppMessage } from "../lib/whatsapp";
+import { requireAuth } from "../middlewares/auth.js";
 
 const router = Router();
 
@@ -10,7 +11,7 @@ router.get("/status", (req, res) => {
   });
 });
 
-router.post("/send-bulk", async (req, res) => {
+router.post("/send-bulk", requireAuth, async (req, res) => {
   const { messages } = req.body;
   if (!Array.isArray(messages)) {
     return res.status(400).json({ error: "messages array required" });

@@ -10,7 +10,7 @@ Hace un tiempo que no te vemos en Estudio Joha Molinero y te extrañamos 💜
 
 ¿Querés retomar? Reservá tu turno con un *10% de descuento* usando el código:
 
-✨ *VOLVISTE-{codigo}* ✨
+✨ *{codigo}* ✨
 
 📲 Reservar: https://wa.link/pga9u0
 
@@ -120,7 +120,7 @@ export default function Reactivacion() {
   };
 
   const generateMessageText = (clientName: string) => {
-    const code = discount + "OFF";
+    const code = `VOLVISTE-${discount}OFF`;
     return customTemplate
       .replace(/{nombre}/g, clientName)
       .replace(/{codigo}/g, code);
@@ -144,7 +144,7 @@ export default function Reactivacion() {
         message: generateMessageText(c.name)
       }));
 
-    const codeToCreate = discount + "OFF";
+    const codeToCreate = `VOLVISTE-${discount}OFF`;
 
     try {
       // 1. Create voucher in backend

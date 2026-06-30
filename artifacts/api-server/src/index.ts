@@ -1,7 +1,8 @@
 import app from "./app";
 import { logger } from "./lib/logger";
-import { db, sqlite, professionals, services } from "@workspace/db";
+import { db, sqlite, professionals, services, app_settings } from "@workspace/db";
 import { randomUUID } from "crypto";
+import { DEFAULT_SETTINGS } from "./lib/settings.js";
 
 // Create all tables if they don't exist (schema init without migration files)
 function initSchema() {
@@ -106,6 +107,10 @@ function initSchema() {
         \`created_at\` integer NOT NULL
       );
       CREATE UNIQUE INDEX IF NOT EXISTS \`vouchers_code_unique\` ON \`vouchers\` (\`code\`);
+      CREATE TABLE IF NOT EXISTS \`app_settings\` (
+        \`key\` text PRIMARY KEY NOT NULL,
+        \`value\` text NOT NULL
+      );
     `);
     logger.info("Database schema initialized successfully");
   } catch (err) {
@@ -118,8 +123,7 @@ async function seedIfEmpty() {
   try {
     // Seed professionals if empty
     const existingProfs = db.select().from(professionals).all();
-    if (existingProfs.length <= 5) {
-      db.delete(professionals).run();
+    if (existingProfs.length === 0) {
       logger.info("Seeding professionals...");
       db.insert(professionals).values([
         { id: randomUUID(), name: "Estudio JohaMolinero", role: "Admin", color: "#7c3aed", initial: "EJ", email: "estudiojminterno2@gmail.com", phone: "5493510000000", username: "admin", password: "123456789" },
@@ -131,10 +135,9 @@ async function seedIfEmpty() {
       logger.info("Professionals seeded. Admin: admin / 123456789");
     }
 
-    // Seed services if empty (checked independently)
+    // Seed services if empty
     const existingSrvs = db.select().from(services).all();
-    if (existingSrvs.length <= 5) { db.delete(services).run(); // Force update since we are upgrading from 5 placeholders
-      db.delete(services).run(); // Delete old placeholders safely
+    if (existingSrvs.length === 0) {
       logger.info("Seeding services...");
       db.insert(services).values([
         // ── UÑAS - Manicuría y Spa ────────────────────────────────────
@@ -253,6 +256,15 @@ async function seedIfEmpty() {
         { id: randomUUID(), name: "Esmalte Semi Manos y Pies Simultáneo (French)", category: "Catálogo Eventos", duration: 90, price: 0 },
       ]).run();
       logger.info("Services seeded.");
+    }
+
+    // Seed default app settings if empty
+    const existingSettings = db.select().from(app_settings).all();
+    if (existingSettings.length === 0) {
+      logger.info("Seeding default app settings...");
+      for (const [key, value] of Object.entries(DEFAULT_SETTINGS)) {
+        db.insert(app_settings).values({ key, value }).run();
+      }
     }
 
   } catch (err) {

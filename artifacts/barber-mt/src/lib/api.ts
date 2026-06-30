@@ -19,7 +19,9 @@ export async function fetchAPI(url: string, options: RequestInit = {}) {
   if (response.status === 401) {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
-    window.location.href = "/admin";
+    if (window.location.pathname.startsWith("/admin")) {
+      window.location.href = "/login";
+    }
   }
 
   return response;

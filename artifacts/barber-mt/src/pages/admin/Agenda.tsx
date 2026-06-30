@@ -24,11 +24,15 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 function NewTurnModal({ onClose, defaultDate, defaultTime = "10:00", onCreated }: { onClose: () => void; defaultDate: string; defaultTime?: string; onCreated: () => void }) {
-  const [professionals, setProfessionals] = useState<Professional[]>([]);
+  const [professionals, setProfessionals] = useState<(Professional & { role?: string })[]>([]);
+  const [professionalServices, setProfessionalServices] = useState<{ professionalId: string; serviceId: string }[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
-  const [services, setServices] = useState<Service[]>([]);
+  const [services, setServices] = useState<(Service & { category?: string })[]>([]);
   const [clientSearch, setClientSearch] = useState("");
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [creatingClient, setCreatingClient] = useState(false);
+  const [newClientName, setNewClientName] = useState("");
+  const [newClientPhone, setNewClientPhone] = useState("");
   const [professionalId, setProfessionalId] = useState("");
   const [serviceId, setServiceId] = useState("");
   const [date, setDate] = useState(defaultDate);
@@ -43,7 +47,20 @@ function NewTurnModal({ onClose, defaultDate, defaultTime = "10:00", onCreated }
     fetchAPI("/api/data/professionals").then(r => r.json()).then(setProfessionals).catch(console.error);
     fetchAPI("/api/data/clients").then(r => r.json()).then(setClients).catch(console.error);
     fetchAPI("/api/data/services").then(r => r.json()).then(setServices).catch(console.error);
+    fetchAPI("/api/data/professional-services").then(r => r.json()).then(setProfessionalServices).catch(console.error);
   }, []);
+
+  const selectedService = services.find(s => s.id === serviceId);
+
+  const eligibleProfessionals = professionals.filter(p => {
+    if (p.role?.toLowerCase() === "admin") return false;
+    if (!serviceId) return true;
+    const explicit = professionalServices.some(ps => ps.professionalId === p.id && ps.serviceId === serviceId);
+    if (explicit) return true;
+    const hasAny = professionalServices.some(ps => ps.professionalId === p.id);
+    if (!hasAny && selectedService && p.role === selectedService.category) return true;
+    return false;
+  });
 
   const filteredClients = clients.filter(c =>
     c.name.toLowerCase().includes(clientSearch.toLowerCase()) || c.phone.includes(clientSearch)
@@ -51,12 +68,35 @@ function NewTurnModal({ onClose, defaultDate, defaultTime = "10:00", onCreated }
 
   const handleServiceChange = (id: string) => {
     setServiceId(id);
+    setProfessionalId("");
     const srv = services.find(s => s.id === id);
     if (srv) { setPrice(String(srv.price)); setDuration(String(srv.duration)); }
   };
 
   const handleCreate = async () => {
-    if (!selectedClient || !professionalId || !serviceId || !date || !time) {
+    let clientId = selectedClient?.id;
+
+    if (creatingClient) {
+      if (!newClientName.trim() || !newClientPhone.trim()) {
+        setError("Nombre y teléfono del nuevo cliente son obligatorios");
+        return;
+      }
+      try {
+        const res = await fetchAPI("/api/data/clients", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: newClientName.trim(), phone: newClientPhone.trim() }),
+        });
+        if (!res.ok) throw new Error();
+        const created = await res.json();
+        clientId = created.id;
+      } catch {
+        setError("Error al crear el cliente");
+        return;
+      }
+    }
+
+    if (!clientId || !professionalId || !serviceId || !date || !time) {
       setError("Completá todos los campos obligatorios"); return;
     }
     setSaving(true); setError("");
@@ -64,13 +104,16 @@ function NewTurnModal({ onClose, defaultDate, defaultTime = "10:00", onCreated }
       const res = await fetchAPI("/api/data/appointments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clientId: selectedClient.id, professionalId, serviceId, date, time, duration, price, notes }),
+        body: JSON.stringify({ clientId, professionalId, serviceId, date, time, duration, price, notes }),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Error al crear el turno");
+      }
       onCreated();
       onClose();
-    } catch {
-      setError("Error al crear el turno");
+    } catch (err: any) {
+      setError(err.message || "Error al crear el turno");
     } finally { setSaving(false); }
   };
 
@@ -86,8 +129,34 @@ function NewTurnModal({ onClose, defaultDate, defaultTime = "10:00", onCreated }
         <div className="p-5 space-y-4">
           {/* Client */}
           <div>
-            <label className="text-[9px] font-bold tracking-[0.2em] uppercase text-muted-foreground block mb-1.5">Cliente *</label>
-            {selectedClient ? (
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-[9px] font-bold tracking-[0.2em] uppercase text-muted-foreground">Cliente *</label>
+              {!selectedClient && (
+                <button
+                  type="button"
+                  onClick={() => setCreatingClient(!creatingClient)}
+                  className="text-[10px] text-primary hover:underline"
+                >
+                  {creatingClient ? "Buscar existente" : "+ Crear nuevo"}
+                </button>
+              )}
+            </div>
+            {creatingClient ? (
+              <div className="space-y-2">
+                <input
+                  placeholder="Nombre completo"
+                  value={newClientName}
+                  onChange={e => setNewClientName(e.target.value)}
+                  className="w-full bg-background border border-border rounded-sm px-3 py-2.5 text-xs"
+                />
+                <input
+                  placeholder="Teléfono WhatsApp"
+                  value={newClientPhone}
+                  onChange={e => setNewClientPhone(e.target.value)}
+                  className="w-full bg-background border border-border rounded-sm px-3 py-2.5 text-xs"
+                />
+              </div>
+            ) : selectedClient ? (
               <div className="flex items-center justify-between p-2.5 bg-primary/10 border border-primary/30 rounded-sm">
                 <span className="text-xs text-foreground font-medium">{selectedClient.name} — {selectedClient.phone}</span>
                 <button onClick={() => { setSelectedClient(null); setClientSearch(""); }} className="text-muted-foreground hover:text-primary"><X size={12} /></button>
@@ -128,7 +197,7 @@ function NewTurnModal({ onClose, defaultDate, defaultTime = "10:00", onCreated }
             <select value={professionalId} onChange={e => setProfessionalId(e.target.value)}
               className="w-full bg-background border border-border rounded-sm px-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-primary">
               <option value="">Elegí una profesional</option>
-              {professionals.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              {eligibleProfessionals.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </div>
           {/* Date & Time */}

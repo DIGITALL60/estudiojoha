@@ -151,3 +151,9 @@ export const vouchers = sqliteTable("vouchers", {
 export const insertVoucherSchema = createInsertSchema(vouchers);
 export const selectVoucherSchema = createSelectSchema(vouchers);
 export type Voucher = z.infer<typeof selectVoucherSchema>;
+
+// App Settings (key-value store for business config & toggles)
+export const app_settings = sqliteTable("app_settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+});

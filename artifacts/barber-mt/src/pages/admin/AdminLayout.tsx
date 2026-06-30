@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from "react";
-import { Link, useRoute, useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Home, Calendar, Users, Briefcase, Package, UserCog,
   GraduationCap, Wallet, TrendingUp, BadgeDollarSign,
   Gift, History, RotateCw, Ticket, Settings, LogOut,
-  ChevronLeft, ChevronRight, Menu, X, AlertTriangle, Bell,
+  ChevronLeft, ChevronRight, Menu, AlertTriangle, Bell,
   MessageSquare, Clock, Image
 } from "lucide-react";
 import LogoIcon from "@/components/LogoIcon";
+import { fetchAPI } from "@/lib/api";
 
 const iconMap: Record<string, React.ReactNode> = {
   home: <Home size={16} />,
@@ -38,11 +39,11 @@ const navConfig = {
       title: null,
       items: [
         { id: "dashboard", label: "Inicio", icon: "home", path: "/admin/dashboard" },
-        { id: "agenda", label: "Agenda", icon: "calendar", path: "/admin/agenda", badge: { type: "count", value: 3 } },
+        { id: "agenda", label: "Agenda", icon: "calendar", path: "/admin/agenda" },
         { id: "horarios", label: "Mis Horarios", icon: "clock", path: "/admin/horarios" },
         { id: "clientes", label: "Clientes", icon: "users", path: "/admin/clientes" },
         { id: "servicios", label: "Servicios", icon: "briefcase", path: "/admin/servicios" },
-        { id: "stock", label: "Stock", icon: "package", path: "/admin/stock", badge: { type: "warning", value: 2 } },
+        { id: "stock", label: "Stock", icon: "package", path: "/admin/stock" },
         { id: "staff", label: "Staff", icon: "user-cog", path: "/admin/staff" },
       ],
     },
@@ -94,6 +95,7 @@ function NavItem({
     if (item.id === "logout") {
       e.preventDefault();
       localStorage.removeItem("user");
+      localStorage.removeItem("token");
       setLocation("/");
     }
   };
@@ -138,7 +140,7 @@ function NavItem({
               ? "bg-amber-500/20 text-amber-400"
               : "bg-primary/20 text-primary"
           }`}>
-            {item.badge.type === "warning" ? <AlertTriangle size={10} /> : item.badge.value}
+            {item.badge.type === "warning" ? item.badge.value : item.badge.value}
           </span>
         )}
       </motion.div>
@@ -159,13 +161,30 @@ export default function AdminLayout({ children, title, subtitle, actions }: Admi
   const [, navigate] = useLocation();
 
   const [user, setUser] = useState<{name: string, role: string, initial: string} | null>(null);
+  const [badges, setBadges] = useState<{ agenda: number; stockLow: number }>({ agenda: 0, stockLow: 0 });
   
   useEffect(() => {
     const userStr = localStorage.getItem("user");
     if (userStr) {
       setUser(JSON.parse(userStr));
     }
+
+    const today = new Date().toISOString().split("T")[0];
+    Promise.all([
+      fetchAPI("/api/data/appointments").then(r => r.json()).catch(() => []),
+      fetchAPI("/api/data/products").then(r => r.json()).catch(() => []),
+    ]).then(([apps, products]) => {
+      const agendaCount = apps.filter((a: any) => a.date === today && a.status === "agendado").length;
+      const stockLow = products.filter((p: any) => p.stock <= p.minStock).length;
+      setBadges({ agenda: agendaCount, stockLow });
+    });
   }, []);
+
+  const getItemBadge = (itemId: string) => {
+    if (itemId === "agenda" && badges.agenda > 0) return { type: "count", value: badges.agenda };
+    if (itemId === "stock" && badges.stockLow > 0) return { type: "warning", value: badges.stockLow };
+    return undefined;
+  };
 
   const isAdmin = user?.role?.toLowerCase() === "admin";
 
@@ -253,7 +272,7 @@ export default function AdminLayout({ children, title, subtitle, actions }: Admi
                 {section.title && collapsed && <div className="h-px bg-sidebar-border/50 mx-2 my-2" />}
                 <div className="space-y-0.5">
                   {visibleItems.map((item) => (
-                    <NavItem key={item.id} item={item} collapsed={collapsed} />
+                    <NavItem key={item.id} item={{ ...item, badge: getItemBadge(item.id) }} collapsed={collapsed} />
                   ))}
                 </div>
               </div>

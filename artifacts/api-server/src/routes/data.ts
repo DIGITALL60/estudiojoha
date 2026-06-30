@@ -1,12 +1,80 @@
 import { Router } from "express";
-import { db, professionals, services, clients, appointments, professional_schedules, professional_services, products, service_products, expenses } from "@workspace/db";
+import { db, professionals, services, clients, appointments, professional_schedules, professional_services, products, service_products, expenses, app_settings } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { sendWhatsAppMessage } from "../lib/whatsapp.js";
 import { logger } from "../lib/logger.js";
 import { requireAuth } from "../middlewares/auth.js";
+import { getAllSettings, upsertSettings, getBoolSetting, getSetting } from "../lib/settings.js";
+import { isTimeSlotAvailable } from "../lib/availability.js";
 
 const router = Router();
+
+const DAY_NAMES = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+const DAY_NAMES_FULL = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+
+function summarizeBusinessHours(schedules: { dayOfWeek: number; startTime: string; endTime: string }[]) {
+  if (schedules.length === 0) {
+    return {
+      openDaysLabel: "Martes a Sábado",
+      hoursLabel: "10:00 — 20:00 hs",
+      closedLabel: "Dom y Lun: Cerrado",
+    };
+  }
+
+  const byDay: Record<number, { starts: string[]; ends: string[] }> = {};
+  for (const s of schedules) {
+    if (!byDay[s.dayOfWeek]) byDay[s.dayOfWeek] = { starts: [], ends: [] };
+    byDay[s.dayOfWeek].starts.push(s.startTime);
+    byDay[s.dayOfWeek].ends.push(s.endTime);
+  }
+
+  const openDays = Object.keys(byDay).map(Number).sort((a, b) => a - b);
+  const closedDays = [0, 1, 2, 3, 4, 5, 6].filter(d => !openDays.includes(d));
+
+  const earliest = schedules.reduce((min, s) => (s.startTime < min ? s.startTime : min), schedules[0].startTime);
+  const latest = schedules.reduce((max, s) => (s.endTime > max ? s.endTime : max), schedules[0].endTime);
+
+  const formatRange = (days: number[]) => {
+    if (days.length === 0) return "";
+    if (days.length === 1) return DAY_NAMES_FULL[days[0]];
+    if (days.length === 7) return "Todos los días";
+    const consecutive = days.every((d, i) => i === 0 || d === days[i - 1] + 1);
+    if (consecutive && days.length > 1) {
+      return `${DAY_NAMES_FULL[days[0]]} a ${DAY_NAMES_FULL[days[days.length - 1]]}`;
+    }
+    return days.map(d => DAY_NAMES[d]).join(", ");
+  };
+
+  return {
+    openDaysLabel: formatRange(openDays),
+    hoursLabel: `${earliest} — ${latest} hs`,
+    closedLabel: closedDays.length > 0 ? `${formatRange(closedDays)}: Cerrado` : "",
+  };
+}
+
+// Public info for landing + booking wizard
+router.get("/public-info", async (_req, res) => {
+  try {
+    const settings = await getAllSettings();
+    const schedules = await db.select().from(professional_schedules);
+    const hours = summarizeBusinessHours(schedules);
+
+    res.json({
+      settings: {
+        business_name: settings.business_name,
+        business_email: settings.business_email,
+        business_phone: settings.business_phone,
+        business_address: settings.business_address,
+        business_instagram: settings.business_instagram,
+        whatsapp_link: settings.whatsapp_link,
+      },
+      hours,
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch public info" });
+  }
+});
 
 // ─── SERVICES ─────────────────────────────────────────────
 router.get("/services", async (req, res) => {
@@ -99,8 +167,8 @@ router.patch("/services/:id", requireAuth, async (req, res) => {
       name, category, duration: Number(duration), price: Number(price), cod
     }).where(eq(services.id, id));
 
-    // Handle recipes
-    if (recipes && Array.isArray(recipes)) {
+    // Only update recipes when explicitly sent (prevents accidental wipe on edit)
+    if (recipes !== undefined && Array.isArray(recipes)) {
       await db.delete(service_products).where(eq(service_products.serviceId, id));
       for (const recipe of recipes) {
         await db.insert(service_products).values({
@@ -268,6 +336,13 @@ router.get("/appointments", requireAuth, async (req, res) => {
 router.post("/appointments", requireAuth, async (req, res) => {
   try {
     const { clientId, professionalId, serviceId, date, time, duration, price, status, notes } = req.body;
+    const dur = Number(duration);
+
+    const availability = await isTimeSlotAvailable(date, professionalId, dur, time);
+    if (!availability.available) {
+      return res.status(409).json({ error: availability.reason || "Horario no disponible" });
+    }
+
     const id = randomUUID();
     await db.insert(appointments).values({
       id, clientId, professionalId, serviceId,
@@ -288,9 +363,10 @@ router.post("/appointments", requireAuth, async (req, res) => {
       
       const allProfessionals = await db.select().from(professionals);
       const admin = allProfessionals.find(p => p.role.toLowerCase() === "admin");
+      const whatsappEnabled = await getBoolSetting("whatsapp_notif");
+      const businessAddress = await getSetting("business_address", "Río Segundo, Córdoba");
 
-      if (client && prof && srv) {
-        // Mensaje para el CLIENTE
+      if (client && prof && srv && whatsappEnabled) {
         const clientMsg =
           `¡Hola ${client.name}! 👋\n\n` +
           `Tu turno en *Estudio Joha Molinero* está confirmado ✅\n\n` +
@@ -298,11 +374,10 @@ router.post("/appointments", requireAuth, async (req, res) => {
           `⏰ Hora: *${time}*\n` +
           `💅 Servicio: ${srv.name}\n` +
           `👩‍🎨 Profesional: ${prof.name}\n\n` +
-          `📍 Río Segundo, Córdoba\n\n` +
+          `📍 ${businessAddress}\n\n` +
           `Si necesitás cancelar o reprogramar, avisanos con anticipación.\n¡Gracias por elegirnos! 💜`;
         await sendWhatsAppMessage(client.phone, clientMsg);
 
-        // Mensaje para la EMPLEADA
         if (prof.phone && prof.phone !== admin?.phone) {
           const profMsg =
             `🔔 *Nuevo turno asignado (manual)*\n\n` +
@@ -314,7 +389,6 @@ router.post("/appointments", requireAuth, async (req, res) => {
           await sendWhatsAppMessage(prof.phone, profMsg);
         }
 
-        // Mensaje para la ADMIN
         if (admin?.phone) {
           const adminMsg =
             `🆕 *Nuevo turno cargado en agenda*\n\n` +
@@ -449,6 +523,54 @@ router.delete("/professional-services/:id", requireAuth, async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: "Failed to delete professional service" });
+  }
+});
+
+// Sync all service assignments for a professional (replaces existing)
+router.put("/professional-services/sync", requireAuth, async (req, res) => {
+  try {
+    const { professionalId, serviceIds } = req.body;
+    if (!professionalId || !Array.isArray(serviceIds)) {
+      return res.status(400).json({ error: "professionalId and serviceIds[] required" });
+    }
+
+    const existing = await db.select().from(professional_services).where(eq(professional_services.professionalId, professionalId));
+    for (const row of existing) {
+      await db.delete(professional_services).where(eq(professional_services.id, row.id));
+    }
+
+    for (const serviceId of serviceIds) {
+      await db.insert(professional_services).values({
+        id: randomUUID(),
+        professionalId,
+        serviceId,
+      });
+    }
+
+    const updated = await db.select().from(professional_services).where(eq(professional_services.professionalId, professionalId));
+    return res.json(updated);
+  } catch (err) {
+    return res.status(500).json({ error: "Failed to sync professional services" });
+  }
+});
+
+// ─── APP SETTINGS ───────────────────────────────────────────
+router.get("/settings", async (_req, res) => {
+  try {
+    const settings = await getAllSettings();
+    res.json(settings);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch settings" });
+  }
+});
+
+router.patch("/settings", requireAuth, async (req, res) => {
+  try {
+    await upsertSettings(req.body);
+    const settings = await getAllSettings();
+    res.json(settings);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to update settings" });
   }
 });
 

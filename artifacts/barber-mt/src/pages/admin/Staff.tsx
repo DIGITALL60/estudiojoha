@@ -23,11 +23,15 @@ const COLOR_OPTIONS = [
 function EditModal({
   member,
   categories,
+  allServices,
+  assignedServiceIds: initialAssigned,
   onClose,
   onSave,
 }: {
   member: Professional;
   categories: string[];
+  allServices: { id: string; name: string; category: string }[];
+  assignedServiceIds: string[];
   onClose: () => void;
   onSave: (updated: Professional, isNew: boolean) => void;
 }) {
@@ -36,6 +40,7 @@ function EditModal({
     ...member, 
     commissionRate: member.commissionRate ?? 0 
   });
+  const [assignedServiceIds, setAssignedServiceIds] = useState<string[]>(initialAssigned);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -73,6 +78,20 @@ function EditModal({
       });
       if (!res.ok) throw new Error("Error al guardar");
       const updated = await res.json();
+
+      // Sync service assignments (skip for Admin)
+      if (form.role?.toLowerCase() !== "admin") {
+        let serviceIds = assignedServiceIds;
+        if (serviceIds.length === 0 && form.role) {
+          serviceIds = allServices.filter(s => s.category === form.role).map(s => s.id);
+        }
+        await fetchAPI("/api/data/professional-services/sync", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ professionalId: updated.id, serviceIds }),
+        });
+      }
+
       onSave(updated, isNew);
       onClose();
     } catch (err) {
@@ -214,6 +233,37 @@ function EditModal({
             </p>
           </div>
 
+          {/* Service assignments */}
+          {form.role?.toLowerCase() !== "admin" && (
+            <div>
+              <label className="text-[9px] font-bold tracking-widest text-muted-foreground uppercase block mb-2">
+                Servicios que puede realizar
+              </label>
+              <div className="max-h-36 overflow-y-auto border border-border rounded-sm p-2 space-y-1.5">
+                {allServices
+                  .filter(s => !form.role || s.category === form.role || assignedServiceIds.includes(s.id))
+                  .map(s => (
+                    <label key={s.id} className="flex items-center gap-2 text-xs cursor-pointer hover:bg-accent/5 px-1 py-0.5 rounded">
+                      <input
+                        type="checkbox"
+                        checked={assignedServiceIds.includes(s.id)}
+                        onChange={(e) => {
+                          setAssignedServiceIds(prev =>
+                            e.target.checked ? [...prev, s.id] : prev.filter(id => id !== s.id)
+                          );
+                        }}
+                        className="accent-primary"
+                      />
+                      <span className="text-foreground/80">{s.name}</span>
+                    </label>
+                  ))}
+              </div>
+              <p className="text-[9px] text-muted-foreground mt-1">
+                Si no seleccionás ninguno, se asignan automáticamente los de su sector ({form.role}).
+              </p>
+            </div>
+          )}
+
           {/* Password */}
           <div>
             <label className="text-[9px] font-bold tracking-widest text-muted-foreground uppercase block mb-1.5">Contraseña</label>
@@ -257,17 +307,20 @@ function EditModal({
 export default function Staff() {
   const [members, setMembers] = useState<Professional[]>([]);
   const [services, setServices] = useState<any[]>([]);
+  const [professionalServices, setProfessionalServices] = useState<{ professionalId: string; serviceId: string }[]>([]);
   const [editing, setEditing] = useState<Professional | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchStaffAndServices = async () => {
     try {
-      const [resMembers, resServices] = await Promise.all([
+      const [resMembers, resServices, resLinks] = await Promise.all([
         fetchAPI("/api/data/professionals"),
-        fetchAPI("/api/data/services")
+        fetchAPI("/api/data/services"),
+        fetchAPI("/api/data/professional-services"),
       ]);
       setMembers(await resMembers.json());
       setServices(await resServices.json());
+      setProfessionalServices(await resLinks.json());
     } catch (err) {
       console.error(err);
     } finally {
@@ -421,8 +474,15 @@ export default function Staff() {
           <EditModal
             member={editing}
             categories={[...new Set(services.map(s => s.category))]}
+            allServices={services}
+            assignedServiceIds={professionalServices
+              .filter(ps => ps.professionalId === editing.id)
+              .map(ps => ps.serviceId)}
             onClose={() => setEditing(null)}
-            onSave={handleSaved}
+            onSave={(updated, isNew) => {
+              handleSaved(updated, isNew);
+              fetchStaffAndServices();
+            }}
           />
         )}
       </AnimatePresence>

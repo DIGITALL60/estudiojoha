@@ -1,10 +1,17 @@
 import { motion, AnimatePresence, type Variants } from "framer-motion";
-import { Clock, MapPin, Instagram, ChevronRight, Sparkles } from "lucide-react";
-import { useState, useEffect } from "react";
-import { useLocation } from "wouter";
+import { Clock, MapPin, Instagram, ChevronRight, Sparkles, MessageCircle } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
 import LogoIcon from "@/components/LogoIcon";
 import BookingWizard from "@/components/BookingWizard";
+import MisTurnosModal from "@/components/MisTurnosModal";
 import { fetchAPI } from "@/lib/api";
+import {
+  fetchPublicInfo,
+  instagramHandle,
+  whatsappUrl,
+  mapsUrl,
+  type PublicInfo,
+} from "@/lib/publicInfo";
 
 const fadeUp: Variants = {
   hidden: { opacity: 0, y: 28 },
@@ -16,62 +23,105 @@ const stagger: Variants = {
   show: { opacity: 1, transition: { staggerChildren: 0.1 } },
 };
 
+interface ServiceRow {
+  id: string;
+  name: string;
+  duration: number;
+  price: number;
+}
+
+interface SectorGroup {
+  id: string;
+  label: string;
+  services: ServiceRow[];
+}
+
+function groupServices(data: { id: string; name: string; category: string; duration: number; price: number }[]): SectorGroup[] {
+  const grouped = data.reduce((acc: Record<string, SectorGroup>, service) => {
+    if (!acc[service.category]) {
+      acc[service.category] = {
+        id: service.category.toLowerCase().replace(/\s+/g, "-"),
+        label: service.category,
+        services: [],
+      };
+    }
+    acc[service.category].services.push({
+      id: service.id,
+      name: service.name,
+      duration: service.duration,
+      price: service.price,
+    });
+    return acc;
+  }, {});
+  return Object.values(grouped);
+}
+
 export default function Home() {
   const [openSector, setOpenSector] = useState<string | null>(null);
   const [showBooking, setShowBooking] = useState(false);
-  const [sectors, setSectors] = useState<any[]>([]);
-  const [, navigate] = useLocation();
+  const [showMisTurnos, setShowMisTurnos] = useState(false);
+  const [initialServiceId, setInitialServiceId] = useState<string | undefined>();
+  const [sectors, setSectors] = useState<SectorGroup[]>([]);
+  const [publicInfo, setPublicInfo] = useState<PublicInfo | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
-    fetchAPI("/api/data/services")
-      .then(res => res.json())
-      .then(data => {
-        const grouped = data.reduce((acc: any, service: any) => {
-          if (!acc[service.category]) {
-            acc[service.category] = {
-              id: service.category.toLowerCase().replace(/\s+/g, '-'),
-              label: service.category,
-              icon: "✦",
-              services: []
-            };
-          }
-          acc[service.category].services.push({
-            name: service.name,
-            duration: `${service.duration} min`,
-            cod: service.id
-          });
-          return acc;
-        }, {});
-        setSectors(Object.values(grouped));
+    Promise.all([
+      fetchAPI("/api/data/services").then(r => {
+        if (!r.ok) throw new Error("services failed");
+        return r.json();
+      }),
+      fetchPublicInfo(),
+    ])
+      .then(([services, info]) => {
+        setSectors(groupServices(services));
+        setPublicInfo(info);
       })
-      .catch(console.error);
+      .catch(() => setLoadError(true))
+      .finally(() => setLoading(false));
   }, []);
+
+  const openBooking = useCallback((serviceId?: string) => {
+    setInitialServiceId(serviceId);
+    setShowBooking(true);
+  }, []);
+
+  const closeBooking = useCallback(() => {
+    setShowBooking(false);
+    setInitialServiceId(undefined);
+  }, []);
+
+  const settings = publicInfo?.settings;
+  const hours = publicInfo?.hours;
+  const businessName = settings?.business_name || "Joha Molinero";
+  const address = settings?.business_address || "Río Segundo, Córdoba";
+  const igHandle = instagramHandle(settings?.business_instagram || "estudiojohamolinero");
+  const waLink = whatsappUrl(settings?.business_phone || "", settings?.whatsapp_link || "");
+  const mapLink = mapsUrl(address);
+  const categories = sectors.map(s => s.label);
 
   return (
     <div className="bg-background text-foreground min-h-screen overflow-x-hidden">
 
-      {/* Navbar */}
       <nav className="fixed top-0 w-full z-50 flex items-center justify-between px-6 py-5 bg-background/85 backdrop-blur-md border-b border-border/40">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate("/admin/dashboard")}
-            className="opacity-90 hover:opacity-100 hover:scale-105 transition-all duration-300 cursor-pointer"
-            title="Acceso administrativo"
-            aria-label="Panel de administración"
-          >
-            <LogoIcon size={56} />
-          </button>
-          <div className="flex flex-col leading-none">
+        <button
+          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+          className="flex items-center gap-3 opacity-90 hover:opacity-100 transition-all duration-300"
+          aria-label="Inicio"
+        >
+          <LogoIcon size={56} />
+          <div className="flex flex-col leading-none text-left">
             <span className="font-serif text-base font-light tracking-[0.2em] text-foreground uppercase">
-              Joha Molinero
+              {businessName.split(" ").slice(0, 2).join(" ") || "Joha Molinero"}
             </span>
             <span className="font-sans text-[9px] tracking-[0.4em] text-primary uppercase font-medium mt-0.5">
               Beauty Studio
             </span>
           </div>
-        </div>
+        </button>
         <button
-          onClick={() => setShowBooking(true)}
+          onClick={() => openBooking()}
           data-testid="button-nav-booking"
           className="border border-primary text-primary font-sans text-xs tracking-[0.25em] uppercase px-5 py-2.5 hover:bg-primary hover:text-background transition-all duration-300"
         >
@@ -79,15 +129,11 @@ export default function Home() {
         </button>
       </nav>
 
-      {/* Hero */}
       <section className="relative min-h-[100dvh] flex items-center justify-center overflow-hidden">
-        {/* Gradient backdrop */}
         <div className="absolute inset-0 z-0">
           <div className="absolute inset-0 bg-gradient-to-br from-[hsl(270_20%_8%)] via-[hsl(300_10%_6%)] to-[hsl(340_15%_5%)]" />
-          {/* Subtle radial glow */}
           <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] rounded-full bg-primary/8 blur-[120px]" />
           <div className="absolute bottom-0 right-0 w-[400px] h-[400px] rounded-full bg-[hsl(300_30%_30%)]/10 blur-[100px]" />
-          {/* Fine grid */}
           <div
             className="absolute inset-0 opacity-[0.035]"
             style={{
@@ -110,10 +156,10 @@ export default function Home() {
               transition={{ duration: 1.2, delay: 0.2 }}
               className="text-primary font-sans text-xs uppercase tracking-[0.4em] mb-8"
             >
-              Joha Molinero Beauty Studio · Río Segundo, Cba
+              {businessName} · Río Segundo, Cba
             </motion.p>
 
-            <h1 className="font-serif font-light text-6xl md:text-8xl lg:text-9xl text-foreground leading-[0.9] mb-8">
+            <h1 className="font-serif font-light text-5xl sm:text-6xl md:text-8xl lg:text-9xl text-foreground leading-[0.9] mb-8">
               Tu mejor{" "}
               <em className="not-italic text-primary">versión</em>
               ,<br />
@@ -121,7 +167,7 @@ export default function Home() {
             </h1>
 
             <p className="font-sans font-light text-muted-foreground text-base md:text-lg tracking-wide mb-12 max-w-md mx-auto">
-              Reservá tu turno online en segundos. Sin esperas, sin llamadas.
+              Reservá tu turno online en segundos. Confirmación por WhatsApp.
             </p>
 
             <motion.div
@@ -131,7 +177,7 @@ export default function Home() {
               className="flex flex-col sm:flex-row gap-4 justify-center"
             >
               <button
-                onClick={() => setShowBooking(true)}
+                onClick={() => openBooking()}
                 data-testid="button-hero-booking"
                 className="group bg-primary text-background font-sans text-xs tracking-[0.3em] uppercase px-10 py-4 hover:bg-primary/90 transition-all duration-300 flex items-center justify-center gap-3"
               >
@@ -139,9 +185,7 @@ export default function Home() {
                 <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </button>
               <button
-                onClick={() => {
-                  document.getElementById("servicios")?.scrollIntoView({ behavior: "smooth" });
-                }}
+                onClick={() => document.getElementById("servicios")?.scrollIntoView({ behavior: "smooth" })}
                 data-testid="button-hero-services"
                 className="border border-border text-muted-foreground font-sans text-xs tracking-[0.3em] uppercase px-10 py-4 hover:border-primary hover:text-primary transition-all duration-300"
               >
@@ -151,7 +195,6 @@ export default function Home() {
           </motion.div>
         </div>
 
-        {/* Scroll indicator */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -166,24 +209,24 @@ export default function Home() {
         </motion.div>
       </section>
 
-      {/* Intro strip */}
-      <section className="py-12 border-y border-border/40 overflow-hidden bg-card/30">
-        <motion.div
-          initial={{ opacity: 0 }}
-          whileInView={{ opacity: 1 }}
-          viewport={{ once: true }}
-          className="flex items-center justify-center gap-12 flex-wrap px-6"
-        >
-          {["Manicuría & Pedicuría", "Cejas & Pestañas", "Tratamientos Faciales", "Láser Diodo", "Cama Solar", "Eventos & Maquillaje"].map((item) => (
-            <span key={item} className="font-sans text-xs tracking-[0.3em] text-muted-foreground uppercase flex items-center gap-3">
-              <span className="text-primary text-xs">✦</span>
-              {item}
-            </span>
-          ))}
-        </motion.div>
-      </section>
+      {categories.length > 0 && (
+        <section className="py-12 border-y border-border/40 overflow-hidden bg-card/30">
+          <motion.div
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            viewport={{ once: true }}
+            className="flex items-center justify-center gap-8 md:gap-12 flex-wrap px-6"
+          >
+            {categories.map((item) => (
+              <span key={item} className="font-sans text-xs tracking-[0.3em] text-muted-foreground uppercase flex items-center gap-3">
+                <span className="text-primary text-xs">✦</span>
+                {item}
+              </span>
+            ))}
+          </motion.div>
+        </section>
+      )}
 
-      {/* Services */}
       <section id="servicios" className="py-28 px-6">
         <div className="max-w-5xl mx-auto">
           <motion.div
@@ -200,73 +243,81 @@ export default function Home() {
               </h2>
             </motion.div>
 
-            <div className="space-y-0 divide-y divide-border/40">
-              {sectors.map((sector) => (
-                <motion.div key={sector.id} variants={fadeUp}>
-                  <button
-                    data-testid={`button-sector-${sector.id}`}
-                    onClick={() => setOpenSector(openSector === sector.id ? null : sector.id)}
-                    className="w-full flex items-center justify-between py-7 group text-left"
-                  >
-                    <div className="flex items-center gap-5">
-                      <span className="text-primary text-xs font-sans">✦</span>
-                      <span className="font-serif text-2xl md:text-3xl font-light text-foreground group-hover:text-primary transition-colors duration-300">
-                        {sector.label}
-                      </span>
-                      <span className="font-sans text-xs text-muted-foreground tracking-wider hidden sm:inline">
-                        {sector.services.length} {sector.services.length === 1 ? "servicio" : "servicios"}
-                      </span>
-                    </div>
-                    <ChevronRight
-                      className={`w-4 h-4 text-primary transition-transform duration-300 ${openSector === sector.id ? "rotate-90" : ""}`}
-                    />
-                  </button>
+            {loading ? (
+              <p className="text-center text-sm text-muted-foreground py-12">Cargando servicios...</p>
+            ) : loadError ? (
+              <div className="text-center py-12 space-y-3">
+                <p className="text-sm text-red-400">No se pudo conectar con el servidor de reservas.</p>
+                <p className="text-xs text-muted-foreground">Ejecutá <code className="text-primary">pnpm dev</code> en la carpeta del proyecto (necesita API + web).</p>
+              </div>
+            ) : sectors.length === 0 ? (
+              <p className="text-center text-sm text-muted-foreground py-12">Pronto publicaremos nuestros servicios.</p>
+            ) : (
+              <div className="space-y-0 divide-y divide-border/40">
+                {sectors.map((sector) => (
+                  <motion.div key={sector.id} variants={fadeUp}>
+                    <button
+                      data-testid={`button-sector-${sector.id}`}
+                      onClick={() => setOpenSector(openSector === sector.id ? null : sector.id)}
+                      className="w-full flex items-center justify-between py-7 group text-left"
+                    >
+                      <div className="flex items-center gap-5">
+                        <span className="text-primary text-xs font-sans">✦</span>
+                        <span className="font-serif text-2xl md:text-3xl font-light text-foreground group-hover:text-primary transition-colors duration-300">
+                          {sector.label}
+                        </span>
+                        <span className="font-sans text-xs text-muted-foreground tracking-wider hidden sm:inline">
+                          {sector.services.length} {sector.services.length === 1 ? "servicio" : "servicios"}
+                        </span>
+                      </div>
+                      <ChevronRight
+                        className={`w-4 h-4 text-primary transition-transform duration-300 ${openSector === sector.id ? "rotate-90" : ""}`}
+                      />
+                    </button>
 
-                  {/* Expanded services */}
-                  <motion.div
-                    initial={false}
-                    animate={
-                      openSector === sector.id
-                        ? { height: "auto", opacity: 1 }
-                        : { height: 0, opacity: 0 }
-                    }
-                    transition={{ duration: 0.35, ease: "easeInOut" }}
-                    className="overflow-hidden"
-                  >
-                    <div className="pb-8 pl-9 space-y-0 divide-y divide-border/20">
-                      {sector.services.map((service: any, idx: number) => (
-                        <div
-                          key={idx}
-                          data-testid={`row-service-${service.cod}`}
-                          className="flex items-center justify-between py-4 group/item"
-                        >
-                          <div className="flex items-center gap-6">
-                            <span className="font-sans text-sm text-foreground/80 group-hover/item:text-foreground transition-colors">
-                              {service.name}
-                            </span>
-                            <span className="font-sans text-xs text-muted-foreground tracking-wider hidden sm:inline">
-                              {service.duration}
-                            </span>
-                          </div>
-                          <button
-                            onClick={() => setShowBooking(true)}
-                            data-testid={`button-book-${service.cod}`}
-                            className="font-sans text-[10px] tracking-[0.25em] uppercase text-primary border border-primary/30 px-4 py-1.5 hover:bg-primary hover:text-background transition-all duration-200 opacity-0 group-hover/item:opacity-100"
+                    <motion.div
+                      initial={false}
+                      animate={openSector === sector.id ? { height: "auto", opacity: 1 } : { height: 0, opacity: 0 }}
+                      transition={{ duration: 0.35, ease: "easeInOut" }}
+                      className="overflow-hidden"
+                    >
+                      <div className="pb-8 pl-9 space-y-0 divide-y divide-border/20">
+                        {sector.services.map((service) => (
+                          <div
+                            key={service.id}
+                            data-testid={`row-service-${service.id}`}
+                            className="flex items-center justify-between py-4 gap-4 group/item"
                           >
-                            Reservar
-                          </button>
-                        </div>
-                      ))}
-                    </div>
+                            <div className="flex-1 min-w-0">
+                              <span className="font-sans text-sm text-foreground/80 group-hover/item:text-foreground transition-colors block">
+                                {service.name}
+                              </span>
+                              <span className="font-sans text-xs text-muted-foreground tracking-wider mt-1 block">
+                                {service.duration} min
+                                {service.price > 0 && (
+                                  <span className="text-primary ml-2">${service.price.toLocaleString("es-AR")}</span>
+                                )}
+                              </span>
+                            </div>
+                            <button
+                              onClick={() => openBooking(service.id)}
+                              data-testid={`button-book-${service.id}`}
+                              className="font-sans text-[10px] tracking-[0.25em] uppercase text-primary border border-primary/30 px-4 py-1.5 hover:bg-primary hover:text-background transition-all duration-200 flex-shrink-0 sm:opacity-0 sm:group-hover/item:opacity-100"
+                            >
+                              Reservar
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </motion.div>
                   </motion.div>
-                </motion.div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </motion.div>
         </div>
       </section>
 
-      {/* CTA Banner */}
       <section className="py-24 px-6 relative overflow-hidden border-y border-border/40">
         <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-primary/10 to-primary/5" />
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[300px] rounded-full bg-primary/8 blur-[80px]" />
@@ -280,13 +331,13 @@ export default function Home() {
           <motion.div variants={fadeUp}>
             <Sparkles className="w-6 h-6 text-primary mx-auto mb-6 opacity-70" />
             <h2 className="font-serif font-light text-4xl md:text-5xl text-foreground mb-4">
-              Lista para tu próximo turno?
+              ¿Lista para tu próximo turno?
             </h2>
             <p className="font-sans text-sm text-muted-foreground tracking-wide mb-10">
-              Reservá en segundos por WhatsApp. Sin esperas, sin llamadas.
+              Elegí servicio, profesional y horario. Te confirmamos por WhatsApp.
             </p>
             <button
-              onClick={() => setShowBooking(true)}
+              onClick={() => openBooking()}
               data-testid="button-cta-booking"
               className="group bg-primary text-background font-sans text-xs tracking-[0.35em] uppercase px-14 py-5 hover:bg-primary/90 transition-all duration-300 inline-flex items-center gap-3"
             >
@@ -297,7 +348,6 @@ export default function Home() {
         </motion.div>
       </section>
 
-      {/* Info Cards */}
       <section className="py-24 px-6">
         <div className="max-w-5xl mx-auto">
           <motion.div
@@ -307,28 +357,35 @@ export default function Home() {
             variants={stagger}
             className="grid grid-cols-1 md:grid-cols-3 gap-px bg-border/30"
           >
-            <motion.div variants={fadeUp} className="bg-background p-10 flex flex-col gap-4">
+            <motion.a
+              variants={fadeUp}
+              href={mapLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bg-background p-10 flex flex-col gap-4 group hover:bg-card transition-colors duration-300"
+            >
               <MapPin className="w-5 h-5 text-primary" />
               <h4 className="font-serif text-xl font-light text-foreground">Ubicación</h4>
-              <p className="font-sans text-sm text-muted-foreground leading-relaxed">
-                Río Segundo, Córdoba<br />
-                <span className="text-primary/70 text-xs">(Dirección exacta al reservar)</span>
+              <p className="font-sans text-sm text-muted-foreground leading-relaxed group-hover:text-foreground/80 transition-colors">
+                {address}
               </p>
-            </motion.div>
+            </motion.a>
 
             <motion.div variants={fadeUp} className="bg-background p-10 flex flex-col gap-4">
               <Clock className="w-5 h-5 text-primary" />
               <h4 className="font-serif text-xl font-light text-foreground">Horarios</h4>
               <p className="font-sans text-sm text-muted-foreground leading-relaxed">
-                Martes a Sábado<br />
-                10:00 — 20:00 hs<br />
-                <span className="text-primary/70 text-xs">Dom y Lun: Cerrado</span>
+                {hours?.openDaysLabel || "Martes a Sábado"}<br />
+                {hours?.hoursLabel || "10:00 — 20:00 hs"}<br />
+                {hours?.closedLabel && (
+                  <span className="text-primary/70 text-xs">{hours.closedLabel}</span>
+                )}
               </p>
             </motion.div>
 
             <motion.a
               variants={fadeUp}
-              href="https://instagram.com/estudiojohamolinero"
+              href={`https://instagram.com/${igHandle}`}
               target="_blank"
               rel="noopener noreferrer"
               data-testid="link-instagram"
@@ -338,43 +395,59 @@ export default function Home() {
               <h4 className="font-serif text-xl font-light text-foreground">Seguinos</h4>
               <p className="font-sans text-sm text-muted-foreground leading-relaxed">
                 Instagram<br />
-                <span className="text-primary text-xs group-hover:underline">@estudiojohamolinero</span>
+                <span className="text-primary text-xs group-hover:underline">@{igHandle}</span>
               </p>
             </motion.a>
           </motion.div>
         </div>
       </section>
 
-      {/* Footer */}
       <footer className="border-t border-border/40 py-14 px-6">
         <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-between gap-8">
           <LogoIcon size={44} />
 
           <div className="flex flex-wrap justify-center gap-8">
             <button
-              onClick={() => setShowBooking(true)}
-              data-testid="button-footer-bot"
+              onClick={() => openBooking()}
+              data-testid="button-footer-booking"
               className="font-sans text-xs tracking-[0.2em] uppercase text-muted-foreground hover:text-primary transition-colors"
             >
-              Bot de Reservas
+              Reservar Online
             </button>
             <button
-              onClick={() => setShowBooking(true)}
-              data-testid="button-footer-atencion"
+              onClick={() => setShowMisTurnos(true)}
               className="font-sans text-xs tracking-[0.2em] uppercase text-muted-foreground hover:text-primary transition-colors"
             >
-              Atención al Cliente
+              Mis Turnos
             </button>
+            <a
+              href={waLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              data-testid="button-footer-whatsapp"
+              className="font-sans text-xs tracking-[0.2em] uppercase text-muted-foreground hover:text-primary transition-colors flex items-center gap-1.5"
+            >
+              <MessageCircle size={12} /> WhatsApp
+            </a>
           </div>
 
-          <p className="font-sans text-xs text-muted-foreground/50 tracking-widest uppercase">
-            © {new Date().getFullYear()} Joha Molinero Beauty Studio
+          <p className="font-sans text-xs text-muted-foreground/50 tracking-widest uppercase text-center">
+            © {new Date().getFullYear()} {businessName}
           </p>
         </div>
       </footer>
-      {/* Booking Wizard Modal */}
+
       <AnimatePresence>
-        {showBooking && <BookingWizard onClose={() => setShowBooking(false)} />}
+        {showMisTurnos && <MisTurnosModal onClose={() => setShowMisTurnos(false)} />}
+      </AnimatePresence>
+      <AnimatePresence>
+        {showBooking && (
+          <BookingWizard
+            onClose={closeBooking}
+            initialServiceId={initialServiceId}
+            publicInfo={publicInfo}
+          />
+        )}
       </AnimatePresence>
     </div>
   );
