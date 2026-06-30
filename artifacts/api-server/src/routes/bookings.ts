@@ -1,11 +1,13 @@
 import { Router } from "express";
-import { db, clients, appointments, professionals, services, professional_schedules } from "@workspace/db";
+import { db, clients, appointments, professionals, services, professional_schedules, vouchers } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { sendWhatsAppMessage } from "../lib/whatsapp.js";
 import { logger } from "../lib/logger.js";
 import { randomUUID } from "crypto";
 import { validate } from "../middlewares/validate.js";
 import { createBookingSchema } from "../schemas/bookings.js";
+import { isTimeSlotAvailable } from "../lib/availability.js";
+import { getBoolSetting, getSetting } from "../lib/settings.js";
 
 const router = Router();
 
@@ -15,6 +17,16 @@ router.post("/", validate(createBookingSchema), async (req, res) => {
 
     const appointmentId = randomUUID();
     let finalClientId = "";
+
+    const availability = await isTimeSlotAvailable(
+      appointment.date,
+      appointment.professionalId,
+      appointment.duration,
+      appointment.time
+    );
+    if (!availability.available) {
+      return res.status(409).json({ error: availability.reason || "Horario no disponible" });
+    }
 
     await db.transaction(async (tx) => {
       // 1. Find or create client
@@ -66,6 +78,13 @@ router.post("/", validate(createBookingSchema), async (req, res) => {
         notes: finalNotes || null,
         createdAt: new Date(),
       });
+
+      if (appointment.voucherCode) {
+        await tx
+          .update(vouchers)
+          .set({ isActive: false })
+          .where(eq(vouchers.code, appointment.voucherCode.toUpperCase()));
+      }
     });
 
     // 3. Fetch details for messages
@@ -83,10 +102,12 @@ router.post("/", validate(createBookingSchema), async (req, res) => {
 
     // 4. Fetch admin (role = Admin)
     const allProfessionals = await db.select().from(professionals);
-    const admin = allProfessionals.find(p => p.role === "Admin");
+    const admin = allProfessionals.find(p => p.role?.toLowerCase() === "admin");
 
     const professionalName = prof?.name ?? "el profesional";
     const serviceName = srv?.name ?? "tu servicio";
+    const businessAddress = await getSetting("business_address", "Río Segundo, Córdoba");
+    const whatsappEnabled = await getBoolSetting("whatsapp_notif");
 
     // ─────────────────────────────────────────────────
     // 5. Send WhatsApp Notifications (Non-blocking)
@@ -98,7 +119,7 @@ router.post("/", validate(createBookingSchema), async (req, res) => {
       `⏰ Hora: *${appointment.time}*\n` +
       `💅 Servicio: ${serviceName}\n` +
       `👩‍🎨 Profesional: ${professionalName}\n\n` +
-      `📍 Río Segundo, Córdoba\n\n` +
+      `📍 ${businessAddress}\n\n` +
       `Si necesitás cancelar o reprogramar, avisanos con anticipación.\n¡Gracias por elegirnos! 💜`;
 
     const profMsg =
@@ -116,18 +137,21 @@ router.post("/", validate(createBookingSchema), async (req, res) => {
       `💅 Servicio: ${serviceName}\n` +
       `👩‍🎨 A cargo de: ${professionalName}`;
 
-    Promise.allSettled([
-      sendWhatsAppMessage(client.phone, clientMsg),
-      prof?.phone && prof.phone !== admin?.phone ? sendWhatsAppMessage(prof.phone, profMsg) : Promise.resolve(),
-      admin?.phone ? sendWhatsAppMessage(admin.phone, adminMsg) : Promise.resolve()
-    ]).catch(err => {
-      logger.error({ err }, "Error sending WhatsApp notifications");
-    });
+    if (whatsappEnabled) {
+      Promise.allSettled([
+        sendWhatsAppMessage(client.phone, clientMsg),
+        prof?.phone && prof.phone !== admin?.phone ? sendWhatsAppMessage(prof.phone, profMsg) : Promise.resolve(),
+        admin?.phone ? sendWhatsAppMessage(admin.phone, adminMsg) : Promise.resolve()
+      ]).catch(err => {
+        logger.error({ err }, "Error sending WhatsApp notifications");
+      });
+    }
 
     res.json({ success: true, appointmentId });
   } catch (error) {
-    logger.error({ error }, "Error processing booking");
-    res.status(500).json({ error: "Internal server error" });
+    const errMsg = error instanceof Error ? error.message : String(error);
+    logger.error({ error, errMsg }, "Error processing booking");
+    res.status(500).json({ error: `Error al procesar la reserva: ${errMsg}` });
   }
 });
 
