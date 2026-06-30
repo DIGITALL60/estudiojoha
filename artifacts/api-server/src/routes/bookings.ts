@@ -130,6 +130,64 @@ router.post("/", validate(createBookingSchema), async (req, res) => {
   }
 });
 
+// GET upsell suggestion — disponibilidad real para servicio complementario
+router.get("/upsell-suggestion", async (req, res) => {
+  try {
+    const { date, professionalId, endTime, bookedCategories } = req.query;
+
+    if (!date || !professionalId || !endTime) {
+      return res.status(400).json({ suggestion: null });
+    }
+
+    const excludedCats = String(bookedCategories || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    // Buscar servicios cortos (<=30 min) de otras categorías con precio
+    const allServices = db.select().from(services).all();
+    const candidates = allServices.filter(
+      (s) =>
+        s.price > 0 &&
+        s.duration <= 30 &&
+        !excludedCats.includes(s.category)
+    );
+
+    if (candidates.length === 0) {
+      return res.json({ suggestion: null });
+    }
+
+    // Mezclar para no mostrar siempre el mismo
+    const shuffled = candidates.sort(() => Math.random() - 0.5);
+
+    // Verificar disponibilidad real para cada candidato en el horario endTime
+    for (const svc of shuffled) {
+      const avail = await isTimeSlotAvailable(
+        String(date),
+        String(professionalId),
+        svc.duration,
+        String(endTime)
+      );
+
+      if (avail.available) {
+        return res.json({
+          suggestion: {
+            service: svc,
+            time: String(endTime),
+            date: String(date),
+          },
+        });
+      }
+    }
+
+    return res.json({ suggestion: null });
+  } catch (error) {
+    const errMsg = error instanceof Error ? error.message : String(error);
+    logger.error({ error, errMsg }, "Error fetching upsell suggestion");
+    return res.json({ suggestion: null });
+  }
+});
+
 // GET available times
 router.get("/availability", async (req, res) => {
   try {

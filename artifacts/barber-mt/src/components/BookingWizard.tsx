@@ -48,9 +48,15 @@ export default function BookingWizard({ onClose, initialServiceId, publicInfo: p
   const [success, setSuccess] = useState(false);
   const [initialized, setInitialized] = useState(false);
 
-  // Upsell post-confirmación
-  const [upsellService, setUpsellService] = useState<Service | null>(null);
+  // Upsell post-confirmación (con disponibilidad real)
+  interface UpsellSuggestion { service: Service; time: string; date: string; }
+  const [upsellSuggestion, setUpsellSuggestion] = useState<UpsellSuggestion | null>(null);
+  const [upsellLoading, setUpsellLoading] = useState(false);
   const [upsellDismissed, setUpsellDismissed] = useState(false);
+  const [upsellBookingLoading, setUpsellBookingLoading] = useState(false);
+  const [upsellBookingSuccess, setUpsellBookingSuccess] = useState(false);
+  const [upsellBookingError, setUpsellBookingError] = useState("");
+  const [firstAppointmentId, setFirstAppointmentId] = useState("");
   const [altDiscountApplied, setAltDiscountApplied] = useState(false);
 
   const loadData = () => {
@@ -181,6 +187,48 @@ export default function BookingWizard({ onClose, initialServiceId, publicInfo: p
     }
   };
 
+  const addMinutes = (timeStr: string, minutes: number): string => {
+    const [h, m] = timeStr.split(":").map(Number);
+    const total = h * 60 + m + minutes;
+    return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+  };
+
+  const handleUpsellBooking = async () => {
+    if (!upsellSuggestion || !selectedProfessional) return;
+    setUpsellBookingLoading(true);
+    setUpsellBookingError("");
+    try {
+      const discountedPrice = Math.round(upsellSuggestion.service.price * 0.95);
+      const res = await fetchAPI("/api/bookings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          client: clientData,
+          appointment: {
+            serviceId: upsellSuggestion.service.id,
+            professionalId: selectedProfessional.id,
+            date: upsellSuggestion.date,
+            time: upsellSuggestion.time,
+            duration: upsellSuggestion.service.duration,
+            price: discountedPrice,
+            notes: `UPSELL_5PCT - vinculado a turno ${firstAppointmentId}`,
+          },
+        }),
+      });
+      if (res.ok) {
+        setUpsellBookingSuccess(true);
+        setUpsellDismissed(true);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setUpsellBookingError(data.error || "No se pudo reservar. Intentá de nuevo.");
+      }
+    } catch {
+      setUpsellBookingError("Error de conexión al intentar reservar.");
+    } finally {
+      setUpsellBookingLoading(false);
+    }
+  };
+
   const handleSubmit = async () => {
     if (!selectedProfessional) {
       setSubmitError("Elegí una profesional para continuar");
@@ -199,14 +247,12 @@ export default function BookingWizard({ onClose, initialServiceId, publicInfo: p
       const totalDuration = selectedServices.reduce((acc, s) => acc + s.duration, 0);
       let totalPrice = selectedServices.reduce((acc, s) => acc + s.price, 0);
 
-      // Aplicar descuento de turno alternativo (5% OFF)
       if (altDiscountApplied) {
-        totalPrice = totalPrice - (totalPrice * 0.05);
+        totalPrice = totalPrice - totalPrice * 0.05;
       }
-
       if (voucherStatus === "valid" && voucherDiscount) {
         if (voucherDiscount.type === "percent") {
-          totalPrice = totalPrice - (totalPrice * (voucherDiscount.value / 100));
+          totalPrice = totalPrice - totalPrice * (voucherDiscount.value / 100);
         } else if (voucherDiscount.type === "fixed") {
           totalPrice = Math.max(0, totalPrice - voucherDiscount.value);
         }
@@ -230,21 +276,27 @@ export default function BookingWizard({ onClose, initialServiceId, publicInfo: p
       });
 
       if (res.ok) {
-        // Elegir un servicio complementario corto (≤ 30 min) de otra categoría para el upsell
-        const bookedCategories = new Set(selectedServices.map(s => s.category));
-        const otherCategory = services.filter(s => !bookedCategories.has(s.category) && s.price > 0);
-        // Priorizar servicios cortos (≤ 30 min) que se puedan agregar al final del turno
-        const shortServices = otherCategory.filter(s => s.duration <= 30);
-        const candidates = shortServices.length > 0 ? shortServices : otherCategory;
-        const pick = candidates[Math.floor(Math.random() * candidates.length)] ?? null;
-        setUpsellService(pick);
+        const data = await res.json().catch(() => ({}));
+        setFirstAppointmentId(data.appointmentId || "");
         setUpsellDismissed(false);
+        setUpsellBookingSuccess(false);
+        setUpsellBookingError("");
         setSuccess(true);
+
+        // Buscar sugerencia con disponibilidad real
+        const endTime = addMinutes(selectedTime, totalDuration);
+        const bookedCats = encodeURIComponent(selectedServices.map(s => s.category).join(","));
+        setUpsellLoading(true);
+        fetchAPI(`/api/bookings/upsell-suggestion?date=${selectedDate}&professionalId=${selectedProfessional.id}&endTime=${endTime}&bookedCategories=${bookedCats}`)
+          .then(r => r.json())
+          .then(d => setUpsellSuggestion(d.suggestion ?? null))
+          .catch(() => setUpsellSuggestion(null))
+          .finally(() => setUpsellLoading(false));
         return;
       }
 
-      const data = await res.json().catch(() => ({}));
-      setSubmitError(data.error || "No se pudo confirmar el turno. Intentá de nuevo.");
+      const errData = await res.json().catch(() => ({}));
+      setSubmitError(errData.error || "No se pudo confirmar el turno. Intentá de nuevo.");
     } catch {
       setSubmitError("Error de conexión. Verificá tu internet e intentá nuevamente.");
     } finally {
@@ -312,7 +364,6 @@ export default function BookingWizard({ onClose, initialServiceId, publicInfo: p
 
         {success ? (
           <div className="flex flex-col items-center justify-center px-6 py-16 min-h-screen">
-            {/* Icono de éxito */}
             <motion.div
               initial={{ scale: 0.5, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
@@ -323,33 +374,46 @@ export default function BookingWizard({ onClose, initialServiceId, publicInfo: p
             </motion.div>
 
             <motion.h2
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.15 }}
+              initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
               className="text-2xl font-serif text-center mb-3 text-foreground"
             >
               ¡Turno Confirmado!
             </motion.h2>
             <motion.p
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.22 }}
+              initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.22 }}
               className="text-muted-foreground text-center mb-2 max-w-sm text-sm"
             >
               Tu turno quedó registrado, <strong className="text-foreground">{clientData.name}</strong>.
             </motion.p>
             <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.3 }}
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}
               className="text-muted-foreground text-center mb-8 max-w-sm text-xs"
             >
               Recibirás un WhatsApp con los detalles.
             </motion.p>
 
-            {/* Card de upsell */}
+            {/* Confirmación de segundo turno agregado */}
             <AnimatePresence>
-              {upsellService && !upsellDismissed && (
+              {upsellBookingSuccess && (
+                <motion.div
+                  initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                  className="w-full max-w-sm flex items-start gap-3 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl px-4 py-3 mb-4"
+                >
+                  <CheckCircle2 size={18} className="text-emerald-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-semibold text-emerald-400">¡Segundo turno reservado!</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {upsellSuggestion?.service.name} a las {upsellSuggestion?.time} hs.
+                      Te llega un WhatsApp con los detalles.
+                    </p>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Card de upsell con disponibilidad real */}
+            <AnimatePresence>
+              {!upsellDismissed && (
                 <motion.div
                   initial={{ opacity: 0, y: 20, scale: 0.95 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -357,9 +421,8 @@ export default function BookingWizard({ onClose, initialServiceId, publicInfo: p
                   transition={{ delay: 0.4, duration: 0.4, ease: "easeOut" }}
                   className="w-full max-w-sm rounded-2xl border border-primary/50 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent p-5 mb-6 relative overflow-hidden"
                 >
-                  {/* Destellos */}
                   <div className="absolute -top-8 -right-8 w-32 h-32 bg-primary/10 rounded-full blur-2xl pointer-events-none" />
-                  <div className="absolute -bottom-4 -left-4 w-20 h-20 bg-primary/8 rounded-full blur-xl pointer-events-none" />
+                  <div className="absolute -bottom-4 -left-4 w-20 h-20 bg-primary/5 rounded-full blur-xl pointer-events-none" />
 
                   <div className="relative">
                     <div className="flex items-center gap-2 mb-3">
@@ -370,61 +433,69 @@ export default function BookingWizard({ onClose, initialServiceId, publicInfo: p
                       </span>
                     </div>
 
-                    <p className="text-sm text-foreground leading-snug mb-1">
-                      Al finalizar tu turno, ¿te gustaría hacerte
-                    </p>
-                    <p className="text-lg font-serif font-semibold text-foreground mb-1">
-                      {upsellService.name}
-                    </p>
-                    <div className="flex items-center gap-2 mb-4">
-                      <Clock size={11} className="text-muted-foreground" />
-                      <span className="text-xs text-muted-foreground">{upsellService.duration} min</span>
-                      {upsellService.price > 0 && (
-                        <>
-                          <span className="text-xs text-muted-foreground line-through ml-1">${upsellService.price.toLocaleString("es-AR")}</span>
-                          <span className="text-sm font-bold text-primary">${Math.round(upsellService.price * 0.95).toLocaleString("es-AR")}</span>
-                        </>
-                      )}
-                    </div>
-
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => {
-                          // Reiniciar wizard con el servicio de upsell pre-seleccionado
-                          setSuccess(false);
-                          setSelectedServices([upsellService]);
-                          setOpenCategory(upsellService.category);
-                          setSelectedProfessional(null);
-                          setSelectedDate("");
-                          setSelectedTime("");
-                          setAltDiscountApplied(true);
-                          setUpsellDismissed(true);
-                          setClientData(prev => prev);
-                          setVoucherCode("");
-                          setVoucherStatus("idle");
-                          setVoucherDiscount(null);
-                          setVoucherMessage("");
-                        }}
-                        className="flex-1 bg-primary text-primary-foreground text-sm font-bold py-3 rounded-xl hover:bg-primary/90 transition-all hover:scale-[1.02] active:scale-[0.98]"
-                      >
-                        ¡Sí, lo agrego!
-                      </button>
-                      <button
-                        onClick={() => setUpsellDismissed(true)}
-                        className="text-sm text-muted-foreground border border-border/50 px-4 py-3 rounded-xl hover:border-primary/30 transition-colors"
-                      >
-                        No, gracias
-                      </button>
-                    </div>
+                    {upsellLoading ? (
+                      <div className="py-4 flex items-center justify-center gap-2 text-muted-foreground">
+                        <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: "linear" }}>
+                          <Clock size={14} />
+                        </motion.div>
+                        <span className="text-xs">Buscando turno disponible...</span>
+                      </div>
+                    ) : upsellSuggestion ? (
+                      <>
+                        <p className="text-sm text-foreground leading-snug mb-0.5">
+                          Al finalizar tu turno, ¿te gustaría hacerte
+                        </p>
+                        <p className="text-lg font-serif font-semibold text-foreground mb-1">
+                          {upsellSuggestion.service.name}
+                        </p>
+                        <div className="flex items-center gap-3 mb-1">
+                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <Clock size={10} /> {upsellSuggestion.service.duration} min
+                          </span>
+                          <span className="text-xs font-bold text-primary">a las {upsellSuggestion.time} hs</span>
+                        </div>
+                        {upsellSuggestion.service.price > 0 && (
+                          <div className="flex items-center gap-2 mb-4">
+                            <span className="text-xs text-muted-foreground line-through">${upsellSuggestion.service.price.toLocaleString("es-AR")}</span>
+                            <span className="text-base font-bold text-primary">${Math.round(upsellSuggestion.service.price * 0.95).toLocaleString("es-AR")}</span>
+                            <span className="text-[10px] text-emerald-400">(-5%)</span>
+                          </div>
+                        )}
+                        {upsellBookingError && (
+                          <p className="text-xs text-red-400 mb-3 flex items-center gap-1">
+                            <AlertCircle size={11} /> {upsellBookingError}
+                          </p>
+                        )}
+                        <div className="flex gap-2">
+                          <button
+                            onClick={handleUpsellBooking}
+                            disabled={upsellBookingLoading}
+                            className="flex-1 bg-primary text-primary-foreground text-sm font-bold py-3 rounded-xl hover:bg-primary/90 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60"
+                          >
+                            {upsellBookingLoading ? "Reservando..." : "¡Sí, lo agrego!"}
+                          </button>
+                          <button
+                            onClick={() => setUpsellDismissed(true)}
+                            disabled={upsellBookingLoading}
+                            className="text-sm text-muted-foreground border border-border/50 px-4 py-3 rounded-xl hover:border-primary/30 transition-colors"
+                          >
+                            No, gracias
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-xs text-muted-foreground text-center py-3">
+                        No hay turnos disponibles para agregar hoy.
+                      </p>
+                    )}
                   </div>
                 </motion.div>
               )}
             </AnimatePresence>
 
             <motion.button
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: upsellService ? 0.5 : 0.35 }}
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+              transition={{ delay: 0.5 }}
               onClick={onClose}
               className="bg-secondary text-secondary-foreground font-medium px-8 py-3 rounded-full hover:bg-secondary/80 transition-colors text-sm"
             >
