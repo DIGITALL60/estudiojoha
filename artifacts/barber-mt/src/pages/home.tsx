@@ -130,12 +130,13 @@ export default function Home() {
       </nav>
 
       <section className="relative min-h-[100dvh] flex items-center justify-center overflow-hidden">
-        <div className="absolute inset-0 z-0">
-          <div 
-            className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-            style={{ backgroundImage: "url('/hero-premium.jpg')" }}
+        <div className="absolute inset-0 z-0 bg-background">
+          <img 
+            src="/hero-premium.jpg" 
+            alt="Estudio Joha Molinero" 
+            className="absolute inset-0 w-full h-full object-cover opacity-30 mix-blend-luminosity"
           />
-          <div className="absolute inset-0 bg-gradient-to-br from-[hsl(270_20%_8%)] via-[hsl(300_10%_6%)] to-[hsl(340_15%_5%)] opacity-70 mix-blend-multiply" />
+          <div className="absolute inset-0 bg-gradient-to-br from-background/90 via-background/60 to-background/90" />
           <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] rounded-full bg-primary/20 blur-[120px]" />
           <div className="absolute bottom-0 right-0 w-[400px] h-[400px] rounded-full bg-[hsl(300_30%_30%)]/20 blur-[100px]" />
           <div
@@ -322,13 +323,12 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="relative w-full h-[60vh] min-h-[400px] flex items-center justify-center overflow-hidden border-y border-border/40">
+      <section className="relative w-full h-[60vh] min-h-[400px] flex items-center justify-center overflow-hidden border-y border-border/40 bg-background">
         <div 
-          className="absolute inset-0 bg-cover bg-center bg-no-repeat bg-fixed"
+          className="absolute inset-0 bg-cover bg-center bg-no-repeat bg-fixed opacity-40 mix-blend-luminosity"
           style={{ backgroundImage: "url('/hero-premium.jpg')" }}
         />
-        <div className="absolute inset-0 bg-background/50 backdrop-blur-[2px]" />
-        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/20 to-background" />
+        <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-background" />
         
         <motion.div 
           initial="hidden"
