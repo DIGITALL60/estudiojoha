@@ -230,9 +230,12 @@ export default function BookingWizard({ onClose, initialServiceId, publicInfo: p
       });
 
       if (res.ok) {
-        // Elegir un servicio complementario de otra categoría para el upsell
+        // Elegir un servicio complementario corto (≤ 30 min) de otra categoría para el upsell
         const bookedCategories = new Set(selectedServices.map(s => s.category));
-        const candidates = services.filter(s => !bookedCategories.has(s.category) && s.price > 0);
+        const otherCategory = services.filter(s => !bookedCategories.has(s.category) && s.price > 0);
+        // Priorizar servicios cortos (≤ 30 min) que se puedan agregar al final del turno
+        const shortServices = otherCategory.filter(s => s.duration <= 30);
+        const candidates = shortServices.length > 0 ? shortServices : otherCategory;
         const pick = candidates[Math.floor(Math.random() * candidates.length)] ?? null;
         setUpsellService(pick);
         setUpsellDismissed(false);
