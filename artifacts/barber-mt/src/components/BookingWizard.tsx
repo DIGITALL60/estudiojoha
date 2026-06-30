@@ -48,8 +48,9 @@ export default function BookingWizard({ onClose, initialServiceId, publicInfo: p
   const [success, setSuccess] = useState(false);
   const [initialized, setInitialized] = useState(false);
 
-  // Turno especial del día con 5% OFF
-  const [featuredSlotDismissed, setFeaturedSlotDismissed] = useState(false);
+  // Upsell post-confirmación
+  const [upsellService, setUpsellService] = useState<Service | null>(null);
+  const [upsellDismissed, setUpsellDismissed] = useState(false);
   const [altDiscountApplied, setAltDiscountApplied] = useState(false);
 
   const loadData = () => {
@@ -112,8 +113,6 @@ export default function BookingWizard({ onClose, initialServiceId, publicInfo: p
         .then(data => {
           setAvailableTimes(data.availableTimes || []);
           setSelectedTime("");
-          setFeaturedSlotDismissed(false);
-          setAltDiscountApplied(false);
         })
         .catch(console.error)
         .finally(() => setLoadingTimes(false));
@@ -231,6 +230,12 @@ export default function BookingWizard({ onClose, initialServiceId, publicInfo: p
       });
 
       if (res.ok) {
+        // Elegir un servicio complementario de otra categoría para el upsell
+        const bookedCategories = new Set(selectedServices.map(s => s.category));
+        const candidates = services.filter(s => !bookedCategories.has(s.category) && s.price > 0);
+        const pick = candidates[Math.floor(Math.random() * candidates.length)] ?? null;
+        setUpsellService(pick);
+        setUpsellDismissed(false);
         setSuccess(true);
         return;
       }
@@ -303,23 +308,125 @@ export default function BookingWizard({ onClose, initialServiceId, publicInfo: p
         </button>
 
         {success ? (
-          <div className="flex flex-col items-center justify-center p-12 min-h-screen">
-            <div className="w-16 h-16 bg-primary/20 rounded-full flex items-center justify-center mb-6">
-              <CheckCircle2 size={32} className="text-primary" />
-            </div>
-            <h2 className="text-2xl font-serif text-center mb-4 text-foreground">¡Turno Confirmado!</h2>
-            <p className="text-muted-foreground text-center mb-4 max-w-sm text-sm">
-              Tu turno quedó registrado, {clientData.name}.
-            </p>
-            <p className="text-muted-foreground text-center mb-8 max-w-sm text-xs">
-              Recibirás un WhatsApp con los detalles. Si no llega en unos minutos, escribinos.
-            </p>
-            <button
+          <div className="flex flex-col items-center justify-center px-6 py-16 min-h-screen">
+            {/* Icono de éxito */}
+            <motion.div
+              initial={{ scale: 0.5, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: "spring", stiffness: 200, damping: 15 }}
+              className="w-20 h-20 bg-primary/20 rounded-full flex items-center justify-center mb-6 border border-primary/30"
+            >
+              <CheckCircle2 size={36} className="text-primary" />
+            </motion.div>
+
+            <motion.h2
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.15 }}
+              className="text-2xl font-serif text-center mb-3 text-foreground"
+            >
+              ¡Turno Confirmado!
+            </motion.h2>
+            <motion.p
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.22 }}
+              className="text-muted-foreground text-center mb-2 max-w-sm text-sm"
+            >
+              Tu turno quedó registrado, <strong className="text-foreground">{clientData.name}</strong>.
+            </motion.p>
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.3 }}
+              className="text-muted-foreground text-center mb-8 max-w-sm text-xs"
+            >
+              Recibirás un WhatsApp con los detalles.
+            </motion.p>
+
+            {/* Card de upsell */}
+            <AnimatePresence>
+              {upsellService && !upsellDismissed && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.97 }}
+                  transition={{ delay: 0.4, duration: 0.4, ease: "easeOut" }}
+                  className="w-full max-w-sm rounded-2xl border border-primary/50 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent p-5 mb-6 relative overflow-hidden"
+                >
+                  {/* Destellos */}
+                  <div className="absolute -top-8 -right-8 w-32 h-32 bg-primary/10 rounded-full blur-2xl pointer-events-none" />
+                  <div className="absolute -bottom-4 -left-4 w-20 h-20 bg-primary/8 rounded-full blur-xl pointer-events-none" />
+
+                  <div className="relative">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Sparkles size={14} className="text-primary flex-shrink-0" />
+                      <span className="text-[11px] font-bold text-primary uppercase tracking-wider">Oferta exclusiva para vos</span>
+                      <span className="ml-auto text-[10px] font-black bg-primary text-primary-foreground px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <Tag size={8} /> 5% OFF
+                      </span>
+                    </div>
+
+                    <p className="text-sm text-foreground leading-snug mb-1">
+                      Al finalizar tu turno, ¿te gustaría hacerte
+                    </p>
+                    <p className="text-lg font-serif font-semibold text-foreground mb-1">
+                      {upsellService.name}
+                    </p>
+                    <div className="flex items-center gap-2 mb-4">
+                      <Clock size={11} className="text-muted-foreground" />
+                      <span className="text-xs text-muted-foreground">{upsellService.duration} min</span>
+                      {upsellService.price > 0 && (
+                        <>
+                          <span className="text-xs text-muted-foreground line-through ml-1">${upsellService.price.toLocaleString("es-AR")}</span>
+                          <span className="text-sm font-bold text-primary">${Math.round(upsellService.price * 0.95).toLocaleString("es-AR")}</span>
+                        </>
+                      )}
+                    </div>
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          // Reiniciar wizard con el servicio de upsell pre-seleccionado
+                          setSuccess(false);
+                          setSelectedServices([upsellService]);
+                          setOpenCategory(upsellService.category);
+                          setSelectedProfessional(null);
+                          setSelectedDate("");
+                          setSelectedTime("");
+                          setAltDiscountApplied(true);
+                          setUpsellDismissed(true);
+                          setClientData(prev => prev);
+                          setVoucherCode("");
+                          setVoucherStatus("idle");
+                          setVoucherDiscount(null);
+                          setVoucherMessage("");
+                        }}
+                        className="flex-1 bg-primary text-primary-foreground text-sm font-bold py-3 rounded-xl hover:bg-primary/90 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                      >
+                        ¡Sí, lo agrego!
+                      </button>
+                      <button
+                        onClick={() => setUpsellDismissed(true)}
+                        className="text-sm text-muted-foreground border border-border/50 px-4 py-3 rounded-xl hover:border-primary/30 transition-colors"
+                      >
+                        No, gracias
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <motion.button
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: upsellService ? 0.5 : 0.35 }}
               onClick={onClose}
-              className="bg-primary text-primary-foreground font-medium px-8 py-3 rounded-full hover:bg-primary/90 transition-colors"
+              className="bg-secondary text-secondary-foreground font-medium px-8 py-3 rounded-full hover:bg-secondary/80 transition-colors text-sm"
             >
               Cerrar
-            </button>
+            </motion.button>
           </div>
         ) : dataLoading ? (
           <div className="flex items-center justify-center min-h-screen text-sm text-muted-foreground">
@@ -505,128 +612,26 @@ export default function BookingWizard({ onClose, initialServiceId, publicInfo: p
                 </div>
 
                 {selectedDate && (
-                  <div className="pt-4 space-y-4">
+                  <div className="pt-4">
                     {loadingTimes ? (
                       <p className="text-xs text-muted-foreground animate-pulse text-center py-4">Cargando horarios...</p>
                     ) : availableTimes.length === 0 ? (
                       <p className="text-xs text-muted-foreground text-center py-4">No hay horarios disponibles para esta fecha.</p>
-                    ) : (() => {
-                      // Elegir el turno especial: el que está al ~40% de la lista (media mañana)
-                      const featuredIdx = Math.max(0, Math.floor(availableTimes.length * 0.4));
-                      const featuredSlot = availableTimes[featuredIdx];
-
-                      return (
-                        <>
-                          {/* Card de turno especial con 5% OFF */}
-                          <AnimatePresence>
-                            {!featuredSlotDismissed && (
-                              <motion.div
-                                initial={{ opacity: 0, y: -10, scale: 0.97 }}
-                                animate={{ opacity: 1, y: 0, scale: 1 }}
-                                exit={{ opacity: 0, y: -6, scale: 0.97 }}
-                                transition={{ duration: 0.35, ease: "easeOut" }}
-                                className="rounded-2xl border border-primary/50 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent p-4 relative overflow-hidden"
-                              >
-                                {/* Destellos decorativos */}
-                                <div className="absolute -top-6 -right-6 w-28 h-28 bg-primary/15 rounded-full blur-2xl pointer-events-none" />
-                                <div className="absolute bottom-0 left-0 w-16 h-16 bg-primary/10 rounded-full blur-xl pointer-events-none" />
-
-                                <button
-                                  onClick={() => setFeaturedSlotDismissed(true)}
-                                  className="absolute top-3 right-3 text-muted-foreground hover:text-foreground transition-colors"
-                                  aria-label="Cerrar oferta"
-                                >
-                                  <X size={14} />
-                                </button>
-
-                                <div className="flex items-center gap-3 mb-3">
-                                  <div className="w-8 h-8 rounded-xl bg-primary/25 flex items-center justify-center flex-shrink-0">
-                                    <Sparkles size={14} className="text-primary" />
-                                  </div>
-                                  <div>
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-[11px] font-bold text-primary uppercase tracking-wider">Turno especial del día</span>
-                                      <span className="text-[10px] font-black bg-primary text-primary-foreground px-2 py-0.5 rounded-full flex items-center gap-1">
-                                        <Tag size={8} /> 5% OFF
-                                      </span>
-                                    </div>
-                                    <p className="text-xs text-muted-foreground mt-0.5">¡Solo por hoy en este horario!</p>
-                                  </div>
-                                </div>
-
-                                <div className="flex items-center justify-between gap-3">
-                                  <div>
-                                    <p className="text-2xl font-serif font-bold text-foreground">{featuredSlot}</p>
-                                    <p className="text-xs text-muted-foreground">
-                                      Reservá este turno y pagás {(selectedServices.reduce((a,s)=>a+s.price,0)*0.95).toLocaleString("es-AR", {maximumFractionDigits:0})} en vez de ${selectedServices.reduce((a,s)=>a+s.price,0).toLocaleString("es-AR")}
-                                    </p>
-                                  </div>
-                                  <button
-                                    onClick={() => {
-                                      setSelectedTime(featuredSlot);
-                                      setAltDiscountApplied(true);
-                                      setFeaturedSlotDismissed(true);
-                                    }}
-                                    className="flex-shrink-0 bg-primary text-primary-foreground text-xs font-bold py-2.5 px-4 rounded-xl hover:bg-primary/90 transition-all hover:scale-105 active:scale-95"
-                                  >
-                                    ¡Lo tomo!
-                                  </button>
-                                </div>
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
-
-                          {/* Confirmación de descuento aplicado */}
-                          <AnimatePresence>
-                            {altDiscountApplied && (
-                              <motion.div
-                                initial={{ opacity: 0, y: -6 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0 }}
-                                className="flex items-center gap-2 text-xs text-emerald-400 bg-emerald-400/10 border border-emerald-400/20 rounded-xl px-3 py-2.5"
-                              >
-                                <CheckCircle2 size={13} />
-                                <span>¡5% de descuento aplicado! Turno: <strong>{selectedTime}</strong></span>
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
-
-                          {/* Grilla de todos los turnos */}
-                          <div className="grid grid-cols-3 gap-3">
-                            {availableTimes.map(t => {
-                              const isFeatured = t === featuredSlot && !featuredSlotDismissed;
-                              const isSelected = selectedTime === t;
-                              return (
-                                <button
-                                  key={t}
-                                  onClick={() => {
-                                    setSelectedTime(t);
-                                    if (t === featuredSlot && !featuredSlotDismissed) {
-                                      setAltDiscountApplied(true);
-                                      setFeaturedSlotDismissed(true);
-                                    } else if (t !== featuredSlot) {
-                                      setAltDiscountApplied(false);
-                                    }
-                                  }}
-                                  className={`relative py-3 rounded-xl text-sm font-medium border transition-all ${
-                                    isSelected
-                                      ? "bg-primary border-primary text-primary-foreground"
-                                      : isFeatured
-                                      ? "border-primary/60 bg-primary/8 text-primary hover:bg-primary/15"
-                                      : "bg-transparent border-border/50 hover:border-primary/50 text-foreground"
-                                  }`}
-                                >
-                                  {isFeatured && (
-                                    <span className="absolute -top-2 left-1/2 -translate-x-1/2 text-[8px] font-black bg-primary text-primary-foreground px-1.5 py-0.5 rounded-full whitespace-nowrap">5% OFF</span>
-                                  )}
-                                  {t}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </>
-                      );
-                    })()}
+                    ) : (
+                      <div className="grid grid-cols-3 gap-3">
+                        {availableTimes.map(t => (
+                          <button
+                            key={t}
+                            onClick={() => setSelectedTime(t)}
+                            className={`py-3 rounded-xl text-sm font-medium border transition-all ${
+                              selectedTime === t ? "bg-primary border-primary text-primary-foreground" : "bg-transparent border-border/50 hover:border-primary/50 text-foreground"
+                            }`}
+                          >
+                            {t}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
