@@ -413,7 +413,7 @@ export default function BookingWizard({ onClose, initialServiceId, publicInfo: p
 
             {/* Card de upsell con disponibilidad real */}
             <AnimatePresence>
-              {!upsellDismissed && (
+              {!upsellDismissed && (upsellLoading || upsellSuggestion) && (
                 <motion.div
                   initial={{ opacity: 0, y: 20, scale: 0.95 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
