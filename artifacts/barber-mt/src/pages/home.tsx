@@ -131,9 +131,14 @@ export default function Home() {
 
       <section className="relative min-h-[100dvh] flex items-center justify-center overflow-hidden">
         <div className="absolute inset-0 z-0">
-          <div className="absolute inset-0 bg-gradient-to-br from-[hsl(270_20%_8%)] via-[hsl(300_10%_6%)] to-[hsl(340_15%_5%)]" />
-          <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] rounded-full bg-primary/8 blur-[120px]" />
-          <div className="absolute bottom-0 right-0 w-[400px] h-[400px] rounded-full bg-[hsl(300_30%_30%)]/10 blur-[100px]" />
+          <div 
+            className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+            style={{ backgroundImage: "url('/studio-alt.jpg')" }}
+          />
+          <div className="absolute inset-0 bg-background/80" />
+          <div className="absolute inset-0 bg-gradient-to-br from-[hsl(270_20%_8%)]/80 via-[hsl(300_10%_6%)]/80 to-[hsl(340_15%_5%)]/90" />
+          <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] rounded-full bg-primary/15 blur-[120px]" />
+          <div className="absolute bottom-0 right-0 w-[400px] h-[400px] rounded-full bg-[hsl(300_30%_30%)]/20 blur-[100px]" />
           <div
             className="absolute inset-0 opacity-[0.035]"
             style={{
@@ -316,6 +321,32 @@ export default function Home() {
             )}
           </motion.div>
         </div>
+      </section>
+
+      <section className="relative w-full h-[60vh] min-h-[400px] flex items-center justify-center overflow-hidden border-y border-border/40">
+        <div 
+          className="absolute inset-0 bg-cover bg-center bg-no-repeat bg-fixed"
+          style={{ backgroundImage: "url('/studio-alt.jpg')" }}
+        />
+        <div className="absolute inset-0 bg-background/50 backdrop-blur-[2px]" />
+        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/20 to-background" />
+        
+        <motion.div 
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true }}
+          variants={fadeUp}
+          className="relative z-10 text-center px-6 max-w-2xl mx-auto"
+        >
+          <Sparkles className="w-6 h-6 text-primary mx-auto mb-6 opacity-90 drop-shadow-md" />
+          <h2 className="font-serif font-light text-4xl md:text-5xl text-white mb-4 drop-shadow-lg">
+            Un espacio pensado<br />
+            <em className="not-italic text-primary">para vos.</em>
+          </h2>
+          <p className="font-sans font-light text-white/90 text-sm tracking-wide drop-shadow-md max-w-md mx-auto">
+            Relajate y disfrutá de una experiencia premium. Cada detalle de nuestro salón está diseñado para tu confort.
+          </p>
+        </motion.div>
       </section>
 
       <section className="py-24 px-6 relative overflow-hidden border-y border-border/40">
