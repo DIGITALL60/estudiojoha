@@ -132,11 +132,11 @@ export default function Home() {
         <div className="flex items-center gap-3">
           <ThemeToggle />
           <button
-            onClick={() => openBooking()}
-            data-testid="button-nav-booking"
-            className="border border-primary text-primary font-sans text-xs tracking-[0.25em] uppercase px-5 py-2.5 hover:bg-primary hover:text-white transition-all duration-300"
+            onClick={() => window.location.href = "/admin"}
+            data-testid="button-nav-admin"
+            className="border border-primary/50 text-primary/70 font-sans text-[10px] tracking-[0.2em] uppercase px-4 py-2 hover:border-primary hover:text-primary transition-all duration-300"
           >
-            Reservar
+            Personal autorizado
           </button>
         </div>
       </nav>
