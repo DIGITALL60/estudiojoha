@@ -79,15 +79,15 @@
   --elevate-1: rgba(0,0,0, .04);
   --elevate-2: rgba(0,0,0, .08);
 
-  /* Background: cream-50 (#fbf6f1) ≈ hsl(30 57% 97%) */
-  --background: 30 57% 97%;
+  /* Background: blush/pink (#fce8f0) ≈ hsl(335 85% 95%) to match the reference site */
+  --background: 335 85% 95%;
   /* Foreground: ink (#2a1014) ≈ hsl(350 50% 12%) */
   --foreground: 350 50% 12%;
 
   /* Border: blush-200 (#e8c5d0) ≈ hsl(340 40% 84%) */
   --border: 340 40% 84%;
-  /* Card: cream-100 (#f4ece3) ≈ hsl(30 43% 92%) */
-  --card: 30 43% 92%;
+  /* Card: pure white for contrast against pink background */
+  --card: 0 0% 100%;
   --card-foreground: 350 50% 12%;
   --card-border: 340 40% 84%;
 
