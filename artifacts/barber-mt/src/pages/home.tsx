@@ -119,7 +119,7 @@ export default function Home() {
           className="flex items-center gap-3 opacity-90 hover:opacity-100 transition-all duration-300"
           aria-label="Inicio"
         >
-          <LogoIcon size={56} />
+          <LogoIcon size={72} />
           <div className="flex flex-col leading-none text-left">
             <span className="font-serif text-base font-light tracking-[0.2em] text-foreground uppercase">
               {businessName.split(" ").slice(0, 2).join(" ") || "Joha Molinero"}
@@ -454,7 +454,7 @@ export default function Home() {
 
       <footer className="border-t border-border/40 py-14 px-6">
         <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-between gap-8">
-          <LogoIcon size={44} />
+          <LogoIcon size={64} />
 
           <div className="flex flex-wrap justify-center gap-8">
             <button
