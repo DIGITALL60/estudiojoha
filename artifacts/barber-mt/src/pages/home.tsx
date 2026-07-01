@@ -120,18 +120,13 @@ export default function Home() {
           aria-label="Inicio"
         >
           <LogoIcon size={72} />
-          <div className="flex items-center gap-2 text-left">
-            <span className="font-serif text-base font-light tracking-[0.2em] text-foreground uppercase pt-0.5">
-              ESTUDIO
+          <div className="flex flex-col items-center leading-none">
+            <span className="font-serif text-base font-light tracking-[0.2em] text-foreground uppercase">
+              ESTUDIO JOHA MOLINERO
             </span>
-            <div className="flex flex-col items-center leading-none">
-              <span className="font-serif text-base font-light tracking-[0.2em] text-foreground uppercase">
-                JOHA MOLINERO
-              </span>
-              <span className="font-sans text-[9px] tracking-[0.4em] text-primary uppercase font-medium mt-0.5">
-                Beauty Studio
-              </span>
-            </div>
+            <span className="font-sans text-[9px] tracking-[0.4em] text-primary uppercase font-medium mt-1 self-end">
+              Beauty Studio
+            </span>
           </div>
         </button>
         <div className="flex items-center gap-3">
