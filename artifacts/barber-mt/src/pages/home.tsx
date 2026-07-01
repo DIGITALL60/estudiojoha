@@ -140,11 +140,12 @@ export default function Home() {
             alt="Estudio Joha Molinero" 
             className="absolute inset-0 w-full h-full object-cover opacity-30 mix-blend-luminosity"
           />
-          <div className="absolute inset-0 bg-gradient-to-br from-[hsl(270_20%_8%)] via-[hsl(300_10%_6%)] to-[hsl(340_15%_5%)] opacity-70 mix-blend-multiply" />
-          <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] rounded-full bg-primary/20 blur-[120px]" />
-          <div className="absolute bottom-0 right-0 w-[400px] h-[400px] rounded-full bg-[hsl(300_30%_30%)]/20 blur-[100px]" />
+          {/* Overlay sutil que funciona en ambos modos */}
+          <div className="absolute inset-0 bg-background/50" />
+          <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] rounded-full bg-primary/15 blur-[120px]" />
+          <div className="absolute bottom-0 right-0 w-[400px] h-[400px] rounded-full bg-primary/10 blur-[100px]" />
           <div
-            className="absolute inset-0 opacity-[0.035]"
+            className="absolute inset-0 opacity-[0.025]"
             style={{
               backgroundImage:
                 "linear-gradient(hsl(var(--border)) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--border)) 1px, transparent 1px)",
@@ -188,7 +189,7 @@ export default function Home() {
               <button
                 onClick={() => openBooking()}
                 data-testid="button-hero-booking"
-                className="group bg-primary text-background font-sans text-xs tracking-[0.3em] uppercase px-10 py-4 hover:bg-primary/90 transition-all duration-300 flex items-center justify-center gap-3"
+                className="group bg-primary text-white font-sans text-xs tracking-[0.3em] uppercase px-10 py-4 hover:bg-primary/90 transition-all duration-300 flex items-center justify-center gap-3"
               >
                 Reservar Turno
                 <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
@@ -332,7 +333,7 @@ export default function Home() {
           className="absolute inset-0 bg-cover bg-center bg-no-repeat bg-fixed opacity-40 mix-blend-luminosity"
           style={{ backgroundImage: "url('/hero-premium.jpg')" }}
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-background" />
+        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/30 to-background" />
         
         <motion.div 
           initial="hidden"
@@ -342,11 +343,11 @@ export default function Home() {
           className="relative z-10 text-center px-6 max-w-2xl mx-auto"
         >
           <Sparkles className="w-6 h-6 text-primary mx-auto mb-6 opacity-90 drop-shadow-md" />
-          <h2 className="font-serif font-light text-4xl md:text-5xl text-white mb-4 drop-shadow-lg">
+          <h2 className="font-serif font-light text-4xl md:text-5xl text-foreground mb-4 drop-shadow-lg">
             Un espacio pensado<br />
             <em className="not-italic text-primary">para vos.</em>
           </h2>
-          <p className="font-sans font-light text-white/90 text-sm tracking-wide drop-shadow-md max-w-md mx-auto">
+          <p className="font-sans font-light text-foreground/70 text-sm tracking-wide drop-shadow-md max-w-md mx-auto">
             Relajate y disfrutá de una experiencia premium. Cada detalle de nuestro salón está diseñado para tu confort.
           </p>
         </motion.div>
@@ -373,7 +374,7 @@ export default function Home() {
             <button
               onClick={() => openBooking()}
               data-testid="button-cta-booking"
-              className="group bg-primary text-background font-sans text-xs tracking-[0.35em] uppercase px-14 py-5 hover:bg-primary/90 transition-all duration-300 inline-flex items-center gap-3"
+              className="group bg-primary text-white font-sans text-xs tracking-[0.35em] uppercase px-14 py-5 hover:bg-primary/90 transition-all duration-300 inline-flex items-center gap-3"
             >
               Reservar Ahora
               <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
