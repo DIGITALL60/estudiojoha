@@ -328,12 +328,15 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="relative w-full h-[60vh] min-h-[400px] flex items-center justify-center overflow-hidden border-y border-border/40 bg-background">
+      <section className="relative w-full h-[60vh] min-h-[400px] flex items-center justify-center overflow-hidden border-y border-border/40">
+        {/* Foto de fondo siempre oscura — funciona en modo claro y oscuro */}
         <div 
-          className="absolute inset-0 bg-cover bg-center bg-no-repeat bg-fixed opacity-40 mix-blend-luminosity"
+          className="absolute inset-0 bg-cover bg-center bg-no-repeat bg-fixed"
           style={{ backgroundImage: "url('/hero-premium.jpg')" }}
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/30 to-background" />
+        {/* Overlay oscuro permanente para que el texto blanco siempre se lea */}
+        <div className="absolute inset-0 bg-black/55" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-black/60" />
         
         <motion.div 
           initial="hidden"
@@ -343,11 +346,11 @@ export default function Home() {
           className="relative z-10 text-center px-6 max-w-2xl mx-auto"
         >
           <Sparkles className="w-6 h-6 text-primary mx-auto mb-6 opacity-90 drop-shadow-md" />
-          <h2 className="font-serif font-light text-4xl md:text-5xl text-foreground mb-4 drop-shadow-lg">
+          <h2 className="font-serif font-light text-4xl md:text-5xl text-white mb-4 drop-shadow-lg">
             Un espacio pensado<br />
             <em className="not-italic text-primary">para vos.</em>
           </h2>
-          <p className="font-sans font-light text-foreground/70 text-sm tracking-wide drop-shadow-md max-w-md mx-auto">
+          <p className="font-sans font-light text-white/85 text-sm tracking-wide drop-shadow-md max-w-md mx-auto">
             Relajate y disfrutá de una experiencia premium. Cada detalle de nuestro salón está diseñado para tu confort.
           </p>
         </motion.div>
