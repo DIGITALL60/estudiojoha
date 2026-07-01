@@ -122,7 +122,7 @@ export default function Home() {
           <LogoIcon size={72} />
           <div className="flex flex-col leading-none text-left">
             <span className="font-serif text-base font-light tracking-[0.2em] text-foreground uppercase">
-              {businessName || "Estudio Joha Molinero"}
+              ESTUDIO JOHA MOLINERO
             </span>
             <span className="font-sans text-[9px] tracking-[0.4em] text-primary uppercase font-medium mt-0.5">
               Beauty Studio
