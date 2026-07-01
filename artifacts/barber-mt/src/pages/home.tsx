@@ -220,15 +220,19 @@ export default function Home() {
       </section>
 
       {categories.length > 0 && (
-        <section className="py-12 border-y border-border/40 overflow-hidden bg-card/30">
+        <section className="py-12 border-y border-border/40 overflow-hidden bg-card/30 flex">
           <motion.div
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            viewport={{ once: true }}
-            className="flex items-center justify-center gap-8 md:gap-12 flex-wrap px-6"
+            initial={{ x: "0%" }}
+            animate={{ x: "-50%" }}
+            transition={{
+              repeat: Infinity,
+              ease: "linear",
+              duration: 25, // velocidad del desplazamiento
+            }}
+            className="flex items-center gap-8 md:gap-12 w-max pr-8 md:pr-12"
           >
-            {categories.map((item) => (
-              <span key={item} className="font-sans text-xs tracking-[0.3em] text-muted-foreground uppercase flex items-center gap-3">
+            {[...categories, ...categories].map((item, i) => (
+              <span key={i} className="font-sans text-xs tracking-[0.3em] text-muted-foreground uppercase flex items-center gap-3">
                 <span className="text-primary text-xs">✦</span>
                 {item}
               </span>
