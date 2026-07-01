@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import LogoIcon from "@/components/LogoIcon";
 import BookingWizard from "@/components/BookingWizard";
 import MisTurnosModal from "@/components/MisTurnosModal";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { fetchAPI } from "@/lib/api";
 import {
   fetchPublicInfo,
@@ -120,13 +121,16 @@ export default function Home() {
             </span>
           </div>
         </button>
-        <button
-          onClick={() => openBooking()}
-          data-testid="button-nav-booking"
-          className="border border-primary text-primary font-sans text-xs tracking-[0.25em] uppercase px-5 py-2.5 hover:bg-primary hover:text-background transition-all duration-300"
-        >
-          Reservar
-        </button>
+        <div className="flex items-center gap-3">
+          <ThemeToggle />
+          <button
+            onClick={() => openBooking()}
+            data-testid="button-nav-booking"
+            className="border border-primary text-primary font-sans text-xs tracking-[0.25em] uppercase px-5 py-2.5 hover:bg-primary hover:text-white transition-all duration-300"
+          >
+            Reservar
+          </button>
+        </div>
       </nav>
 
       <section className="relative min-h-[100dvh] flex items-center justify-center overflow-hidden">
