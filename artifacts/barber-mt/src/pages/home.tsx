@@ -39,14 +39,22 @@ interface SectorGroup {
 
 function groupServices(data: { id: string; name: string; category: string; duration: number; price: number }[]): SectorGroup[] {
   const grouped = data.reduce((acc: Record<string, SectorGroup>, service) => {
-    if (!acc[service.category]) {
-      acc[service.category] = {
-        id: service.category.toLowerCase().replace(/\s+/g, "-"),
-        label: service.category,
+    // Saneamiento para corregir problemas de codificación desde la base de datos
+    let safeCategory = service.category;
+    if (/Cat.*logo Eventos/i.test(safeCategory)) {
+      safeCategory = "Catálogo Eventos";
+    } else if (/Depilaci.*n Definitiva/i.test(safeCategory)) {
+      safeCategory = "Depilación Definitiva";
+    }
+
+    if (!acc[safeCategory]) {
+      acc[safeCategory] = {
+        id: safeCategory.toLowerCase().replace(/\s+/g, "-"),
+        label: safeCategory,
         services: [],
       };
     }
-    acc[service.category].services.push({
+    acc[safeCategory].services.push({
       id: service.id,
       name: service.name,
       duration: service.duration,
