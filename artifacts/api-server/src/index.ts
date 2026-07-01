@@ -111,6 +111,10 @@ function initSchema() {
         \`key\` text PRIMARY KEY NOT NULL,
         \`value\` text NOT NULL
       );
+      
+      -- Fix potential encoding issues in DB
+      UPDATE \`services\` SET \`category\` = 'Catálogo Eventos' WHERE \`category\` LIKE 'Cat%logo Eventos';
+      UPDATE \`services\` SET \`category\` = 'Depilación Definitiva' WHERE \`category\` LIKE 'Depilaci%n Definitiva';
     `);
     logger.info("Database schema initialized successfully");
   } catch (err) {
