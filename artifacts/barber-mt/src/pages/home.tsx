@@ -119,12 +119,12 @@ export default function Home() {
           className="flex items-center gap-3 opacity-90 hover:opacity-100 transition-all duration-300"
           aria-label="Inicio"
         >
-          <LogoIcon size={72} />
+          <LogoIcon size={90} />
           <div className="flex flex-col items-center leading-none">
             <span className="font-serif text-base font-light tracking-[0.2em] text-foreground uppercase">
               ESTUDIO JOHA MOLINERO
             </span>
-            <span className="font-sans text-[9px] tracking-[0.4em] text-primary uppercase font-medium mt-1 self-end">
+            <span className="font-sans text-[9px] tracking-[0.4em] text-primary uppercase font-medium mt-1 self-center">
               Beauty Studio
             </span>
           </div>
