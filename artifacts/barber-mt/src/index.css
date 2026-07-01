@@ -69,74 +69,75 @@
 }
 
 :root {
-  /* Palette from cursouniasjohamolinero.netlify.app */
-  /* wine-950: #27090f | wine-900: #34101a | wine-800: #4a1620 */
-  /* neon: #ff4fa8 | neon-soft: #ff8cc6 | rose-400: #c97b95 */
-  /* gold: #c9a769 | cream-50: #fbf6f1 | cream-100: #f4ece3 | ink: #2a1014 */
+  /* === LIGHT MODE — cursouniasjohamolinero palette === */
+  /* cream-50: #fbf6f1 | cream-100: #f4ece3 | blush-100: #fce8f0 */
+  /* rose-400: #c97b95 | neon: #d94f86 | ink: #2a1014 | gold: #c9a769 */
 
-  --button-outline: rgba(255, 79, 168, .20);
-  --badge-outline: rgba(255, 79, 168, .10);
+  --button-outline: rgba(217, 79, 134, .18);
+  --badge-outline: rgba(217, 79, 134, .10);
   --opaque-button-border-intensity: -8;
-  --elevate-1: rgba(0,0,0, .06);
-  --elevate-2: rgba(0,0,0, .12);
+  --elevate-1: rgba(0,0,0, .04);
+  --elevate-2: rgba(0,0,0, .08);
 
-  /* Background: wine-950 (#27090f) ≈ hsl(350 63% 10%) */
-  --background: 350 63% 10%;
-  /* Foreground: cream-50 (#fbf6f1) ≈ hsl(30 50% 97%) */
-  --foreground: 30 50% 97%;
+  /* Background: cream-50 (#fbf6f1) ≈ hsl(30 57% 97%) */
+  --background: 30 57% 97%;
+  /* Foreground: ink (#2a1014) ≈ hsl(350 50% 12%) */
+  --foreground: 350 50% 12%;
 
-  /* Border: wine-800 (#4a1620) ≈ hsl(348 55% 19%) */
-  --border: 348 55% 19%;
-  /* Card: wine-900 (#34101a) ≈ hsl(349 57% 14%) */
-  --card: 349 57% 14%;
-  --card-foreground: 30 50% 97%;
-  --card-border: 348 55% 19%;
+  /* Border: blush-200 (#e8c5d0) ≈ hsl(340 40% 84%) */
+  --border: 340 40% 84%;
+  /* Card: cream-100 (#f4ece3) ≈ hsl(30 43% 92%) */
+  --card: 30 43% 92%;
+  --card-foreground: 350 50% 12%;
+  --card-border: 340 40% 84%;
 
-  --sidebar: 350 63% 10%;
-  --sidebar-foreground: 30 50% 97%;
-  --sidebar-border: 348 55% 19%;
-  /* neon (#ff4fa8) ≈ hsl(330 100% 65%) */
-  --sidebar-primary: 330 100% 65%;
-  --sidebar-primary-foreground: 350 63% 10%;
-  /* wine-800 */
-  --sidebar-accent: 348 55% 19%;
-  --sidebar-accent-foreground: 30 50% 97%;
-  --sidebar-ring: 330 100% 65%;
+  /* Sidebar: blush-50 (#fce8f0) ≈ hsl(335 85% 95%) */
+  --sidebar: 335 85% 95%;
+  --sidebar-foreground: 350 50% 12%;
+  --sidebar-border: 340 40% 84%;
+  /* Primary rose: #d94f86 ≈ hsl(333 63% 57%) */
+  --sidebar-primary: 333 63% 57%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  /* Sidebar accent: cream-100 */
+  --sidebar-accent: 30 43% 92%;
+  --sidebar-accent-foreground: 350 50% 12%;
+  --sidebar-ring: 333 63% 57%;
 
-  --popover: 349 57% 14%;
-  --popover-foreground: 30 50% 97%;
-  --popover-border: 348 55% 19%;
+  /* Popover: white-ish cream */
+  --popover: 30 57% 99%;
+  --popover-foreground: 350 50% 12%;
+  --popover-border: 340 40% 84%;
 
-  /* Primary: neon (#ff4fa8) ≈ hsl(330 100% 65%) */
-  --primary: 330 100% 65%;
+  /* Primary: rose-pink (#d94f86) ≈ hsl(333 63% 57%) */
+  --primary: 333 63% 57%;
   --primary-foreground: 0 0% 100%;
 
-  /* Secondary: rose-400 (#c97b95) ≈ hsl(338 35% 63%) */
-  --secondary: 338 35% 63%;
-  --secondary-foreground: 350 63% 10%;
+  /* Secondary: blush-100 (#fce8f0) ≈ hsl(335 85% 95%) */
+  --secondary: 335 85% 95%;
+  --secondary-foreground: 333 63% 40%;
 
-  /* Muted: wine-800 */
-  --muted: 348 55% 19%;
-  /* blush-200 (#f2d9d9) ≈ hsl(0 46% 90%) */
-  --muted-foreground: 0 46% 75%;
+  /* Muted: cream-100 */
+  --muted: 30 43% 92%;
+  /* Muted text: rose-300 (#c97b95) ≈ hsl(338 35% 63%) */
+  --muted-foreground: 338 25% 48%;
 
-  /* Accent: neon-soft (#ff8cc6) ≈ hsl(330 100% 77%) */
-  --accent: 330 100% 77%;
-  --accent-foreground: 350 63% 10%;
+  /* Accent: light blush */
+  --accent: 335 85% 95%;
+  --accent-foreground: 333 63% 40%;
 
-  --destructive: 0 84% 60%;
+  --destructive: 0 72% 51%;
   --destructive-foreground: 0 0% 100%;
 
-  --input: 348 55% 19%;
-  --ring: 330 100% 65%;
+  --input: 340 40% 88%;
+  --ring: 333 63% 57%;
 
-  /* Charts: neon, gold, rose, cream, blush */
-  --chart-1: 330 100% 65%;
+  /* Charts */
+  --chart-1: 333 63% 57%;
   /* gold (#c9a769) ≈ hsl(38 44% 60%) */
   --chart-2: 38 44% 60%;
   --chart-3: 338 35% 63%;
-  --chart-4: 30 50% 90%;
-  --chart-5: 0 46% 80%;
+  --chart-4: 335 85% 88%;
+  --chart-5: 350 50% 30%;
 
   --app-font-sans: 'Manrope', sans-serif;
   --app-font-serif: 'Cormorant Garamond', Georgia, serif;
@@ -144,14 +145,14 @@
   --app-font-display: 'Cormorant Garamond', Georgia, serif;
 
   --radius: 0.375rem;
-  --shadow-2xs: 0px 2px 0px 0px hsl(0 0% 0% / 0.00);
-  --shadow-xs: 0px 2px 0px 0px hsl(0 0% 0% / 0.00);
-  --shadow-sm: 0px 2px 4px 0px hsl(0 0% 0% / 0.20);
-  --shadow: 0px 4px 8px 0px hsl(0 0% 0% / 0.30);
-  --shadow-md: 0px 8px 16px 0px hsl(0 0% 0% / 0.35);
-  --shadow-lg: 0px 16px 32px 0px hsl(0 0% 0% / 0.40);
-  --shadow-xl: 0px 24px 48px 0px hsl(0 0% 0% / 0.45);
-  --shadow-2xl: 0px 32px 64px 0px hsl(0 0% 0% / 0.50);
+  --shadow-2xs: 0px 1px 2px 0px hsl(340 30% 60% / 0.08);
+  --shadow-xs: 0px 1px 3px 0px hsl(340 30% 60% / 0.10);
+  --shadow-sm: 0px 2px 4px 0px hsl(340 30% 60% / 0.12);
+  --shadow: 0px 4px 8px 0px hsl(340 30% 60% / 0.14);
+  --shadow-md: 0px 8px 16px 0px hsl(340 30% 60% / 0.16);
+  --shadow-lg: 0px 16px 32px 0px hsl(340 30% 60% / 0.18);
+  --shadow-xl: 0px 24px 48px 0px hsl(340 30% 60% / 0.20);
+  --shadow-2xl: 0px 32px 64px 0px hsl(340 30% 60% / 0.24);
   --tracking-normal: 0em;
   --spacing: 0.25rem;
 
@@ -172,7 +173,7 @@
 }
 
 .dark {
-  /* Dark mode = same wine palette (it's already dark-first) */
+  /* === DARK MODE — wine-burgundy palette === */
   --button-outline: rgba(255, 79, 168, .20);
   --badge-outline: rgba(255, 79, 168, .10);
   --opaque-button-border-intensity: 9;
