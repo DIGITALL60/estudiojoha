@@ -1,61 +1,110 @@
-import axios from "axios";
+import makeWASocket, { useMultiFileAuthState, DisconnectReason } from "@whiskeysockets/baileys";
+import QRCode from "qrcode";
 import { logger } from "./logger.js";
 
-// ─── Configuración desde variables de entorno ───────────────────────────────
-const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID!;
-const ACCESS_TOKEN    = process.env.WHATSAPP_ACCESS_TOKEN!;
-const API_URL = `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`;
-
-// Compatibilidad con routes/whatsapp.ts existente
-export let whatsappSocket: null = null;
+export let whatsappSocket: ReturnType<typeof makeWASocket> | null = null;
 export let currentQR: string | null = null;
-export let isConnected = true; // Con Cloud API siempre disponible
+export let isConnected = false;
 
-// ─── Inicialización — ya no requiere QR ni sesión ───────────────────────────
-export async function initWhatsApp() {
-  if (!PHONE_NUMBER_ID || !ACCESS_TOKEN) {
-    logger.error("❌ Faltan variables: WHATSAPP_PHONE_NUMBER_ID o WHATSAPP_ACCESS_TOKEN");
-    isConnected = false;
-    return;
+// ─── Funciones Anti-Baneo ──────────────────────────────────────────────────
+
+// Retraso asíncrono
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Devuelve un string invisible (Zero-width space) aleatorio
+// Esto muta el hash del mensaje para que WhatsApp no detecte que es 100% idéntico.
+function getInvisibleMutation(): string {
+  const invisibleChars = ["\u200B", "\u200C", "\u200D", "\uFEFF"];
+  let mutation = "";
+  const count = Math.floor(Math.random() * 3) + 1; // 1 a 3 caracteres invisibles
+  for (let i = 0; i < count; i++) {
+    mutation += invisibleChars[Math.floor(Math.random() * invisibleChars.length)];
   }
-  isConnected = true;
-  logger.info("✅ WhatsApp Cloud API lista. Sin QR, sin sesión, sin riesgo de baneo.");
+  return mutation;
 }
 
-// ─── Enviar mensaje de texto ─────────────────────────────────────────────────
-export async function sendWhatsAppMessage(phone: string, text: string): Promise<boolean> {
-  // Normalizar número: solo dígitos
-  const formattedPhone = phone.replace(/[^0-9]/g, "");
+// ──────────────────────────────────────────────────────────────────────────
 
-  if (!formattedPhone) {
-    logger.warn("sendWhatsAppMessage: número vacío, se omite.");
+export async function initWhatsApp() {
+  const { state, saveCreds } = await useMultiFileAuthState("auth_info_baileys");
+
+  const sock = makeWASocket({
+    auth: state,
+    printQRInTerminal: true, // Print to terminal for debugging
+  });
+
+  whatsappSocket = sock;
+
+  sock.ev.on("creds.update", saveCreds);
+
+  sock.ev.on("connection.update", async (update) => {
+    const { connection, lastDisconnect, qr } = update;
+
+    if (qr) {
+      logger.info("New QR code generated");
+      try {
+        currentQR = await QRCode.toDataURL(qr);
+      } catch (err) {
+        logger.error({ err }, "Error generating QR Code");
+      }
+    }
+
+    if (connection === "close") {
+      isConnected = false;
+      currentQR = null;
+      const shouldReconnect =
+        (lastDisconnect?.error as { output?: { statusCode?: number } })?.output?.statusCode !==
+        DisconnectReason.loggedOut;
+      
+      logger.warn({ reason: lastDisconnect?.error }, "WhatsApp connection closed.");
+      
+      if (shouldReconnect) {
+        initWhatsApp();
+      } else {
+        logger.error("WhatsApp logged out. Please delete auth_info_baileys and restart to scan again.");
+      }
+    } else if (connection === "open") {
+      logger.info("✅ WhatsApp Web conectado exitosamente (Baileys)!");
+      isConnected = true;
+      currentQR = null;
+    }
+  });
+}
+
+export async function sendWhatsAppMessage(phone: string, text: string) {
+  if (!isConnected || !whatsappSocket) {
+    logger.error("Cannot send message, WhatsApp is not connected.");
     return false;
   }
 
   try {
-    const response = await axios.post(
-      API_URL,
-      {
-        messaging_product: "whatsapp",
-        to: formattedPhone,
-        type: "text",
-        text: { body: text },
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${ACCESS_TOKEN}`,
-          "Content-Type": "application/json",
-        },
-      }
-    );
-    logger.info(
-      { messageId: response.data?.messages?.[0]?.id },
-      `✅ Mensaje enviado a ${formattedPhone}`
-    );
+    const formattedPhone = phone.replace(/[^0-9]/g, "") + "@s.whatsapp.net";
+
+    // 1. Añadir mutación invisible al texto
+    const mutatedText = text + getInvisibleMutation();
+
+    // 2. Simular lectura/presencia
+    await whatsappSocket.presenceSubscribe(formattedPhone);
+    await delay(Math.random() * 500 + 500); // 0.5s - 1.0s pausa antes de escribir
+
+    // 3. Estado "escribiendo..." proporcional al mensaje
+    await whatsappSocket.sendPresenceUpdate("composing", formattedPhone);
+    
+    // Cálculo: aprox 50ms por carácter, mínimo 2s, máximo 12s
+    const typingTime = Math.min(Math.max(mutatedText.length * 50, 2000), 12000);
+    await delay(typingTime);
+
+    // 4. Pausar escritura y enviar
+    await whatsappSocket.sendPresenceUpdate("paused", formattedPhone);
+    await delay(Math.random() * 500 + 200);
+
+    // Enviar mensaje real
+    await whatsappSocket.sendMessage(formattedPhone, { text: mutatedText });
+    
+    logger.info(`✅ Mensaje enviado a ${phone} (Typing sim: ${typingTime}ms)`);
     return true;
-  } catch (err: any) {
-    const detail = err.response?.data ?? err.message;
-    logger.error({ detail }, `❌ Error enviando mensaje a ${formattedPhone}`);
+  } catch (err) {
+    logger.error({ err, phone }, "❌ Error enviando mensaje WhatsApp");
     return false;
   }
 }
