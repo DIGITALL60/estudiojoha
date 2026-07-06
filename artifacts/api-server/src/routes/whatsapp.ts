@@ -1,45 +1,44 @@
 import { Router } from "express";
-import { currentQR, isConnected, sendWhatsAppMessage } from "../lib/whatsapp";
+import { currentQR, isConnected, sendWhatsAppMessage } from "../lib/whatsapp.js";
 import { requireAuth } from "../middlewares/auth.js";
 
 const router = Router();
 
+// Estado de la conexión — con Cloud API siempre está conectado
 router.get("/status", (req, res) => {
   res.json({
     connected: isConnected,
-    qr: currentQR,
+    provider: "Meta WhatsApp Cloud API",
+    qr: null, // Ya no se usa QR con la API oficial
   });
 });
 
 router.post("/send-bulk", requireAuth, async (req, res) => {
   const { messages } = req.body;
   if (!Array.isArray(messages)) {
-    return res.status(400).json({ error: "messages array required" });
+    res.status(400).json({ error: "messages array required" });
+    return;
   }
 
   if (!isConnected) {
-    return res.status(503).json({ error: "WhatsApp is not connected" });
+    res.status(503).json({ error: "WhatsApp Cloud API no está configurada" });
+    return;
   }
 
-  // We process them sequentially. For huge lists, we might want to delay between sends
-  // to avoid ban, but for reactivation of a few clients it should be fine.
-  let sent = 0;
-  let failed = 0;
+  const results: { to: string; success: boolean; error?: string }[] = [];
 
-  for (const msg of messages) {
-    if (msg.phone && msg.message) {
-      const success = await sendWhatsAppMessage(msg.phone, msg.message);
-      if (success) {
-        sent++;
-      } else {
-        failed++;
-      }
-      // Small artificial delay to avoid being flagged as spam quickly
-      await new Promise(r => setTimeout(r, 1500));
+  for (const { to, message } of messages) {
+    try {
+      await sendWhatsAppMessage(to, message);
+      results.push({ to, success: true });
+      // Delay entre mensajes para no saturar la API
+      await new Promise((r) => setTimeout(r, 1000));
+    } catch (err: any) {
+      results.push({ to, success: false, error: err.message });
     }
   }
 
-  res.json({ success: true, sent, failed });
+  res.json({ results });
 });
 
 export default router;

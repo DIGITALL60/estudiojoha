@@ -247,9 +247,13 @@ router.patch("/professionals/:id", requireAuth, async (req, res) => {
 router.delete("/professionals/:id", requireAuth, async (req, res) => {
   try {
     const { id } = req.params as { id: string };
+    // Delete all dependent records first (SQLite has no ON DELETE CASCADE for these)
+    await db.delete(professional_services).where(eq(professional_services.professionalId, id));
+    await db.delete(professional_schedules).where(eq(professional_schedules.professionalId, id));
     await db.delete(professionals).where(eq(professionals.id, id));
     res.json({ success: true });
   } catch (err) {
+    logger.error({ err }, "Failed to delete professional");
     res.status(500).json({ error: "Failed to delete professional" });
   }
 });
