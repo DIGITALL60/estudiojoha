@@ -39,13 +39,19 @@ function AuthRoute({ component: Component, adminOnly = false }: { component: any
   useEffect(() => {
     const userStr = localStorage.getItem("user");
     if (userStr) {
-      const user = JSON.parse(userStr);
-      setIsAuthenticated(true);
-      if (adminOnly && user.role.toLowerCase() !== "admin") {
-        setIsAuthorized(false);
-        navigate("/admin/agenda");
-      } else {
-        setIsAuthorized(true);
+      try {
+        const user = JSON.parse(userStr);
+        setIsAuthenticated(true);
+        if (adminOnly && user?.role?.toLowerCase() !== "admin") {
+          setIsAuthorized(false);
+          navigate("/admin/agenda");
+        } else {
+          setIsAuthorized(true);
+        }
+      } catch (e) {
+        localStorage.removeItem("user");
+        setIsAuthenticated(false);
+        navigate("/login");
       }
     } else {
       setIsAuthenticated(false);
