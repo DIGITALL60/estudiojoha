@@ -19,7 +19,8 @@ function initSchema() {
         \`color\` text DEFAULT '#7c3aed' NOT NULL,
         \`initial\` text NOT NULL,
         \`commission_rate\` integer DEFAULT 0,
-        \`base_salary\` integer DEFAULT 0
+        \`base_salary\` integer DEFAULT 0,
+        \`sales_target\` integer DEFAULT 0
       );
       CREATE UNIQUE INDEX IF NOT EXISTS \`professionals_username_unique\` ON \`professionals\` (\`username\`);
       CREATE TABLE IF NOT EXISTS \`clients\` (
@@ -51,6 +52,7 @@ function initSchema() {
         \`status\` text DEFAULT 'completado' NOT NULL,
         \`payment_method\` text,
         \`notes\` text,
+        \`shop_sales\` integer DEFAULT 0,
         \`reminder_sent\` integer DEFAULT false NOT NULL,
         \`created_at\` integer NOT NULL,
         FOREIGN KEY (\`client_id\`) REFERENCES \`clients\`(\`id\`),

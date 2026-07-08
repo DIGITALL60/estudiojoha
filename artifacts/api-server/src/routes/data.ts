@@ -209,14 +209,15 @@ router.get("/professionals", async (req, res) => {
 
 router.post("/professionals", requireAuth, async (req, res) => {
   try {
-    const { name, role, username, email, phone, password, color, initial, commissionRate, baseSalary } = req.body;
+    const { name, role, username, email, phone, password, color, initial, commissionRate, baseSalary, salesTarget } = req.body;
     if (!name) return res.status(400).json({ error: "Name is required" });
     const id = randomUUID();
     await db.insert(professionals).values({
       id, name, role: role || "Staff", username, email, phone, password,
       color: color || "#7c3aed", initial,
       commissionRate: commissionRate !== undefined ? Number(commissionRate) : 0,
-      baseSalary: baseSalary !== undefined ? Number(baseSalary) : 0
+      baseSalary: baseSalary !== undefined ? Number(baseSalary) : 0,
+      salesTarget: salesTarget !== undefined ? Number(salesTarget) : 0
     });
     const [created] = await db.select().from(professionals).where(eq(professionals.id, id)).limit(1);
     return res.status(201).json(created);
@@ -228,7 +229,7 @@ router.post("/professionals", requireAuth, async (req, res) => {
 router.patch("/professionals/:id", requireAuth, async (req, res) => {
   try {
     const { id } = req.params as { id: string };
-    const { name, role, username, email, phone, password, color, initial, commissionRate, baseSalary } = req.body;
+    const { name, role, username, email, phone, password, color, initial, commissionRate, baseSalary, salesTarget } = req.body;
     const updateData: any = { name, role, username, email, phone, color, initial };
     if (password !== undefined && password !== "") {
       updateData.password = password;
@@ -238,6 +239,9 @@ router.patch("/professionals/:id", requireAuth, async (req, res) => {
     }
     if (baseSalary !== undefined) {
       updateData.baseSalary = Number(baseSalary);
+    }
+    if (salesTarget !== undefined) {
+      updateData.salesTarget = Number(salesTarget);
     }
     await db.update(professionals).set(updateData).where(eq(professionals.id, id));
     const [updated] = await db.select().from(professionals).where(eq(professionals.id, id)).limit(1);
@@ -322,6 +326,7 @@ router.get("/appointments", requireAuth, async (req, res) => {
         status: appointments.status,
         paymentMethod: appointments.paymentMethod,
         notes: appointments.notes,
+        shopSales: appointments.shopSales,
         clientId: appointments.clientId,
         professionalId: appointments.professionalId,
         serviceId: appointments.serviceId,
@@ -359,6 +364,7 @@ router.post("/appointments", requireAuth, async (req, res) => {
       price: Number(price),
       status: status ?? "agendado",
       notes,
+      shopSales: req.body.shopSales ? Number(req.body.shopSales) : 0,
       createdAt: new Date(),
     });
     const [created] = await db.select().from(appointments).where(eq(appointments.id, id)).limit(1);
@@ -451,6 +457,7 @@ router.patch("/appointments/:id", requireAuth, async (req, res) => {
       status, 
       notes, 
       price: price ? Number(price) : undefined,
+      shopSales: req.body.shopSales !== undefined ? Number(req.body.shopSales) : undefined,
       paymentMethod: paymentMethod !== undefined ? paymentMethod : undefined
     }).where(eq(appointments.id, id));
     const [updated] = await db.select().from(appointments).where(eq(appointments.id, id)).limit(1);

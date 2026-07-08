@@ -14,6 +14,7 @@ interface Professional {
   initial: string;
   commissionRate?: number;
   baseSalary?: number;
+  salesTarget?: number;
 }
 
 const COLOR_OPTIONS = [
@@ -40,7 +41,8 @@ function EditModal({
     password: "", 
     ...member, 
     commissionRate: member.commissionRate ?? 0,
-    baseSalary: member.baseSalary ?? 0
+    baseSalary: member.baseSalary ?? 0,
+    salesTarget: member.salesTarget ?? 0
   });
   const [assignedServiceIds, setAssignedServiceIds] = useState<string[]>(initialAssigned);
   const [saving, setSaving] = useState(false);
@@ -68,6 +70,7 @@ function EditModal({
         initial: form.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase(),
         commissionRate: Number(form.commissionRate) || 0,
         baseSalary: Number(form.baseSalary) || 0,
+        salesTarget: Number(form.salesTarget) || 0,
       };
 
       if (form.password?.trim()) {
@@ -252,6 +255,25 @@ function EditModal({
             </div>
             <p className="text-[9px] text-muted-foreground mt-1">
               Monto fijo por mes que se suma al cálculo en la pestaña Salarios.
+            </p>
+          </div>
+
+          {/* Sales Target */}
+          <div>
+            <label className="text-[9px] font-bold tracking-widest text-muted-foreground uppercase block mb-1.5">Objetivo Ventas Shop (Opcional)</label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">$</span>
+              <input
+                type="number"
+                min={0}
+                placeholder="Ej: 100000"
+                value={form.salesTarget ?? 0}
+                onChange={e => setForm(f => ({ ...f, salesTarget: Number(e.target.value) }))}
+                className="w-full bg-background border border-border rounded-sm pl-8 pr-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-primary"
+              />
+            </div>
+            <p className="text-[9px] text-muted-foreground mt-1">
+              Meta de ventas de productos para el mes (visible en Salarios).
             </p>
           </div>
 

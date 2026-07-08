@@ -31,6 +31,7 @@ export const professionals = sqliteTable("professionals", {
   initial: text("initial").notNull(),
   commissionRate: integer("commission_rate").default(0),
   baseSalary: integer("base_salary").default(0),
+  salesTarget: integer("sales_target").default(0),
 });
 
 export const insertProfessionalSchema = createInsertSchema(professionals);
@@ -91,6 +92,7 @@ export const appointments = sqliteTable("appointments", {
   status: text("status").notNull().default("completado"), // agendado, completado, cancelado
   paymentMethod: text("payment_method"), // Efectivo, Transferencia, Tarjeta, Mercado Pago
   notes: text("notes"),
+  shopSales: integer("shop_sales").default(0), // Ventas generadas en el local
   reminderSent: integer("reminder_sent", { mode: "boolean" }).notNull().default(false),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(new Date()),
 });

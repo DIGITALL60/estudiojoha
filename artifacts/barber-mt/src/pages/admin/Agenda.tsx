@@ -250,6 +250,7 @@ function EditTurnModal({ app, onClose, onUpdated }: { app: Appointment; onClose:
   const [status, setStatus] = useState(app.status || "agendado");
   const [notes, setNotes] = useState(app.notes || "");
   const [paymentMethod, setPaymentMethod] = useState((app as any).paymentMethod || "Efectivo");
+  const [shopSales, setShopSales] = useState((app as any).shopSales || 0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [reminding, setReminding] = useState(false);
@@ -278,7 +279,8 @@ function EditTurnModal({ app, onClose, onUpdated }: { app: Appointment; onClose:
         body: JSON.stringify({ 
           status, 
           notes,
-          paymentMethod: status === "completado" ? paymentMethod : null
+          paymentMethod: status === "completado" ? paymentMethod : null,
+          shopSales: status === "completado" ? Number(shopSales) : 0
         })
       });
       onUpdated();
@@ -345,6 +347,27 @@ function EditTurnModal({ app, onClose, onUpdated }: { app: Appointment; onClose:
               </motion.div>
             )}
           </div>
+          {status === "completado" && (
+            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}>
+              <label className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted-foreground block mb-1.5 text-emerald-500">
+                Ventas de Shop ($) (Opcional)
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">$</span>
+                <input
+                  type="number"
+                  min={0}
+                  value={shopSales || ""}
+                  onChange={e => setShopSales(e.target.value ? Number(e.target.value) : 0)}
+                  placeholder="Ej: 5000"
+                  className="w-full bg-background border border-emerald-500/50 rounded-sm pl-8 pr-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+              <p className="text-[9px] text-muted-foreground mt-1">
+                Suma a las ventas y objetivos de la profesional.
+              </p>
+            </motion.div>
+          )}
           <div>
             <label className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted-foreground block mb-1.5">Notas</label>
             <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Opcional..."
