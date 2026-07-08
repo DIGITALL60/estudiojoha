@@ -6,7 +6,7 @@ import {
   GraduationCap, Wallet, TrendingUp, BadgeDollarSign,
   Gift, History, RotateCw, Ticket, Settings, LogOut,
   ChevronLeft, ChevronRight, Menu, AlertTriangle, Bell,
-  MessageSquare, Clock, Image
+  MessageSquare, Clock, Image as ImageIcon
 } from "lucide-react";
 import LogoIcon from "@/components/LogoIcon";
 import { fetchAPI } from "@/lib/api";
@@ -29,7 +29,7 @@ const iconMap: Record<string, React.ReactNode> = {
   settings: <Settings size={16} />,
   "log-out": <LogOut size={16} />,
   clock: <Clock size={16} />,
-  image: <Image size={16} />,
+  image: <ImageIcon size={16} />,
 };
 
 const navConfig = {

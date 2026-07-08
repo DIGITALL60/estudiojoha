@@ -75,11 +75,9 @@ onlyBuiltDependencies:
   - msw
   - unrs-resolver
 
-
-
-
 allowBuilds:
   '@whiskeysockets/baileys': true
   better-sqlite3: true
   esbuild: true
   protobufjs: true
+  puppeteer: set this to true or false

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { Image, Upload, X, Check, Loader2, Plus } from "lucide-react";
+import { Image as ImageIcon, Upload, X, Check, Loader2, Plus } from "lucide-react";
 import AdminLayout from "./AdminLayout";
 import { fetchAPI } from "@/lib/api";
 
@@ -131,7 +131,7 @@ export default function PortadaAdmin() {
         {images.length === 0 ? (
           <div className="py-12 border-2 border-dashed border-border rounded-lg flex flex-col items-center justify-center text-center">
             <div className="w-12 h-12 rounded-full bg-primary/5 flex items-center justify-center mb-3">
-              <Image className="text-primary/40" size={24} />
+              <ImageIcon className="text-primary/40" size={24} />
             </div>
             <p className="text-sm font-medium text-foreground">No hay imágenes en la portada</p>
             <p className="text-xs text-muted-foreground mt-1 mb-4 max-w-xs">
