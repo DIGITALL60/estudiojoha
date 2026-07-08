@@ -19,7 +19,7 @@ interface Client {
   createdAt: string | null;
 }
 
-function ClientModal({ client, onClose, onSaved }: { client?: Client | null; onClose: () => void; onSaved: (c: Client) => void }) {
+function ClientModal({ client, appointments, onClose, onSaved }: { client?: Client | null; appointments: {date: string; status: string; serviceName: string; professionalName: string}[]; onClose: () => void; onSaved: (c: Client) => void }) {
   const [form, setForm] = useState({
     name: client?.name ?? "",
     phone: client?.phone ?? "",
@@ -53,35 +53,67 @@ function ClientModal({ client, onClose, onSaved }: { client?: Client | null; onC
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
       <motion.div initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95 }}
-        className="bg-card border border-border rounded-sm w-full max-w-md">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+        className="bg-card border border-border rounded-sm w-full max-w-2xl max-h-[90vh] overflow-y-auto scrollbar-thin">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border sticky top-0 bg-card z-10">
           <h2 className="text-sm font-semibold text-foreground">{client ? "Editar cliente" : "Nuevo cliente"}</h2>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X size={16} /></button>
         </div>
         <div className="p-5 space-y-4">
-          {[
-            { label: "Nombre completo *", key: "name", type: "text", placeholder: "Ej. María Rodríguez" },
-            { label: "Teléfono *", key: "phone", type: "tel", placeholder: "+54 9 351 000 0000" },
-            { label: "Email", key: "email", type: "email", placeholder: "correo@ejemplo.com" },
-          ].map(f => (
-            <div key={f.key}>
-              <label className="text-[9px] font-bold tracking-[0.2em] uppercase text-muted-foreground block mb-1.5">{f.label}</label>
-              <input type={f.type} placeholder={f.placeholder} value={(form as any)[f.key]}
-                onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))}
-                className="w-full bg-background border border-border rounded-sm px-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-primary" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-4">
+              <h3 className="text-xs font-bold text-foreground border-b border-border/50 pb-2">Datos Personales</h3>
+              {[
+                { label: "Nombre completo *", key: "name", type: "text", placeholder: "Ej. María Rodríguez" },
+                { label: "Teléfono *", key: "phone", type: "tel", placeholder: "+54 9 351 000 0000" },
+                { label: "Email", key: "email", type: "email", placeholder: "correo@ejemplo.com" },
+              ].map(f => (
+                <div key={f.key}>
+                  <label className="text-[9px] font-bold tracking-[0.2em] uppercase text-muted-foreground block mb-1.5">{f.label}</label>
+                  <input type={f.type} placeholder={f.placeholder} value={(form as any)[f.key]}
+                    onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))}
+                    className="w-full bg-background border border-border rounded-sm px-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-primary" />
+                </div>
+              ))}
+              <div>
+                <label className="text-[9px] font-bold tracking-[0.2em] uppercase text-muted-foreground block mb-1.5">Cumpleaños</label>
+                <input type="date" value={form.birthday} onChange={e => setForm(p => ({ ...p, birthday: e.target.value }))}
+                  className="w-full bg-background border border-border rounded-sm px-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-primary" />
+              </div>
             </div>
-          ))}
-          <div>
-            <label className="text-[9px] font-bold tracking-[0.2em] uppercase text-muted-foreground block mb-1.5">Cumpleaños</label>
-            <input type="date" value={form.birthday} onChange={e => setForm(p => ({ ...p, birthday: e.target.value }))}
-              className="w-full bg-background border border-border rounded-sm px-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-primary" />
+            
+            <div className="space-y-4 h-full flex flex-col">
+              <h3 className="text-xs font-bold text-foreground border-b border-border/50 pb-2">Ficha y Observaciones</h3>
+              <div className="flex-1 flex flex-col min-h-[150px]">
+                <label className="text-[9px] font-bold tracking-[0.2em] uppercase text-muted-foreground block mb-1.5">Notas / Historial Médico / Preferencias</label>
+                <textarea value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))}
+                  placeholder="Alergias, fórmulas de coloración, preferencias de servicio, preguntas frecuentes..."
+                  className="w-full flex-1 bg-background border border-border rounded-sm px-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-primary resize-none min-h-[120px]" />
+              </div>
+            </div>
           </div>
-          <div>
-            <label className="text-[9px] font-bold tracking-[0.2em] uppercase text-muted-foreground block mb-1.5">Notas</label>
-            <textarea value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))}
-              placeholder="Alergias, preferencias..." rows={2}
-              className="w-full bg-background border border-border rounded-sm px-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-primary resize-none" />
-          </div>
+
+          {client && appointments.length > 0 && (
+            <div className="mt-6 pt-6 border-t border-border/50">
+              <h3 className="text-xs font-bold text-foreground mb-3">Historial de Turnos Recientes</h3>
+              <div className="space-y-2 max-h-40 overflow-y-auto pr-2 scrollbar-thin">
+                {appointments.slice(0, 10).map((app, idx) => (
+                  <div key={idx} className="flex items-center justify-between p-2.5 bg-background border border-border/50 rounded-sm text-xs">
+                    <div>
+                      <span className="font-semibold text-foreground">{app.date}</span>
+                      <span className="text-muted-foreground ml-2">{app.serviceName}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-muted-foreground/70">{app.professionalName}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${app.status === 'completado' ? 'bg-emerald-500/10 text-emerald-500' : app.status === 'cancelado' ? 'bg-red-500/10 text-red-500' : 'bg-primary/10 text-primary'}`}>
+                        {app.status}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {error && <p className="text-xs text-red-400">{error}</p>}
         </div>
         <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-border">
@@ -242,7 +274,12 @@ export default function Clientes() {
 
       <AnimatePresence>
         {showModal && (
-          <ClientModal client={editClient} onClose={() => { setShowModal(false); setEditClient(null); }} onSaved={handleSaved} />
+          <ClientModal 
+            client={editClient} 
+            appointments={editClient ? appointments.filter(a => a.clientId === editClient.id).sort((a,b) => b.date.localeCompare(a.date)) : []}
+            onClose={() => { setShowModal(false); setEditClient(null); }} 
+            onSaved={handleSaved} 
+          />
         )}
       </AnimatePresence>
     </AdminLayout>
