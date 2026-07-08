@@ -5,7 +5,7 @@ import { logger } from "../lib/logger.js";
 
 const router = Router();
 
-router.get("/status", (req, res) => {
+router.get("/status", (_req, res) => {
   res.json({
     connected: isConnected,
     qr: currentQR,
@@ -24,41 +24,47 @@ router.post("/send-bulk", requireAuth, async (req, res) => {
     return;
   }
 
-  // Responder inmediatamente al frontend para no bloquear la petición HTTP
+  // Responder inmediatamente al frontend para no bloquear la petición HTTP (evitar timeout)
   res.json({ 
     success: true, 
-    message: "Envíos masivos encolados con modo anti-baneo extremo activo." 
+    message: "Envíos masivos encolados con modo anti-baneo (batches + simulación humana) activo." 
   });
 
-  // Procesamiento en segundo plano de forma "humana"
+  // Procesamiento en segundo plano
   (async () => {
     let sent = 0;
     let failed = 0;
+    const validMessages = messages.filter((m) => m.phone && m.message);
 
-    for (let i = 0; i < messages.length; i++) {
-      const msg = messages[i];
-      if (msg.phone && msg.message) {
-        logger.info(`[BULK] Procesando mensaje ${i + 1} de ${messages.length} para ${msg.phone}...`);
-        
-        const success = await sendWhatsAppMessage(msg.phone, msg.message);
-        if (success) {
-          sent++;
-        } else {
-          failed++;
-        }
+    const BATCH_SIZE = 5;
+    const BATCH_PAUSE_MIN = 15_000; // 15s min between batches
+    const BATCH_PAUSE_MAX = 30_000; // 30s max between batches
 
-        // Si no es el último mensaje, meter un delay ENORME (15s a 35s)
-        if (i < messages.length - 1) {
-          const bulkDelay = Math.floor(Math.random() * 20000) + 15000; // 15000ms a 35000ms
-          logger.info(`[BULK ANTI-BAN] Esperando ${Math.round(bulkDelay/1000)}s antes del próximo envío masivo...`);
-          await new Promise(r => setTimeout(r, bulkDelay));
-        }
+    for (let i = 0; i < validMessages.length; i++) {
+      const msg = validMessages[i];
+      
+      logger.info(`[BULK] Procesando mensaje ${i + 1} de ${validMessages.length} para ${msg.phone}...`);
+      
+      const success = await sendWhatsAppMessage(msg.phone, msg.message);
+      if (success) {
+        sent++;
+      } else {
+        failed++;
+      }
+
+      // After every BATCH_SIZE messages, take a longer natural break
+      const isLastMessage = i === validMessages.length - 1;
+      if (!isLastMessage && (i + 1) % BATCH_SIZE === 0) {
+        const batchPause =
+          BATCH_PAUSE_MIN + Math.floor(Math.random() * (BATCH_PAUSE_MAX - BATCH_PAUSE_MIN));
+        logger.info(`[BULK ANTI-BAN] Esperando ${Math.round(batchPause/1000)}s antes del próximo lote de envíos...`);
+        await new Promise((r) => setTimeout(r, batchPause));
       }
     }
     logger.info(`[BULK FINALIZADO] Enviados: ${sent}, Fallidos: ${failed}`);
   })();
 
-  return; // Evita el error TS7030
+  return;
 });
 
 export default router;
