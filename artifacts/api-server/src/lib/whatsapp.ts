@@ -15,7 +15,7 @@ export let isConnected = false;
 // ─── Funciones Anti-Baneo ──────────────────────────────────────────────────
 
 // Retraso asíncrono
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 // Devuelve un string invisible (Zero-width space) aleatorio
 // Esto muta el hash del mensaje para que WhatsApp no detecte que es 100% idéntico.

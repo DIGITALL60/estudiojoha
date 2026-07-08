@@ -164,11 +164,11 @@ router.post("/", validate(createBookingSchema), async (req, res) => {
       });
     }
 
-    res.json({ success: true, appointmentId: appointmentIds[0] });
+    return res.json({ success: true, appointmentId: appointmentIds[0] });
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error);
     logger.error({ error, errMsg }, "Error processing booking");
-    res.status(500).json({ error: `Error al procesar la reserva: ${errMsg}` });
+    return res.status(500).json({ error: `Error al procesar la reserva: ${errMsg}` });
   }
 });
 

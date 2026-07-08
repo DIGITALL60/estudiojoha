@@ -418,9 +418,9 @@ router.post("/appointments", requireAuth, async (req, res) => {
       logger.error({ msgErr }, "Error sending WhatsApp notifications for manual appointment");
     }
 
-    res.status(201).json(created);
+    return res.status(201).json(created);
   } catch (err) {
-    res.status(500).json({ error: "Failed to create appointment" });
+    return res.status(500).json({ error: "Failed to create appointment" });
   }
 });
 
@@ -501,10 +501,10 @@ router.post("/appointments/:id/remind", requireAuth, async (req, res) => {
     // Mark as reminded
     await db.update(appointments).set({ reminderSent: true }).where(eq(appointments.id, id));
     
-    res.json({ success: true });
+    return res.json({ success: true });
   } catch (err) {
     logger.error({ err }, "Error sending manual reminder");
-    res.status(500).json({ error: "Failed to send reminder" });
+    return res.status(500).json({ error: "Failed to send reminder" });
   }
 });
 
