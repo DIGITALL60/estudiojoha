@@ -12,7 +12,6 @@
   "private": true,
   "devDependencies": {
     "prettier": "^3.8.3",
-    "puppeteer": "^25.3.0",
     "sharp": "^0.35.2",
     "typescript": "~5.9.3"
   }
