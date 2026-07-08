@@ -71,6 +71,7 @@ const navConfig = {
         { id: "historia-turnos", label: "Historia de turnos", icon: "history", path: "/admin/marketing/historia-turnos" },
         { id: "reactivacion", label: "Reactivación", icon: "rotate-cw", path: "/admin/marketing/reactivacion" },
         { id: "vouchers-cumple", label: "Vouchers / Cumple", icon: "ticket", path: "/admin/marketing/vouchers-cumple" },
+        { id: "portada", label: "Gestor Portada", icon: "image", path: "/admin/portada" },
       ],
     },
   ],

@@ -7,6 +7,7 @@ export interface BusinessSettings {
   business_address: string;
   business_instagram: string;
   whatsapp_link: string;
+  carousel_images?: { id: string; url: string }[];
 }
 
 export interface BusinessHours {

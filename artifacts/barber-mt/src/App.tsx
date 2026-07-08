@@ -25,6 +25,7 @@ import HistoriaTurnos from "@/pages/admin/HistoriaTurnos";
 import Reactivacion from "@/pages/admin/Reactivacion";
 import VouchersCumple from "@/pages/admin/VouchersCumple";
 import Configuracion from "@/pages/admin/Configuracion";
+import PortadaAdmin from "@/pages/admin/PortadaAdmin";
 import WhatsApp from "@/pages/admin/WhatsApp";
 
 const queryClient = new QueryClient();
@@ -83,6 +84,7 @@ function Router() {
       <Route path="/admin/marketing/reactivacion">{(params) => <AuthRoute component={Reactivacion} adminOnly />}</Route>
       <Route path="/admin/marketing/vouchers-cumple">{(params) => <AuthRoute component={VouchersCumple} adminOnly />}</Route>
       <Route path="/admin/configuracion">{(params) => <AuthRoute component={Configuracion} adminOnly />}</Route>
+      <Route path="/admin/portada">{(params) => <AuthRoute component={PortadaAdmin} adminOnly />}</Route>
       <Route path="/admin/whatsapp">{(params) => <AuthRoute component={WhatsApp} adminOnly />}</Route>
 
       <Route component={NotFound} />

@@ -74,6 +74,7 @@ export default function Home() {
   const [publicInfo, setPublicInfo] = useState<PublicInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
 
   useEffect(() => {
     Promise.all([
@@ -90,6 +91,15 @@ export default function Home() {
       .catch(() => setLoadError(true))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (publicInfo?.settings?.carousel_images && publicInfo.settings.carousel_images.length > 1) {
+      const interval = setInterval(() => {
+        setActiveImageIndex((prev) => (prev + 1) % publicInfo.settings!.carousel_images!.length);
+      }, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [publicInfo]);
 
   const openBooking = useCallback((serviceId?: string) => {
     setInitialServiceId(serviceId);
@@ -143,11 +153,26 @@ export default function Home() {
 
       <section className="relative min-h-[100dvh] flex items-center justify-center overflow-hidden">
         <div className="absolute inset-0 z-0 bg-background">
-          <img 
-            src="/hero-premium.jpg" 
-            alt="Estudio Joha Molinero" 
-            className="absolute inset-0 w-full h-full object-cover opacity-30 mix-blend-luminosity"
-          />
+          {settings?.carousel_images && settings.carousel_images.length > 0 ? (
+            <AnimatePresence mode="popLayout">
+              <motion.img
+                key={activeImageIndex}
+                src={settings.carousel_images[activeImageIndex].url}
+                alt="Estudio Joha Molinero"
+                initial={{ opacity: 0, scale: 1.05 }}
+                animate={{ opacity: 0.3, scale: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 1.5, ease: "easeInOut" }}
+                className="absolute inset-0 w-full h-full object-cover mix-blend-luminosity"
+              />
+            </AnimatePresence>
+          ) : (
+            <img 
+              src="/hero-premium.jpg" 
+              alt="Estudio Joha Molinero" 
+              className="absolute inset-0 w-full h-full object-cover opacity-30 mix-blend-luminosity"
+            />
+          )}
           {/* Overlay sutil que funciona en ambos modos */}
           <div className="absolute inset-0 bg-background/50" />
           <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] rounded-full bg-primary/15 blur-[120px]" />
@@ -179,10 +204,23 @@ export default function Home() {
 
             <h1 className="font-serif font-light text-5xl sm:text-6xl md:text-8xl lg:text-9xl text-foreground leading-[0.9] mb-8">
               Tu mejor{" "}
-              <em className="not-italic text-primary">versión</em>
+              <em className="font-cursive not-italic text-primary text-6xl sm:text-7xl md:text-8xl lg:text-[140px] leading-[0.5] relative top-2 sm:top-4 inline-block transform -rotate-2">
+                versión
+              </em>
               ,<br />
               cada visita.
             </h1>
+
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 1, delay: 0.8 }}
+              className="mb-8"
+            >
+              <span className="font-cursive text-2xl md:text-4xl text-primary/80 transform -rotate-3 inline-block">
+                "Capacitate con nosotras"
+              </span>
+            </motion.div>
 
             <p className="font-sans font-light text-muted-foreground text-base md:text-lg tracking-wide mb-12 max-w-md mx-auto">
               Reservá tu turno online en segundos. Confirmación por WhatsApp.

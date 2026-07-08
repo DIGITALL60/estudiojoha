@@ -68,6 +68,7 @@ router.get("/public-info", async (_req, res) => {
         business_address: settings.business_address,
         business_instagram: settings.business_instagram,
         whatsapp_link: settings.whatsapp_link,
+        carousel_images: settings.carousel_images ? JSON.parse(settings.carousel_images) : [],
       },
       hours,
     });
