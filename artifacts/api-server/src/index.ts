@@ -18,7 +18,8 @@ function initSchema() {
         \`password\` text,
         \`color\` text DEFAULT '#7c3aed' NOT NULL,
         \`initial\` text NOT NULL,
-        \`commission_rate\` integer DEFAULT 0
+        \`commission_rate\` integer DEFAULT 0,
+        \`base_salary\` integer DEFAULT 0
       );
       CREATE UNIQUE INDEX IF NOT EXISTS \`professionals_username_unique\` ON \`professionals\` (\`username\`);
       CREATE TABLE IF NOT EXISTS \`clients\` (

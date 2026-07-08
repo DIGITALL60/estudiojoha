@@ -30,6 +30,7 @@ export const professionals = sqliteTable("professionals", {
   color: text("color").notNull().default("#7c3aed"),
   initial: text("initial").notNull(),
   commissionRate: integer("commission_rate").default(0),
+  baseSalary: integer("base_salary").default(0),
 });
 
 export const insertProfessionalSchema = createInsertSchema(professionals);

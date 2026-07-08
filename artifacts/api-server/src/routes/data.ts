@@ -209,13 +209,14 @@ router.get("/professionals", async (req, res) => {
 
 router.post("/professionals", requireAuth, async (req, res) => {
   try {
-    const { name, role, username, email, phone, password, color, initial, commissionRate } = req.body;
+    const { name, role, username, email, phone, password, color, initial, commissionRate, baseSalary } = req.body;
     if (!name) return res.status(400).json({ error: "Name is required" });
     const id = randomUUID();
     await db.insert(professionals).values({
       id, name, role: role || "Staff", username, email, phone, password,
       color: color || "#7c3aed", initial,
-      commissionRate: commissionRate !== undefined ? Number(commissionRate) : 0
+      commissionRate: commissionRate !== undefined ? Number(commissionRate) : 0,
+      baseSalary: baseSalary !== undefined ? Number(baseSalary) : 0
     });
     const [created] = await db.select().from(professionals).where(eq(professionals.id, id)).limit(1);
     return res.status(201).json(created);
@@ -227,13 +228,16 @@ router.post("/professionals", requireAuth, async (req, res) => {
 router.patch("/professionals/:id", requireAuth, async (req, res) => {
   try {
     const { id } = req.params as { id: string };
-    const { name, role, username, email, phone, password, color, initial, commissionRate } = req.body;
+    const { name, role, username, email, phone, password, color, initial, commissionRate, baseSalary } = req.body;
     const updateData: any = { name, role, username, email, phone, color, initial };
     if (password !== undefined && password !== "") {
       updateData.password = password;
     }
     if (commissionRate !== undefined) {
       updateData.commissionRate = Number(commissionRate);
+    }
+    if (baseSalary !== undefined) {
+      updateData.baseSalary = Number(baseSalary);
     }
     await db.update(professionals).set(updateData).where(eq(professionals.id, id));
     const [updated] = await db.select().from(professionals).where(eq(professionals.id, id)).limit(1);

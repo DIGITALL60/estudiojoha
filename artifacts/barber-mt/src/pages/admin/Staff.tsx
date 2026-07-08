@@ -13,6 +13,7 @@ interface Professional {
   color: string;
   initial: string;
   commissionRate?: number;
+  baseSalary?: number;
 }
 
 const COLOR_OPTIONS = [
@@ -38,7 +39,8 @@ function EditModal({
   const [form, setForm] = useState({ 
     password: "", 
     ...member, 
-    commissionRate: member.commissionRate ?? 0 
+    commissionRate: member.commissionRate ?? 0,
+    baseSalary: member.baseSalary ?? 0
   });
   const [assignedServiceIds, setAssignedServiceIds] = useState<string[]>(initialAssigned);
   const [saving, setSaving] = useState(false);
@@ -65,6 +67,7 @@ function EditModal({
         color: form.color,
         initial: form.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase(),
         commissionRate: Number(form.commissionRate) || 0,
+        baseSalary: Number(form.baseSalary) || 0,
       };
 
       if (form.password?.trim()) {
@@ -230,6 +233,25 @@ function EditModal({
             </div>
             <p className="text-[9px] text-muted-foreground mt-1">
               Se calculará automáticamente sobre el precio de cada turno completado.
+            </p>
+          </div>
+
+          {/* Base Salary */}
+          <div>
+            <label className="text-[9px] font-bold tracking-widest text-muted-foreground uppercase block mb-1.5">Sueldo fijo (Opcional)</label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">$</span>
+              <input
+                type="number"
+                min={0}
+                placeholder="Ej: 50000"
+                value={form.baseSalary ?? 0}
+                onChange={e => setForm(f => ({ ...f, baseSalary: Number(e.target.value) }))}
+                className="w-full bg-background border border-border rounded-sm pl-8 pr-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-primary"
+              />
+            </div>
+            <p className="text-[9px] text-muted-foreground mt-1">
+              Monto fijo por mes que se suma al cálculo en la pestaña Salarios.
             </p>
           </div>
 
@@ -462,6 +484,12 @@ export default function Staff() {
                   <Percent size={11} />
                   <span className="text-[11px]">Comisión: <span className="font-semibold text-foreground">{member.commissionRate ?? 0}%</span></span>
                 </div>
+                {(member.baseSalary ?? 0) > 0 && (
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <span className="font-semibold text-foreground text-[10px]">$</span>
+                    <span className="text-[11px]">Sueldo fijo: <span className="font-semibold text-foreground">${member.baseSalary?.toLocaleString()}</span></span>
+                  </div>
+                )}
               </div>
             </motion.div>
           ))}
