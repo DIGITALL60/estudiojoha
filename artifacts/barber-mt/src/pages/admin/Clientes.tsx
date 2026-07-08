@@ -130,7 +130,7 @@ function ClientModal({ client, appointments, onClose, onSaved }: { client?: Clie
 
 export default function Clientes() {
   const [clients, setClients] = useState<Client[]>([]);
-  const [appointments, setAppointments] = useState<{clientId: string; date: string; status: string}[]>([]);
+  const [appointments, setAppointments] = useState<{clientId: string; date: string; status: string; serviceName: string; professionalName: string}[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState("todos");
