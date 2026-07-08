@@ -119,6 +119,14 @@ function initSchema() {
       UPDATE \`services\` SET \`category\` = 'Catálogo Eventos' WHERE \`category\` LIKE 'Cat%logo Eventos';
       UPDATE \`services\` SET \`category\` = 'Depilación Definitiva' WHERE \`category\` LIKE 'Depilaci%n Definitiva';
     `);
+
+    // Migrations for new columns (ignores error if already exists)
+    try { sqlite.exec("ALTER TABLE appointments ADD COLUMN payment_method text"); } catch (e) {}
+    try { sqlite.exec("ALTER TABLE appointments ADD COLUMN shop_sales integer DEFAULT 0"); } catch (e) {}
+    try { sqlite.exec("ALTER TABLE professionals ADD COLUMN base_salary integer DEFAULT 0"); } catch (e) {}
+    try { sqlite.exec("ALTER TABLE professionals ADD COLUMN sales_target integer DEFAULT 0"); } catch (e) {}
+
+
     logger.info("Database schema initialized successfully");
   } catch (err) {
     logger.error({ err }, "Schema initialization failed");
