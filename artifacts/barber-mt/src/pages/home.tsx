@@ -211,16 +211,6 @@ export default function Home() {
               cada visita.
             </h1>
 
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 1, delay: 0.8 }}
-              className="mb-8"
-            >
-              <span className="font-cursive text-2xl md:text-4xl text-primary/80 transform -rotate-3 inline-block">
-                "Capacitate con nosotras"
-              </span>
-            </motion.div>
 
             <p className="font-sans font-light text-muted-foreground text-base md:text-lg tracking-wide mb-12 max-w-md mx-auto">
               Reservá tu turno online en segundos. Confirmación por WhatsApp.
@@ -230,22 +220,33 @@ export default function Home() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.6 }}
-              className="flex flex-col sm:flex-row gap-4 justify-center"
+              className="flex flex-col items-center gap-6"
             >
+              <div className="flex flex-col sm:flex-row gap-4 justify-center w-full">
+                <button
+                  onClick={() => openBooking()}
+                  data-testid="button-hero-booking"
+                  className="group bg-primary text-white font-sans text-xs tracking-[0.3em] uppercase px-10 py-4 hover:bg-primary/90 transition-all duration-300 flex items-center justify-center gap-3 w-full sm:w-auto"
+                >
+                  Reservar Turno
+                  <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                </button>
+                <button
+                  onClick={() => document.getElementById("servicios")?.scrollIntoView({ behavior: "smooth" })}
+                  data-testid="button-hero-services"
+                  className="border border-border text-muted-foreground font-sans text-xs tracking-[0.3em] uppercase px-10 py-4 hover:border-primary hover:text-primary transition-all duration-300 w-full sm:w-auto"
+                >
+                  Ver Servicios
+                </button>
+              </div>
               <button
-                onClick={() => openBooking()}
-                data-testid="button-hero-booking"
-                className="group bg-primary text-white font-sans text-xs tracking-[0.3em] uppercase px-10 py-4 hover:bg-primary/90 transition-all duration-300 flex items-center justify-center gap-3"
+                className="font-cursive text-3xl md:text-4xl text-primary/90 hover:text-primary transition-colors transform hover:-rotate-2 hover:scale-105 mt-2"
+                onClick={() => {
+                  // TODO: Scroll to capacitate section if it exists, or just a placeholder action for now
+                  window.location.href = "https://instagram.com/" + igHandle; 
+                }}
               >
-                Reservar Turno
-                <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-              </button>
-              <button
-                onClick={() => document.getElementById("servicios")?.scrollIntoView({ behavior: "smooth" })}
-                data-testid="button-hero-services"
-                className="border border-border text-muted-foreground font-sans text-xs tracking-[0.3em] uppercase px-10 py-4 hover:border-primary hover:text-primary transition-all duration-300"
-              >
-                Ver Servicios
+                "Capacitate con nosotras"
               </button>
             </motion.div>
           </motion.div>
