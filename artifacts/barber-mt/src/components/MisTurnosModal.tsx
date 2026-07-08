@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { X, Calendar, Clock, User, Trash2, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { fetchAPI } from "@/lib/api";
+
+import { fetchPublicInfo, whatsappUrl } from "@/lib/publicInfo";
 
 interface Appointment {
   id: string;
@@ -13,6 +15,11 @@ interface Appointment {
 }
 
 export default function MisTurnosModal({ onClose }: { onClose: () => void }) {
+  const [publicInfo, setPublicInfo] = useState<any>(null);
+  
+  useEffect(() => {
+    fetchPublicInfo().then(setPublicInfo).catch(() => {});
+  }, []);
   const [phone, setPhone] = useState("");
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(false);
@@ -40,21 +47,17 @@ export default function MisTurnosModal({ onClose }: { onClose: () => void }) {
     }
   };
 
-  const cancel = async (id: string) => {
-    if (!confirm("¿Cancelar este turno?")) return;
-    setCanceling(id);
-    try {
-      const res = await fetchAPI(`/api/bookings/cancel/${id}`, { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || "No se pudo cancelar");
-        return;
-      }
-      setAppointments(prev => prev.filter(a => a.id !== id));
-    } catch {
-      setError("Error al cancelar");
-    } finally {
-      setCanceling(null);
+  const handleReprogram = (app: Appointment) => {
+    const phone = publicInfo?.settings?.business_phone || "";
+    const customLink = publicInfo?.settings?.whatsapp_link || "";
+    const baseWa = whatsappUrl(phone, customLink);
+    const text = encodeURIComponent(`Hola! Necesito reprogramar mi turno de ${app.serviceName} del día ${app.date} a las ${app.time}hs.`);
+    
+    // Si ya es un enlace wa.me, agregar el texto
+    if (baseWa.includes("wa.me") || baseWa.includes("api.whatsapp.com")) {
+      window.open(`${baseWa}${baseWa.includes('?') ? '&' : '?'}text=${text}`, "_blank");
+    } else {
+      alert("Comunicate por WhatsApp para reprogramar.");
     }
   };
 
@@ -114,12 +117,11 @@ export default function MisTurnosModal({ onClose }: { onClose: () => void }) {
                   <User size={12} /> {app.professionalName}
                 </div>
                 <button
-                  onClick={() => cancel(app.id)}
-                  disabled={canceling === app.id}
-                  className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300 mt-2 disabled:opacity-50"
+                  onClick={() => handleReprogram(app)}
+                  className="flex items-center justify-center gap-1.5 text-xs font-semibold bg-primary/10 text-primary hover:bg-primary/20 px-3 py-2 rounded-md mt-3 w-full transition-colors"
                 >
-                  {canceling === app.id ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
-                  Cancelar turno
+                  <Calendar size={12} />
+                  Reprogramar Turno
                 </button>
               </div>
             ))}

@@ -15,12 +15,27 @@ router.post("/", validate(createBookingSchema), async (req, res) => {
   try {
     const { client, appointment } = req.body;
 
-    const appointmentId = randomUUID();
+    const serviceIds = appointment.serviceIds || (appointment.serviceId ? [appointment.serviceId] : []);
+    if (!serviceIds.length) {
+      return res.status(400).json({ error: "No se seleccionaron servicios" });
+    }
+
+    // Fetch the services from DB
+    const selectedServicesDB = [];
+    for (const sId of serviceIds) {
+      const [srv] = await db.select().from(services).where(eq(services.id, sId)).limit(1);
+      if (srv) selectedServicesDB.push(srv);
+    }
+    if (selectedServicesDB.length === 0) {
+      return res.status(400).json({ error: "Servicios no encontrados" });
+    }
+
+    const totalDuration = selectedServicesDB.reduce((acc, s) => acc + s.duration, 0);
 
     const availability = await isTimeSlotAvailable(
       appointment.date,
       appointment.professionalId,
-      appointment.duration,
+      totalDuration,
       appointment.time
     );
     if (!availability.available) {
@@ -45,7 +60,7 @@ router.post("/", validate(createBookingSchema), async (req, res) => {
       db.update(clients).set({ birthday: client.birthday }).where(eq(clients.id, clientId)).run();
     }
 
-    // 2. Create appointment
+    // 2. Create appointments
     let finalNotes = appointment.notes || "";
     if (appointment.voucherCode) {
       finalNotes = finalNotes
@@ -53,19 +68,47 @@ router.post("/", validate(createBookingSchema), async (req, res) => {
         : `(Voucher usado: ${appointment.voucherCode})`;
     }
 
-    db.insert(appointments).values({
-      id: appointmentId,
-      clientId,
-      professionalId: appointment.professionalId,
-      serviceId: appointment.serviceId,
-      date: appointment.date,
-      time: appointment.time,
-      duration: appointment.duration,
-      price: appointment.price,
-      status: "agendado",
-      notes: finalNotes || null,
-      createdAt: new Date(),
-    }).run();
+    const addMinutes = (timeStr: string, minutes: number) => {
+      const [h, m] = timeStr.split(":").map(Number);
+      const total = h * 60 + m + minutes;
+      return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+    };
+
+    let currentStartTime = appointment.time;
+    const appointmentIds = [];
+    const serviceNames = [];
+    let remainingPrice = appointment.price;
+
+    for (let i = 0; i < selectedServicesDB.length; i++) {
+      const srv = selectedServicesDB[i];
+      const appId = randomUUID();
+      appointmentIds.push(appId);
+      serviceNames.push(srv.name);
+      
+      let priceForThisService = srv.price;
+      if (i === selectedServicesDB.length - 1) {
+         priceForThisService = remainingPrice;
+      } else {
+         priceForThisService = Math.min(priceForThisService, remainingPrice);
+         remainingPrice -= priceForThisService;
+      }
+
+      db.insert(appointments).values({
+        id: appId,
+        clientId,
+        professionalId: appointment.professionalId,
+        serviceId: srv.id,
+        date: appointment.date,
+        time: currentStartTime,
+        duration: srv.duration,
+        price: Math.max(0, priceForThisService),
+        status: "agendado",
+        notes: finalNotes || null,
+        createdAt: new Date(),
+      }).run();
+      
+      currentStartTime = addMinutes(currentStartTime, srv.duration);
+    }
 
     // 3. Deactivate voucher if used
     if (appointment.voucherCode) {
@@ -77,12 +120,11 @@ router.post("/", validate(createBookingSchema), async (req, res) => {
 
     // 4. Fetch details for messages
     const [prof] = await db.select().from(professionals).where(eq(professionals.id, appointment.professionalId)).limit(1);
-    const [srv] = await db.select().from(services).where(eq(services.id, appointment.serviceId)).limit(1);
     const allProfessionals = await db.select().from(professionals);
     const admin = allProfessionals.find(p => p.role?.toLowerCase() === "admin");
 
     const professionalName = prof?.name ?? "el profesional";
-    const serviceName = srv?.name ?? "tu servicio";
+    const servicesListString = serviceNames.join(", ");
     const businessAddress = await getSetting("business_address", "Río Segundo, Córdoba");
     const whatsappEnabled = await getBoolSetting("whatsapp_notif");
 
@@ -92,24 +134,24 @@ router.post("/", validate(createBookingSchema), async (req, res) => {
       `Tu turno en *Estudio Joha Molinero* está confirmado ✅\n\n` +
       `📅 Fecha: *${appointment.date}*\n` +
       `⏰ Hora: *${appointment.time}*\n` +
-      `💅 Servicio: ${serviceName}\n` +
+      `💅 Servicio/s: ${servicesListString}\n` +
       `👩‍🎨 Profesional: ${professionalName}\n\n` +
       `📍 ${businessAddress}\n\n` +
-      `Si necesitás cancelar o reprogramar, avisanos con anticipación.\n¡Gracias por elegirnos! 💜`;
+      `Si necesitás reprogramar, avisanos con al menos 24hs de anticipación.\n¡Gracias por elegirnos! 💜`;
 
     const profMsg =
       `🔔 *Nuevo turno asignado*\n\n` +
       `👤 Cliente: ${client.name}\n` +
       `📱 Teléfono: ${client.phone}\n` +
       `📅 Fecha: ${appointment.date}\n` +
-      `⏰ Hora: ${appointment.time}\n` +
-      `💅 Servicio: ${serviceName}`;
+      `⏰ Hora de inicio: ${appointment.time}\n` +
+      `💅 Servicio/s: ${servicesListString}`;
 
     const adminMsg =
       `🆕 *Nuevo turno reservado* (web)\n\n` +
       `👤 Cliente: ${client.name} — ${client.phone}\n` +
       `📅 Fecha: ${appointment.date} a las ${appointment.time}\n` +
-      `💅 Servicio: ${serviceName}\n` +
+      `💅 Servicio/s: ${servicesListString}\n` +
       `👩‍🎨 A cargo de: ${professionalName}`;
 
     if (whatsappEnabled) {
@@ -122,7 +164,7 @@ router.post("/", validate(createBookingSchema), async (req, res) => {
       });
     }
 
-    res.json({ success: true, appointmentId });
+    res.json({ success: true, appointmentId: appointmentIds[0] });
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error);
     logger.error({ error, errMsg }, "Error processing booking");

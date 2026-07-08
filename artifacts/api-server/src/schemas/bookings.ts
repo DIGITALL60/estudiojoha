@@ -9,7 +9,8 @@ export const createBookingSchema = z.object({
     }),
     appointment: z.object({
       professionalId: z.string().uuid("ID de profesional inválido"),
-      serviceId: z.string().uuid("ID de servicio inválido"),
+      serviceId: z.string().uuid("ID de servicio inválido").optional(),
+      serviceIds: z.array(z.string().uuid()).min(1, "Debe seleccionar al menos un servicio").optional(),
       date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Formato de fecha inválido (YYYY-MM-DD)"),
       time: z.string().regex(/^\d{2}:\d{2}$/, "Formato de hora inválido (HH:mm)"),
       duration: z.number().min(5, "La duración mínima es 5 minutos"),

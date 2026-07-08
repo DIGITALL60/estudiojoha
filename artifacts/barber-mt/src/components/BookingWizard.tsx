@@ -205,7 +205,7 @@ export default function BookingWizard({ onClose, initialServiceId, publicInfo: p
         body: JSON.stringify({
           client: clientData,
           appointment: {
-            serviceId: upsellSuggestion.service.id,
+            serviceIds: [upsellSuggestion.service.id],
             professionalId: selectedProfessional.id,
             date: upsellSuggestion.date,
             time: upsellSuggestion.time,
@@ -264,7 +264,7 @@ export default function BookingWizard({ onClose, initialServiceId, publicInfo: p
         body: JSON.stringify({
           client: clientData,
           appointment: {
-            serviceId: primaryService?.id,
+            serviceIds: selectedServices.map(s => s.id),
             professionalId: selectedProfessional.id,
             date: selectedDate,
             time: selectedTime,
