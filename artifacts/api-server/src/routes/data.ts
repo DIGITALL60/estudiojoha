@@ -456,6 +456,47 @@ router.patch("/appointments/:id", requireAuth, async (req, res) => {
   }
 });
 
+router.post("/appointments/:id/remind", requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params as { id: string };
+    const [app] = await db.select().from(appointments).where(eq(appointments.id, id)).limit(1);
+    if (!app) return res.status(404).json({ error: "Appointment not found" });
+
+    const [client] = await db.select().from(clients).where(eq(clients.id, app.clientId)).limit(1);
+    const [prof] = await db.select().from(professionals).where(eq(professionals.id, app.professionalId)).limit(1);
+    const [srv] = await db.select().from(services).where(eq(services.id, app.serviceId)).limit(1);
+    
+    if (!client || !client.phone) {
+      return res.status(400).json({ error: "Client phone not found" });
+    }
+
+    const businessAddress = await getSetting("business_address", "Río Segundo, Córdoba");
+    const professionalName = prof?.name ?? "el profesional";
+    const serviceName = srv?.name ?? "tu servicio";
+
+    const msg =
+      `¡Hola ${client.name}! 👋\n\n` +
+      `Te escribimos de *Estudio Joha Molinero* para recordarte tu turno para mañana:\n\n` +
+      `📅 Fecha: *${app.date}*\n` +
+      `⏰ Hora: *${app.time}*\n` +
+      `💅 Servicio: ${serviceName}\n` +
+      `👩‍🎨 Profesional: ${professionalName}\n\n` +
+      `📍 ${businessAddress}\n\n` +
+      `Por favor, recordá que si necesitás reprogramar o cancelar, debés avisarnos con 24hs de anticipación.\n¡Te esperamos! 💜`;
+
+    await sendWhatsAppMessage(client.phone, msg);
+    
+    // Mark as reminded
+    await db.update(appointments).set({ reminderSent: true }).where(eq(appointments.id, id));
+    
+    res.json({ success: true });
+  } catch (err) {
+    logger.error({ err }, "Error sending manual reminder");
+    res.status(500).json({ error: "Failed to send reminder" });
+  }
+});
+
+
 // ─── SCHEDULES ─────────────────────────────────────────────
 router.get("/schedules", async (req, res) => {
   try {

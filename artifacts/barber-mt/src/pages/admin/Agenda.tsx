@@ -251,6 +251,23 @@ function EditTurnModal({ app, onClose, onUpdated }: { app: Appointment; onClose:
   const [notes, setNotes] = useState(app.notes || "");
   const [paymentMethod, setPaymentMethod] = useState((app as any).paymentMethod || "Efectivo");
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [reminding, setReminding] = useState(false);
+  const [remindSuccess, setRemindSuccess] = useState(false);
+
+  const handleRemind = async () => {
+    if (!confirm("¿Enviar recordatorio por WhatsApp ahora?")) return;
+    setReminding(true);
+    try {
+      await fetchAPI(`/api/data/appointments/${app.id}/remind`, { method: "POST" });
+      setRemindSuccess(true);
+      setTimeout(() => setRemindSuccess(false), 3000);
+    } catch {
+      alert("Error enviando recordatorio. Verificá que WhatsApp esté conectado.");
+    } finally {
+      setReminding(false);
+    }
+  };
 
   const handleUpdate = async () => {
     setSaving(true);
@@ -333,13 +350,26 @@ function EditTurnModal({ app, onClose, onUpdated }: { app: Appointment; onClose:
             <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Opcional..."
               className="w-full bg-background border border-border rounded-sm px-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-primary resize-none" />
           </div>
+          {error && <p className="text-xs text-red-400">{error}</p>}
         </div>
-        <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-border">
-          <button onClick={onClose} className="text-xs text-muted-foreground hover:text-foreground px-4 py-2">Cancelar</button>
-          <button onClick={handleUpdate} disabled={saving}
-            className="bg-primary text-primary-foreground text-xs font-semibold px-5 py-2 rounded-sm hover:bg-primary/90 disabled:opacity-50">
-            {saving ? "Guardando..." : "Guardar cambios"}
+        <div className="flex items-center justify-between px-5 py-4 border-t border-border">
+          <button 
+            onClick={handleRemind} 
+            disabled={reminding || remindSuccess}
+            className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-sm transition-colors ${
+              remindSuccess ? "bg-emerald-500/10 text-emerald-500" : "bg-primary/10 text-primary hover:bg-primary/20"
+            }`}
+          >
+            {reminding ? "Enviando..." : remindSuccess ? "¡Enviado!" : "🔔 Enviar WhatsApp"}
           </button>
+          
+          <div className="flex items-center gap-3">
+            <button onClick={onClose} className="text-xs text-muted-foreground hover:text-foreground px-4 py-2">Cancelar</button>
+            <button onClick={handleUpdate} disabled={saving}
+              className="bg-primary text-primary-foreground text-xs font-semibold px-5 py-2 rounded-sm hover:bg-primary/90 disabled:opacity-50">
+              {saving ? "Guardando..." : "Guardar"}
+            </button>
+          </div>
         </div>
       </motion.div>
     </motion.div>
