@@ -334,6 +334,7 @@ router.get("/appointments", requireAuth, async (req, res) => {
         serviceId: appointments.serviceId,
         clientName: clients.name,
         clientPhone: clients.phone,
+        clientNotes: clients.notes,
         professionalName: professionals.name,
         professionalColor: professionals.color,
         serviceName: services.name,

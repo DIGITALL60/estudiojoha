@@ -13,6 +13,7 @@ interface Appointment {
   id: string; date: string; time: string; duration: number; price: number;
   status: string; clientName: string; professionalColor: string;
   professionalName: string; serviceName: string; notes?: string;
+  clientId: string; clientNotes?: string;
 }
 
 const hours = Array.from({ length: 14 }, (_, i) => `${String(i + 7).padStart(2, "0")}:00`);
@@ -251,6 +252,7 @@ function NewTurnModal({ onClose, defaultDate, defaultTime = "10:00", onCreated }
 function EditTurnModal({ app, onClose, onUpdated }: { app: Appointment; onClose: () => void; onUpdated: () => void }) {
   const [status, setStatus] = useState(app.status || "agendado");
   const [notes, setNotes] = useState(app.notes || "");
+  const [clientNotes, setClientNotes] = useState(app.clientNotes || "");
   const [paymentMethod, setPaymentMethod] = useState((app as any).paymentMethod || "Efectivo");
   const [shopSales, setShopSales] = useState((app as any).shopSales || 0);
   const [receiptBase64, setReceiptBase64] = useState("");
@@ -321,6 +323,15 @@ function EditTurnModal({ app, onClose, onUpdated }: { app: Appointment; onClose:
           shopSales: Number(shopSales)
         })
       });
+
+      if (clientNotes !== app.clientNotes) {
+        await fetchAPI(`/api/data/clients/${app.clientId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ notes: clientNotes })
+        });
+      }
+
       onUpdated();
       onClose();
     } catch (err) {
@@ -420,10 +431,17 @@ function EditTurnModal({ app, onClose, onUpdated }: { app: Appointment; onClose:
             </div>
           )}
 
-          <div>
-            <label className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted-foreground block mb-1.5">Notas</label>
-            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Opcional..."
-              className="w-full bg-background border border-border rounded-sm px-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-primary resize-none" />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted-foreground block mb-1.5 text-primary">Historia Clínica (Paciente)</label>
+              <textarea value={clientNotes} onChange={e => setClientNotes(e.target.value)} rows={3} placeholder="Alergias, preferencias, etc. Se guarda en el perfil del cliente."
+                className="w-full bg-primary/5 border border-primary/20 rounded-sm px-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-primary resize-none" />
+            </div>
+            <div>
+              <label className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted-foreground block mb-1.5">Notas del Turno Actual</label>
+              <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} placeholder="Opcional..."
+                className="w-full bg-background border border-border rounded-sm px-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-primary resize-none" />
+            </div>
           </div>
           {error && <p className="text-xs text-red-400">{error}</p>}
         </div>
