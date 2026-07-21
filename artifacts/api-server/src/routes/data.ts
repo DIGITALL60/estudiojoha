@@ -8,8 +8,44 @@ import { logger } from "../lib/logger.js";
 import { requireAuth } from "../middlewares/auth.js";
 import { getAllSettings, upsertSettings, getBoolSetting, getSetting } from "../lib/settings.js";
 import { isTimeSlotAvailable } from "../lib/availability.js";
+import { uploadToCloudinary, deleteFromCloudinary } from "../lib/cloudinary.js";
 
 const router = Router();
+
+// ─── UPLOAD IMAGE ───────────────────────────────────────────────────────────
+router.post("/upload", requireAuth, async (req, res) => {
+  try {
+    const { image, folder } = req.body as { image: string; folder?: string };
+    if (!image) return res.status(400).json({ error: "No image provided" });
+
+    const cloudEnabled = !!process.env.CLOUDINARY_CLOUD_NAME;
+    if (!cloudEnabled) {
+      // Cloudinary not configured — return the base64 as-is (fallback)
+      return res.json({ url: image });
+    }
+
+    const url = await uploadToCloudinary(image, folder ?? "estudiojoha/services");
+    return res.json({ url });
+  } catch (err) {
+    logger.error({ err }, "Error uploading image to Cloudinary");
+    return res.status(500).json({ error: "Failed to upload image" });
+  }
+});
+
+// ─── DELETE IMAGE ────────────────────────────────────────────────────────────
+router.delete("/upload", requireAuth, async (req, res) => {
+  try {
+    const { url } = req.body as { url: string };
+    if (url && url.includes("cloudinary.com")) {
+      await deleteFromCloudinary(url);
+    }
+    return res.json({ success: true });
+  } catch (err) {
+    logger.error({ err }, "Error deleting image from Cloudinary");
+    return res.status(500).json({ error: "Failed to delete image" });
+  }
+});
+
 
 const DAY_NAMES = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 const DAY_NAMES_FULL = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];

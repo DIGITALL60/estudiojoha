@@ -1,7 +1,7 @@
 import { fetchAPI } from "@/lib/api";
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Search, Clock, DollarSign, Edit2, Trash2, X, Save, AlertCircle, Sparkles, Eye, Zap, Sun, Droplets, PartyPopper, Scissors, Activity } from "lucide-react";
+import { Plus, Search, Clock, DollarSign, Edit2, Trash2, X, Save, AlertCircle, Sparkles, Eye, Zap, Sun, Droplets, PartyPopper, Scissors, Activity, Loader2 } from "lucide-react";
 import AdminLayout from "./AdminLayout";
 
 const CATEGORY_ICONS: Record<string, any> = {
@@ -49,6 +49,7 @@ function ServiceModal({
 }) {
   const [form, setForm] = useState({ ...service });
   const [saving, setSaving] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [error, setError] = useState("");
   const [isNewCat, setIsNewCat] = useState(!categories.includes(service.category) && !!service.category);
   const [newCatValue, setNewCatValue] = useState(!categories.includes(service.category) ? service.category : "");
@@ -73,9 +74,44 @@ function ServiceModal({
     });
   };
 
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) return alert("Máximo 5MB. Por favor comprimí la imagen.");
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const base64 = reader.result as string;
+      // Show preview immediately
+      setForm(f => ({ ...f, imageUrl: base64 }));
+
+      // Upload to Cloudinary in background
+      setUploadingImage(true);
+      try {
+        const res = await fetchAPI("/api/data/upload", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image: base64, folder: "estudiojoha/services" }),
+        });
+        if (res.ok) {
+          const { url } = await res.json();
+          setForm(f => ({ ...f, imageUrl: url }));
+        }
+      } catch {
+        // Keep base64 as fallback if upload fails
+      } finally {
+        setUploadingImage(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleSave = async () => {
     if (!form.name.trim() || !form.category.trim()) {
       setError("Nombre y categoría son obligatorios"); return;
+    }
+    if (uploadingImage) {
+      setError("Esperá a que termine de subir la imagen..."); return;
     }
     setSaving(true); setError("");
     try {
@@ -155,18 +191,16 @@ function ServiceModal({
           </div>
           <div>
             <label className="text-[9px] font-bold tracking-widest text-muted-foreground uppercase block mb-1.5">Foto del Servicio (Opcional)</label>
-            <input type="file" accept="image/*" onChange={e => {
-                const file = e.target.files?.[0];
-                if (file) {
-                  if (file.size > 2 * 1024 * 1024) return alert("Máximo 2MB. Por favor comprimí la imagen.");
-                  const reader = new FileReader();
-                  reader.onload = () => setForm(f => ({ ...f, imageUrl: reader.result as string }));
-                  reader.readAsDataURL(file);
-                }
-             }} className="w-full text-xs text-muted-foreground file:mr-4 file:py-1.5 file:px-3 file:rounded-sm file:border-0 file:text-[10px] file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20" />
+            <input type="file" accept="image/*" onChange={handleImageChange}
+              className="w-full text-xs text-muted-foreground file:mr-4 file:py-1.5 file:px-3 file:rounded-sm file:border-0 file:text-[10px] file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20" />
             {form.imageUrl && (
               <div className="mt-2 relative inline-block">
                 <img src={form.imageUrl} className="h-20 w-auto rounded-md object-cover border border-border" />
+                {uploadingImage && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-background/70 rounded-md">
+                    <Loader2 size={16} className="animate-spin text-primary" />
+                  </div>
+                )}
                 <button onClick={() => setForm(f => ({ ...f, imageUrl: null }))} className="absolute -top-2 -right-2 bg-background border border-border hover:bg-red-500 hover:text-white text-muted-foreground p-1 rounded-full transition-colors shadow-sm"><X size={10}/></button>
               </div>
             )}
