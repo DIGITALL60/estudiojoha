@@ -46,6 +46,7 @@ export const services = sqliteTable("services", {
   duration: integer("duration").notNull(), // in minutes
   price: integer("price").notNull(),
   cod: text("cod"),
+  imageUrl: text("image_url"),
 });
 
 export const insertServiceSchema = createInsertSchema(services);

@@ -132,7 +132,7 @@ router.get("/reports/services-30d", async (req, res) => {
 
 router.post("/services", requireAuth, async (req, res) => {
   try {
-    const { name, category, duration, price, cod, recipes } = req.body;
+    const { name, category, duration, price, cod, recipes, imageUrl } = req.body;
     if (!name || !category) return res.status(400).json({ error: "Name and category required" });
     const id = randomUUID();
     await db.insert(services).values({
@@ -140,6 +140,7 @@ router.post("/services", requireAuth, async (req, res) => {
       duration: Number(duration),
       price: Number(price),
       cod,
+      imageUrl,
     });
     
     // Handle recipes
@@ -164,9 +165,9 @@ router.post("/services", requireAuth, async (req, res) => {
 router.patch("/services/:id", requireAuth, async (req, res) => {
   try {
     const { id } = req.params as { id: string };
-    const { name, category, duration, price, cod, recipes } = req.body;
+    const { name, category, duration, price, cod, recipes, imageUrl } = req.body;
     await db.update(services).set({
-      name, category, duration: Number(duration), price: Number(price), cod
+      name, category, duration: Number(duration), price: Number(price), cod, imageUrl
     }).where(eq(services.id, id));
 
     // Only update recipes when explicitly sent (prevents accidental wipe on edit)

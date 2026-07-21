@@ -22,6 +22,7 @@ interface Service {
   duration: number;
   price: number;
   cod: string | null;
+  imageUrl?: string | null;
   recipes?: { productId: string; amount: number }[];
 }
 
@@ -151,6 +152,24 @@ function ServiceModal({
             <label className="text-[9px] font-bold tracking-widest text-muted-foreground uppercase block mb-1.5">Código (Opcional)</label>
             <input type="text" value={form.cod || ""} onChange={e => setForm(f => ({ ...f, cod: e.target.value }))} placeholder="Ej. MAN1"
               className="w-full bg-background border border-border rounded-sm px-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-primary" />
+          </div>
+          <div>
+            <label className="text-[9px] font-bold tracking-widest text-muted-foreground uppercase block mb-1.5">Foto del Servicio (Opcional)</label>
+            <input type="file" accept="image/*" onChange={e => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  if (file.size > 2 * 1024 * 1024) return alert("Máximo 2MB. Por favor comprimí la imagen.");
+                  const reader = new FileReader();
+                  reader.onload = () => setForm(f => ({ ...f, imageUrl: reader.result as string }));
+                  reader.readAsDataURL(file);
+                }
+             }} className="w-full text-xs text-muted-foreground file:mr-4 file:py-1.5 file:px-3 file:rounded-sm file:border-0 file:text-[10px] file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20" />
+            {form.imageUrl && (
+              <div className="mt-2 relative inline-block">
+                <img src={form.imageUrl} className="h-20 w-auto rounded-md object-cover border border-border" />
+                <button onClick={() => setForm(f => ({ ...f, imageUrl: null }))} className="absolute -top-2 -right-2 bg-background border border-border hover:bg-red-500 hover:text-white text-muted-foreground p-1 rounded-full transition-colors shadow-sm"><X size={10}/></button>
+              </div>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -394,9 +413,13 @@ export default function Servicios() {
                 className="bg-card border border-border/50 rounded-xl overflow-hidden flex flex-col"
               >
                 {/* Header Color Block */}
-                <div className="h-32 bg-gradient-to-br from-primary/80 to-primary/40 flex items-center justify-center">
-                  <Icon size={24} className="text-white/80" />
-                </div>
+                {service.imageUrl ? (
+                  <div className="h-32 bg-cover bg-center border-b border-border/50" style={{ backgroundImage: `url(${service.imageUrl})` }} />
+                ) : (
+                  <div className="h-32 bg-gradient-to-br from-primary/80 to-primary/40 flex items-center justify-center">
+                    <Icon size={24} className="text-white/80" />
+                  </div>
+                )}
                 
                 {/* Content */}
                 <div className="p-5 flex flex-col flex-1">
