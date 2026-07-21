@@ -18,7 +18,7 @@ router.post("/upload", requireAuth, async (req, res) => {
     const { image, folder } = req.body as { image: string; folder?: string };
     if (!image) return res.status(400).json({ error: "No image provided" });
 
-    const cloudEnabled = !!process.env.CLOUDINARY_CLOUD_NAME;
+    const cloudEnabled = !!(process.env.CLOUDINARY_URL || process.env.CLOUDINARY_CLOUD_NAME);
     if (!cloudEnabled) {
       // Cloudinary not configured — return the base64 as-is (fallback)
       return res.json({ url: image });
