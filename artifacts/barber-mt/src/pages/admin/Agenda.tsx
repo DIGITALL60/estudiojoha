@@ -551,6 +551,7 @@ export default function Agenda() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hoveredApp, setHoveredApp] = useState<{ app: Appointment; x: number; y: number } | null>(null);
 
   const fetchAll = async (silent = false) => {
     if (!silent) setLoading(true);
@@ -800,7 +801,11 @@ export default function Agenda() {
                            const isAgendado = app.status === "agendado" || !app.status;
                            const bgAlpha = isAgendado ? "22" : "";
                            return (
-                            <div key={app.id} onClick={(e) => { e.stopPropagation(); setEditingApp(app); }}
+                            <div key={app.id}
+                              onClick={(e) => { e.stopPropagation(); setEditingApp(app); }}
+                              onMouseEnter={(e) => setHoveredApp({ app, x: e.clientX, y: e.clientY })}
+                              onMouseMove={(e) => setHoveredApp(prev => prev ? { ...prev, x: e.clientX, y: e.clientY } : null)}
+                              onMouseLeave={() => setHoveredApp(null)}
                               className={`absolute rounded-sm overflow-hidden shadow-sm transition-all hover:z-20 z-10 cursor-pointer flex flex-col justify-start px-1.5 py-1 ${!isAgendado ? STATUS_COLORS[app.status] || STATUS_COLORS.agendado : ""}`}
                               style={{ 
                                 top: `${app.top}px`, 
@@ -865,6 +870,9 @@ export default function Agenda() {
                 return (
                   <div key={app.id}
                     onClick={(e) => { e.stopPropagation(); setEditingApp(app); }}
+                    onMouseEnter={(e) => setHoveredApp({ app, x: e.clientX, y: e.clientY })}
+                    onMouseMove={(e) => setHoveredApp(prev => prev ? { ...prev, x: e.clientX, y: e.clientY } : null)}
+                    onMouseLeave={() => setHoveredApp(null)}
                     className={`absolute rounded-sm overflow-hidden shadow-sm transition-all hover:z-20 z-10 cursor-pointer flex flex-col justify-start px-2 py-1 ${!isAgendado ? STATUS_COLORS[app.status] || STATUS_COLORS.cancelado : ""}`}
                     style={{
                       top: `${app.top}px`,
@@ -905,6 +913,42 @@ export default function Agenda() {
         {showModal && <NewTurnModal onClose={() => setShowModal(false)} defaultDate={selectedSlotDate || todayStr} defaultTime={selectedSlotTime || "10:00"} onCreated={fetchAll} />}
         {editingApp && <EditTurnModal app={editingApp} onClose={() => setEditingApp(null)} onUpdated={fetchAll} />}
       </AnimatePresence>
+
+      {/* Hover Tooltip */}
+      {hoveredApp && (() => {
+        const { app, x, y } = hoveredApp;
+        const profColor = app.professionalColor || professionals.find(p => p.name === app.professionalName)?.color || "hsl(var(--primary))";
+        const statusLabel: Record<string, string> = { agendado: "Agendado", confirmado: "Confirmado ✓", completado: "Completado", cancelado: "Cancelado" };
+        const statusColor: Record<string, string> = { agendado: "text-primary", confirmado: "text-teal-500", completado: "text-emerald-500", cancelado: "text-red-500" };
+        return (
+          <div
+            className="fixed z-[9999] pointer-events-none bg-card border border-border rounded-lg shadow-xl px-4 py-3 min-w-[200px] max-w-[260px]"
+            style={{
+              top: y + 14,
+              left: x + 14,
+              borderLeft: `4px solid ${profColor}`,
+              transform: x > window.innerWidth - 280 ? "translateX(-110%)" : undefined,
+            }}
+          >
+            <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: profColor }}>
+              {app.professionalName}
+            </p>
+            <p className="text-sm font-semibold text-foreground leading-tight">{app.clientName}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{app.serviceName}</p>
+            <div className="flex items-center gap-3 mt-2 pt-2 border-t border-border/40">
+              <span className="text-xs font-medium text-foreground">📅 {app.date.split("-").reverse().join("/")}</span>
+              <span className="text-xs font-medium text-foreground">⏰ {app.time}hs</span>
+            </div>
+            <div className="flex items-center justify-between mt-1.5">
+              <span className={`text-[10px] font-semibold uppercase tracking-wide ${statusColor[app.status] || "text-muted-foreground"}`}>
+                {statusLabel[app.status] || app.status}
+              </span>
+              <span className="text-xs font-semibold text-foreground">${app.price?.toLocaleString("es-AR")}</span>
+            </div>
+            <p className="text-[10px] text-muted-foreground/60 mt-2 italic">Clic para editar</p>
+          </div>
+        );
+      })()}
     </AdminLayout>
   );
 }
