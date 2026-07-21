@@ -1,5 +1,6 @@
 import { Router } from "express";
-import { currentQR, isConnected, sendWhatsAppMessage } from "../lib/whatsapp.js";
+import { currentQR, isConnected } from "../lib/whatsapp.js";
+import { cloudSendText } from "../lib/whatsapp-cloud.js";
 import { requireAuth } from "../middlewares/auth.js";
 import { logger } from "../lib/logger.js";
 
@@ -45,7 +46,7 @@ router.post("/send-bulk", requireAuth, async (req, res) => {
       
       logger.info(`[BULK] Procesando mensaje ${i + 1} de ${validMessages.length} para ${msg.phone}...`);
       
-      const success = await sendWhatsAppMessage(msg.phone, msg.message);
+      const success = await cloudSendText(msg.phone, msg.message);
       if (success) {
         sent++;
       } else {

@@ -2,7 +2,7 @@ import cron from "node-cron";
 import { db, appointments, clients, services, professionals, vouchers } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
-import { sendWhatsAppMessage } from "./whatsapp.js";
+import { cloudSendText } from "./whatsapp-cloud.js";
 import { logger } from "./logger.js";
 import { getBoolSetting, getSetting } from "./settings.js";
 
@@ -72,7 +72,7 @@ export function initCronJobs() {
               createdAt: new Date(),
             });
             const waLink = await getSetting("whatsapp_link");
-            await sendWhatsAppMessage(
+            await cloudSendText(
               client.phone,
               `🎂 ¡Feliz cumpleaños, ${client.name}! 🎂\n\nEn Estudio Joha Molinero te regalamos un *15% de descuento* en tu próxima visita 💜\n\nUsá el código: *${code}*\n\n📲 Reservar: ${waLink}\n\n¡Te esperamos para celebrarlo! 🥂`
             );
@@ -94,7 +94,7 @@ export function initCronJobs() {
               `Profesional: ${prof.name}\n\n` +
               `Por favor, si no podés asistir, avisanos para liberar el lugar.\n¡Te esperamos! 💜`;
 
-            await sendWhatsAppMessage(client.phone, msg);
+            await cloudSendText(client.phone, msg);
 
             // Mark as sent
             await db.update(appointments).set({ reminderSent: true }).where(eq(appointments.id, app.id));

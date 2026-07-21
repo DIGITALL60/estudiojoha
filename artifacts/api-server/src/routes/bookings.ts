@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db, clients, appointments, professionals, services, professional_schedules, vouchers } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { sendWhatsAppMessage } from "../lib/whatsapp.js";
+import { cloudSendText } from "../lib/whatsapp-cloud.js";
 import { logger } from "../lib/logger.js";
 import { randomUUID } from "crypto";
 import { validate } from "../middlewares/validate.js";
@@ -155,12 +155,12 @@ router.post("/", validate(createBookingSchema), async (req, res) => {
       `👩‍🎨 A cargo de: ${professionalName}`;
 
     if (whatsappEnabled) {
-      Promise.allSettled([
-        sendWhatsAppMessage(client.phone, clientMsg),
-        prof?.phone && prof.phone !== admin?.phone ? sendWhatsAppMessage(prof.phone, profMsg) : Promise.resolve(),
-        admin?.phone ? sendWhatsAppMessage(admin.phone, adminMsg) : Promise.resolve()
-      ]).catch(err => {
-        logger.error({ err }, "Error sending WhatsApp notifications");
+      Promise.all([
+      cloudSendText(client.phone, clientMsg),
+      prof?.phone && prof.phone !== admin?.phone ? cloudSendText(prof.phone, profMsg) : Promise.resolve(),
+      admin?.phone ? cloudSendText(admin.phone, adminMsg) : Promise.resolve()
+    ]).catch(err => {
+      logger.error({ err }, "Error sending WhatsApp notifications");
       });
     }
 

@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db, professionals, services, clients, appointments, professional_schedules, professional_services, products, service_products, expenses, app_settings } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
-import { sendWhatsAppMessage } from "../lib/whatsapp.js";
+import { cloudSendText } from "../lib/whatsapp-cloud.js";
 import { logger } from "../lib/logger.js";
 import { requireAuth } from "../middlewares/auth.js";
 import { getAllSettings, upsertSettings, getBoolSetting, getSetting } from "../lib/settings.js";
@@ -391,7 +391,7 @@ router.post("/appointments", requireAuth, async (req, res) => {
           `👩‍🎨 Profesional: ${prof.name}\n\n` +
           `📍 ${businessAddress}\n\n` +
           `Si necesitás cancelar o reprogramar, avisanos con anticipación.\n¡Gracias por elegirnos! 💜`;
-        await sendWhatsAppMessage(client.phone, clientMsg);
+        await cloudSendText(client.phone, clientMsg);
 
         if (prof.phone && prof.phone !== admin?.phone) {
           const profMsg =
@@ -401,7 +401,7 @@ router.post("/appointments", requireAuth, async (req, res) => {
             `📅 Fecha: ${date}\n` +
             `⏰ Hora: ${time}\n` +
             `💅 Servicio: ${srv.name}`;
-          await sendWhatsAppMessage(prof.phone, profMsg);
+          await cloudSendText(prof.phone, profMsg);
         }
 
         if (admin?.phone) {
@@ -411,7 +411,7 @@ router.post("/appointments", requireAuth, async (req, res) => {
             `📅 Fecha: ${date} a las ${time}\n` +
             `💅 Servicio: ${srv.name}\n` +
             `👩‍🎨 A cargo de: ${prof.name}`;
-          await sendWhatsAppMessage(admin.phone, adminMsg);
+          await cloudSendText(admin.phone, adminMsg);
         }
       }
     } catch (msgErr) {
@@ -496,7 +496,7 @@ router.post("/appointments/:id/remind", requireAuth, async (req, res) => {
       `📍 ${businessAddress}\n\n` +
       `Por favor, recordá que si necesitás reprogramar o cancelar, debés avisarnos con 24hs de anticipación.\n¡Te esperamos! 💜`;
 
-    await sendWhatsAppMessage(client.phone, msg);
+    await cloudSendText(client.phone, msg);
     
     // Mark as reminded
     await db.update(appointments).set({ reminderSent: true }).where(eq(appointments.id, id));
