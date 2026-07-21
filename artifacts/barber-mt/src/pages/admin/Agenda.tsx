@@ -604,52 +604,58 @@ export default function Agenda() {
     totalColumns: number;
   }
 
-  const appsWithPos: PosApp[] = dayApps.map(app => {
-    const [h, m] = app.time.split(":").map(Number);
-    const startMin = (h - 7) * 60 + m;
-    const endMin = startMin + app.duration;
-    return { ...app, startMin, endMin, top: (startMin / 60) * 64, height: (app.duration / 60) * 64, column: 0, totalColumns: 1 };
-  }).sort((a, b) => a.startMin - b.startMin);
+  const calculateOverlaps = (appsList: Appointment[]): PosApp[] => {
+    const appsWithPos: PosApp[] = appsList.map(app => {
+      const [h, m] = app.time.split(":").map(Number);
+      const startMin = (h - 7) * 60 + m;
+      const endMin = startMin + app.duration;
+      return { ...app, startMin, endMin, top: (startMin / 60) * 64, height: (app.duration / 60) * 64, column: 0, totalColumns: 1 };
+    }).sort((a, b) => a.startMin - b.startMin);
 
-  const groups: PosApp[][] = [];
-  let currentGroup: PosApp[] = [];
-  let groupEnd = 0;
+    const groups: PosApp[][] = [];
+    let currentGroup: PosApp[] = [];
+    let groupEnd = 0;
 
-  for (const app of appsWithPos) {
-    if (app.startMin < groupEnd) {
-      currentGroup.push(app);
-      groupEnd = Math.max(groupEnd, app.endMin);
-    } else {
-      if (currentGroup.length > 0) groups.push(currentGroup);
-      currentGroup = [app];
-      groupEnd = app.endMin;
+    for (const app of appsWithPos) {
+      if (app.startMin < groupEnd) {
+        currentGroup.push(app);
+        groupEnd = Math.max(groupEnd, app.endMin);
+      } else {
+        if (currentGroup.length > 0) groups.push(currentGroup);
+        currentGroup = [app];
+        groupEnd = app.endMin;
+      }
     }
-  }
-  if (currentGroup.length > 0) groups.push(currentGroup);
+    if (currentGroup.length > 0) groups.push(currentGroup);
 
-  for (const group of groups) {
-    const columns: PosApp[][] = [];
-    for (const app of group) {
-      let placed = false;
-      for (let i = 0; i < columns.length; i++) {
-        const col = columns[i];
-        const lastAppInCol = col[col.length - 1];
-        if (lastAppInCol.endMin <= app.startMin) {
-          col.push(app);
-          app.column = i;
-          placed = true;
-          break;
+    for (const group of groups) {
+      const columns: PosApp[][] = [];
+      for (const app of group) {
+        let placed = false;
+        for (let i = 0; i < columns.length; i++) {
+          const col = columns[i];
+          const lastAppInCol = col[col.length - 1];
+          if (lastAppInCol.endMin <= app.startMin) {
+            col.push(app);
+            app.column = i;
+            placed = true;
+            break;
+          }
+        }
+        if (!placed) {
+          app.column = columns.length;
+          columns.push([app]);
         }
       }
-      if (!placed) {
-        app.column = columns.length;
-        columns.push([app]);
+      for (const app of group) {
+        app.totalColumns = columns.length;
       }
     }
-    for (const app of group) {
-      app.totalColumns = columns.length;
-    }
-  }
+    return appsWithPos;
+  };
+
+  const appsWithPos = calculateOverlaps(dayApps);
+
 
   return (
     <AdminLayout title="Agenda" subtitle="Turnos del día"
@@ -765,11 +771,7 @@ export default function Agenda() {
               {eachDayOfInterval({ start: startOfWeek(currentDate, { weekStartsOn: 1 }), end: endOfWeek(currentDate, { weekStartsOn: 1 }) }).map((day, i) => {
                 const dayStr = format(day, "yyyy-MM-dd");
                 const dApps = appointments.filter(a => a.date === dayStr && (activeProfessional === "all" || a.professionalName === professionals.find(p => p.id === activeProfessional)?.name));
-                const dAppsWithPos = dApps.map(app => {
-                  const [h, m] = app.time.split(":").map(Number);
-                  const startMin = (h - 7) * 60 + m;
-                  return { ...app, startMin, endMin: startMin + app.duration, top: (startMin / 60) * 64, height: (app.duration / 60) * 64 };
-                }).sort((a, b) => a.startMin - b.startMin);
+                const dAppsWithPos = calculateOverlaps(dApps);
                 
                 return (
                   <div key={i} className="border-r border-border relative">
@@ -786,18 +788,26 @@ export default function Agenda() {
                           <div key={h} className="h-16 hover:bg-accent/5 cursor-pointer group" onClick={() => { setSelectedSlotDate(dayStr); setSelectedSlotTime(h); setShowModal(true); }} />
                         ))}
                       </div>
-                      {dAppsWithPos.map(app => {
-                         const isAgendado = app.status === "agendado" || !app.status;
-                         const profColor = app.professionalColor || professionals.find(p => p.name === app.professionalName)?.color || "hsl(var(--primary))";
-                         return (
-                          <div key={app.id} onClick={(e) => { e.stopPropagation(); setEditingApp(app); }}
-                            className={`absolute rounded-sm border px-1.5 py-1 flex flex-col justify-start overflow-hidden shadow-sm transition-all hover:z-10 z-10 cursor-pointer ${!isAgendado ? STATUS_COLORS[app.status] : ""}`}
-                            style={{ top: `${app.top}px`, height: `${app.height}px`, left: "2px", right: "2px", ...(isAgendado ? { backgroundColor: `${profColor}40`, borderColor: `${profColor}90`, color: "#ffffff" } : {}) }}>
-                            <p className="text-[9px] font-semibold truncate leading-tight drop-shadow-md">{app.clientName}</p>
-                            <p className="text-[8px] opacity-90 truncate leading-tight mt-0.5 drop-shadow-md">{app.serviceName}</p>
-                          </div>
-                         );
-                      })}
+                        {dAppsWithPos.map(app => {
+                           const width = 100 / app.totalColumns;
+                           const left = app.column * width;
+                           const isAgendado = app.status === "agendado" || !app.status;
+                           const profColor = app.professionalColor || professionals.find(p => p.name === app.professionalName)?.color || "hsl(var(--primary))";
+                           return (
+                            <div key={app.id} onClick={(e) => { e.stopPropagation(); setEditingApp(app); }}
+                              className={`absolute rounded-sm border px-1.5 py-1 flex flex-col justify-start overflow-hidden shadow-sm transition-all hover:z-10 z-10 cursor-pointer ${!isAgendado ? STATUS_COLORS[app.status] : ""}`}
+                              style={{ 
+                                top: `${app.top}px`, 
+                                height: `${app.height}px`, 
+                                left: `calc(${left}% + 1px)`, 
+                                width: `calc(${width}% - 2px)`,
+                                ...(isAgendado ? { backgroundColor: `${profColor}40`, borderColor: `${profColor}90`, color: "#ffffff" } : {}) 
+                              }}>
+                              <p className="text-[9px] font-semibold truncate leading-tight drop-shadow-md">{app.clientName}</p>
+                              <p className="text-[8px] opacity-90 truncate leading-tight mt-0.5 drop-shadow-md">{app.serviceName}</p>
+                            </div>
+                           );
+                        })}
                     </div>
                   </div>
                 );
