@@ -157,26 +157,11 @@ export default function Home() {
 
       <section className="relative min-h-[100dvh] flex items-center justify-center overflow-hidden">
         <div className="absolute inset-0 z-0 bg-background">
-          {settings?.carousel_images && settings.carousel_images.length > 0 ? (
-            <AnimatePresence mode="popLayout">
-              <motion.img
-                key={activeImageIndex}
-                src={settings.carousel_images[activeImageIndex].url}
-                alt="Estudio Joha Molinero"
-                initial={{ opacity: 0, scale: 1.05 }}
-                animate={{ opacity: 0.3, scale: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 1.5, ease: "easeInOut" }}
-                className="absolute inset-0 w-full h-full object-cover mix-blend-luminosity"
-              />
-            </AnimatePresence>
-          ) : (
-            <img 
-              src="/hero-premium.jpg" 
-              alt="Estudio Joha Molinero" 
-              className="absolute inset-0 w-full h-full object-cover opacity-30 mix-blend-luminosity"
-            />
-          )}
+          <img 
+            src="/hero-premium.jpg" 
+            alt="Estudio Joha Molinero" 
+            className="absolute inset-0 w-full h-full object-cover opacity-30 mix-blend-luminosity"
+          />
           {/* Overlay sutil que funciona en ambos modos */}
           <div className="absolute inset-0 bg-background/50" />
           <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] rounded-full bg-primary/15 blur-[120px]" />
@@ -314,6 +299,40 @@ export default function Home() {
               </span>
             ))}
           </motion.div>
+        </section>
+      )}
+
+      {settings?.carousel_images && settings.carousel_images.length > 0 && (
+        <section className="relative w-full bg-card/20 border-b border-border/40 py-8 flex items-center justify-center overflow-hidden min-h-[300px]">
+          <AnimatePresence mode="wait">
+            <motion.img
+              key={activeImageIndex}
+              src={settings.carousel_images[activeImageIndex].url}
+              alt="Promoción del mes"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.5, ease: "easeOut" }}
+              className="w-full max-w-4xl h-auto max-h-[70vh] object-contain shadow-2xl rounded-sm z-10"
+            />
+          </AnimatePresence>
+          
+          {settings.carousel_images.length > 1 && (
+            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 z-20">
+              {settings.carousel_images.map((_, i) => (
+                <button
+                  key={i}
+                  onClick={() => setActiveImageIndex(i)}
+                  className={`transition-all duration-300 rounded-full ${
+                    i === activeImageIndex 
+                      ? "w-6 h-1.5 bg-primary" 
+                      : "w-1.5 h-1.5 bg-primary/30 hover:bg-primary/50"
+                  }`}
+                  aria-label={`Ver promoción ${i + 1}`}
+                />
+              ))}
+            </div>
+          )}
         </section>
       )}
 
