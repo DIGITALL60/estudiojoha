@@ -282,43 +282,49 @@ export default function Home() {
         {/* Floating Promo Widget */}
         {settings?.carousel_images && settings.carousel_images.length > 0 && (
           <motion.div 
-            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            initial={{ opacity: 0, scale: 0.9, y: 30 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            transition={{ delay: 0.5, duration: 0.6 }}
-            onClick={() => setSelectedServiceImage(settings.carousel_images![activeImageIndex].url)}
-            className="absolute z-40 bottom-6 right-6 md:bottom-12 md:right-12 w-32 sm:w-48 md:w-64 lg:w-72 rounded-xl overflow-hidden shadow-2xl border border-white/20 bg-background cursor-pointer hover:scale-105 transition-transform"
+            transition={{ delay: 0.5, duration: 0.8, ease: "easeOut" }}
+            className="absolute z-40 bottom-6 right-6 md:bottom-12 md:right-12 w-44 sm:w-64 md:w-80 lg:w-[360px]"
           >
-            <div className="bg-primary text-primary-foreground text-[8px] md:text-[10px] text-center py-1 uppercase tracking-widest font-bold">
-              Promociones
-            </div>
-            <div className="relative aspect-[3/4] w-full">
-              <AnimatePresence mode="wait">
-                <motion.img
-                  key={activeImageIndex}
-                  src={settings.carousel_images[activeImageIndex].url}
-                  alt="Promoción"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.5 }}
-                  className="absolute inset-0 w-full h-full object-cover"
-                />
-              </AnimatePresence>
-            </div>
-            {settings.carousel_images.length > 1 && (
-              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-20">
-                {settings.carousel_images.map((_, i) => (
-                  <div
-                    key={i}
-                    className={`transition-all duration-300 rounded-full ${
-                      i === activeImageIndex 
-                        ? "w-4 h-1.5 bg-primary" 
-                        : "w-1.5 h-1.5 bg-white/70 shadow-sm"
-                    }`}
-                  />
-                ))}
+            <motion.div
+              animate={{ y: [0, -12, 0] }}
+              transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+              onClick={() => setSelectedServiceImage(settings.carousel_images![activeImageIndex].url)}
+              className="rounded-xl overflow-hidden shadow-2xl border border-white/20 bg-background/95 backdrop-blur-sm cursor-pointer hover:scale-[1.02] transition-transform"
+            >
+              <div className="bg-primary text-primary-foreground text-[9px] md:text-[11px] text-center py-1.5 uppercase tracking-widest font-bold">
+                Promociones
               </div>
-            )}
+              <div className="relative w-full bg-muted/10 overflow-hidden" style={{ aspectRatio: "4/5" }}>
+                <AnimatePresence mode="wait">
+                  <motion.img
+                    key={activeImageIndex}
+                    src={settings.carousel_images[activeImageIndex].url}
+                    alt="Promoción"
+                    initial={{ opacity: 0, x: 30, scale: 0.95 }}
+                    animate={{ opacity: 1, x: 0, scale: 1 }}
+                    exit={{ opacity: 0, x: -30, scale: 0.95 }}
+                    transition={{ duration: 0.5, ease: "easeInOut" }}
+                    className="absolute inset-0 w-full h-full object-contain p-2"
+                  />
+                </AnimatePresence>
+              </div>
+              {settings.carousel_images.length > 1 && (
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-20 bg-background/60 backdrop-blur-md px-3 py-1.5 rounded-full shadow-sm">
+                  {settings.carousel_images.map((_, i) => (
+                    <div
+                      key={i}
+                      className={`transition-all duration-300 rounded-full ${
+                        i === activeImageIndex 
+                          ? "w-5 h-1.5 bg-primary" 
+                          : "w-1.5 h-1.5 bg-primary/40"
+                      }`}
+                    />
+                  ))}
+                </div>
+              )}
+            </motion.div>
           </motion.div>
         )}
       </section>
