@@ -102,9 +102,14 @@ export async function handleBotMessage(from: string, text: string, interactiveId
 
   if (input === "reminder_confirm" || input === "reminder_cancel" || ((session.step === "idle" || session.step === "done") && (isConfirmation || isCancellation))) {
     if (isConfirmation || isCancellation) {
-      // Look for upcoming appointment for this phone number
-      const clientRows = db.select().from(clients).where(eq(clients.phone, from)).all();
-      const clientId = clientRows[0]?.id;
+      // Look for upcoming appointment for this phone number by normalizing
+      const allClients = await db.select().from(clients);
+      const client = allClients.find(c => {
+        const raw = (c.phone || "").replace(/\D/g, "");
+        if (!raw) return false;
+        return from.includes(raw) || raw.includes(from.replace(/^549?/, ""));
+      });
+      const clientId = client?.id;
       let app = null;
 
       if (clientId) {
@@ -150,12 +155,11 @@ export async function handleBotMessage(from: string, text: string, interactiveId
           session.professionalName = (await db.select().from(professionals).where(eq(professionals.id, app.professionalId)).limit(1))[0]?.name;
           session.serviceName = (await db.select().from(services).where(eq(services.id, app.serviceId)).limit(1))[0]?.name;
           sessions.set(from, session);
-          await cloudSendButtons(from,
-            `😕 ¡Qué lástima que no puedas venir!\n\n¿Querés *reprogramar* tu turno para otro día, o preferís cancelarlo definitivamente?`,
-            [
-              { id: "reschedule_yes", title: "📅 Reprogramar" },
-              { id: "reschedule_no", title: "❌ Cancelar definitivo" },
-            ]
+          
+          await db.update(appointments).set({ status: "cancelado" }).where(eq(appointments.id, app.id));
+          
+          await cloudSendText(from,
+            `😕 ¡Qué lástima que no puedas venir!\n\nTu turno actual fue cancelado, pero vamos a *reprogramarlo* para otra fecha.\n\n¿Qué día te queda mejor?\nEscribilo así: *DD/MM/AAAA*\nEj: *28/07/2026*`
           );
           return;
         }
@@ -171,20 +175,6 @@ export async function handleBotMessage(from: string, text: string, interactiveId
 
   // ── RESCHEDULING FLOW ─────────────────────────────────────────────────────
   if (session.step === "rescheduling_choosing_date") {
-    if (input === "reschedule_no") {
-      // Actually cancel the appointment
-      if (session.appointmentIdToReschedule) {
-        await db.update(appointments).set({ status: "cancelado" }).where(eq(appointments.id, session.appointmentIdToReschedule));
-      }
-      sessions.delete(from);
-      await cloudSendText(from, "Tu turno fue cancelado 🙈\n\nCuando quieras reservar de nuevo, ¡escribinos y te ayudamos! 💜");
-      return;
-    }
-    if (input === "reschedule_yes") {
-      await cloudSendText(from, `¡Perfecto! ¿Qué fecha te queda mejor?\n\nEscribila así: *DD/MM/AAAA*\nEj: *28/07/2025*`);
-      return;
-    }
-
     // Parse date
     let dateStr = "";
     const matchDDMM = input.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
@@ -452,13 +442,20 @@ async function showServices(to: string): Promise<void> {
     grouped[s.category].push(s);
   }
 
+  let totalRows = 0;
   const sections = [];
   for (const [category, svcs] of Object.entries(grouped)) {
-    const rows = svcs.slice(0, 10).map((s) => ({
-      id: s.id,
-      title: s.name.length > 24 ? s.name.substring(0, 21) + "..." : s.name,
-      description: `${s.duration} min · $${s.price}`,
-    }));
+    if (totalRows >= 10) break;
+    const rows = [];
+    for (const s of svcs) {
+      if (totalRows >= 10) break;
+      rows.push({
+        id: s.id,
+        title: s.name.length > 24 ? s.name.substring(0, 21) + "..." : s.name,
+        description: `${s.duration} min · $${s.price}`,
+      });
+      totalRows++;
+    }
     if (rows.length > 0) {
       sections.push({
         title: category.length > 24 ? category.substring(0, 24) : category,
@@ -467,14 +464,12 @@ async function showServices(to: string): Promise<void> {
     }
   }
 
-  const validSections = sections.slice(0, 10);
-
   await cloudSendList(
     to,
     "Estudio Joha Molinero 💅",
     "¡Hola! Bienvenida 🌸\nEstamos en *Río Segundo, Córdoba*\n📅 Martes a Sábado · 10:00 a 20:00 hs\n\n¿Qué servicio querés reservar?",
     "Ver Servicios",
-    validSections
+    sections
   );
 }
 
