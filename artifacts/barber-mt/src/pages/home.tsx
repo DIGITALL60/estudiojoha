@@ -233,21 +233,18 @@ export default function Home() {
                   <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                 </button>
                 <button
-                  onClick={() => document.getElementById("servicios")?.scrollIntoView({ behavior: "smooth" })}
-                  data-testid="button-hero-services"
+                  onClick={() => window.open("https://instagram.com/" + igHandle, "_blank")}
+                  data-testid="button-hero-courses"
                   className="border border-border text-muted-foreground font-sans text-xs tracking-[0.3em] uppercase px-10 py-4 hover:border-primary hover:text-primary transition-all duration-300 w-full sm:w-auto"
                 >
-                  Ver Servicios
+                  Capacitate con nosotras
                 </button>
               </div>
               <button
                 className="font-cursive text-3xl md:text-4xl text-primary/90 hover:text-primary transition-colors transform hover:-rotate-2 hover:scale-105 mt-2"
-                onClick={() => {
-                  // TODO: Scroll to capacitate section if it exists, or just a placeholder action for now
-                  window.location.href = "https://instagram.com/" + igHandle; 
-                }}
+                onClick={() => document.getElementById("servicios")?.scrollIntoView({ behavior: "smooth" })}
               >
-                "Capacitate con nosotras"
+                Ver Servicios
               </button>
             </motion.div>
           </motion.div>
