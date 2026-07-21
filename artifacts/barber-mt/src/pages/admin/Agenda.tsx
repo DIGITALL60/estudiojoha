@@ -809,7 +809,7 @@ export default function Agenda() {
                               className={`absolute rounded-sm overflow-hidden shadow-sm transition-all hover:z-20 z-10 cursor-pointer flex flex-col justify-start px-1.5 py-1 ${!isAgendado ? STATUS_COLORS[app.status] || STATUS_COLORS.agendado : ""}`}
                               style={{ 
                                 top: `${app.top}px`, 
-                                height: `${Math.max(app.height, 22)}px`, 
+                                height: `${app.height}px`, 
                                 left: `calc(${left}% + 1px)`, 
                                 width: `calc(${width}% - 2px)`,
                                 ...(isAgendado ? {
@@ -876,7 +876,7 @@ export default function Agenda() {
                     className={`absolute rounded-sm overflow-hidden shadow-sm transition-all hover:z-20 z-10 cursor-pointer flex flex-col justify-start px-2 py-1 ${!isAgendado ? STATUS_COLORS[app.status] || STATUS_COLORS.cancelado : ""}`}
                     style={{
                       top: `${app.top}px`,
-                      height: `${Math.max(app.height, 26)}px`,
+                      height: `${app.height}px`,
                       left: `calc(${left}% + 4px)`,
                       width: `calc(${width}% - 8px)`,
                       ...(isAgendado ? {

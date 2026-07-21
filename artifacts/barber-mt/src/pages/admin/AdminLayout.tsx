@@ -33,6 +33,7 @@ const iconMap: Record<string, React.ReactNode> = {
   clock: <Clock size={16} />,
   image: <ImageIcon size={16} />,
   qrcode: <QrCode size={16} />,
+  "message-square": <MessageSquare size={16} />,
 };
 
 const navConfig = {
@@ -80,6 +81,7 @@ const navConfig = {
   ],
   footer: [
     { id: "qr", label: "QR Mostrador", icon: "qrcode" },
+    { id: "whatsapp", label: "Estado WhatsApp", icon: "message-square", path: "/admin/whatsapp" },
     { id: "configuracion", label: "Configuración", icon: "settings", path: "/admin/configuracion" },
     { id: "logout", label: "Cerrar sesión", icon: "log-out" },
   ],
