@@ -232,20 +232,55 @@ export default function Home() {
                   Reservar Turno
                   <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                 </button>
+                {/* Capacitate con nosotras - shimmer button */}
                 <button
                   onClick={() => window.open("https://instagram.com/" + igHandle, "_blank")}
                   data-testid="button-hero-courses"
-                  className="border border-border text-muted-foreground font-sans text-xs tracking-[0.3em] uppercase px-10 py-4 hover:border-primary hover:text-primary transition-all duration-300 w-full sm:w-auto"
+                  className="relative overflow-hidden border border-primary/60 text-primary font-sans text-xs tracking-[0.3em] uppercase px-10 py-4 hover:border-primary hover:text-primary transition-all duration-300 w-full sm:w-auto group"
                 >
+                  {/* shimmer sweep */}
+                  <span
+                    className="pointer-events-none absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-in-out"
+                    style={{
+                      background: "linear-gradient(105deg, transparent 40%, rgba(236,72,153,0.35) 50%, transparent 60%)",
+                    }}
+                  />
                   Capacitate con nosotras
                 </button>
               </div>
-              <button
-                className="font-cursive text-3xl md:text-4xl text-primary/90 hover:text-primary transition-colors transform hover:-rotate-2 hover:scale-105 mt-2"
-                onClick={() => document.getElementById("servicios")?.scrollIntoView({ behavior: "smooth" })}
-              >
-                Ver Servicios
-              </button>
+
+              {/* Ver Servicios - with sparkles */}
+              <div className="relative inline-flex items-center justify-center mt-2">
+                {/* sparkle stars */}
+                {[
+                  { top: "-8px", left: "6px", delay: "0s", size: 8 },
+                  { top: "-4px", right: "4px", delay: "0.4s", size: 6 },
+                  { bottom: "-6px", left: "20px", delay: "0.8s", size: 7 },
+                  { top: "4px", right: "-8px", delay: "0.2s", size: 5 },
+                ].map((s, i) => (
+                  <span
+                    key={i}
+                    className="absolute text-primary/70 animate-ping"
+                    style={{
+                      top: s.top,
+                      left: (s as any).left,
+                      right: (s as any).right,
+                      bottom: (s as any).bottom,
+                      animationDelay: s.delay,
+                      animationDuration: "2s",
+                      fontSize: s.size + "px",
+                    }}
+                  >
+                    ✦
+                  </span>
+                ))}
+                <button
+                  className="font-cursive text-3xl md:text-4xl text-primary/90 hover:text-primary transition-colors transform hover:-rotate-2 hover:scale-105"
+                  onClick={() => document.getElementById("servicios")?.scrollIntoView({ behavior: "smooth" })}
+                >
+                  Ver Servicios
+                </button>
+              </div>
             </motion.div>
           </motion.div>
         </div>
