@@ -253,10 +253,46 @@ function EditTurnModal({ app, onClose, onUpdated }: { app: Appointment; onClose:
   const [notes, setNotes] = useState(app.notes || "");
   const [paymentMethod, setPaymentMethod] = useState((app as any).paymentMethod || "Efectivo");
   const [shopSales, setShopSales] = useState((app as any).shopSales || 0);
+  const [receiptBase64, setReceiptBase64] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [reminding, setReminding] = useState(false);
   const [remindSuccess, setRemindSuccess] = useState(false);
+
+  useEffect(() => {
+    if (app.notes && app.notes.includes("[COMPROBANTE]")) {
+      const parts = app.notes.split("[COMPROBANTE]");
+      setNotes(parts[0].trim());
+      setReceiptBase64(parts[1]);
+    }
+  }, [app]);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const MAX_WIDTH = 800;
+        let width = img.width;
+        let height = img.height;
+        if (width > MAX_WIDTH) {
+          height = height * (MAX_WIDTH / width);
+          width = MAX_WIDTH;
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx?.drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
+        setReceiptBase64(dataUrl);
+      };
+      img.src = ev.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleRemind = async () => {
     if (!confirm("¿Enviar recordatorio por WhatsApp ahora?")) return;
@@ -280,9 +316,9 @@ function EditTurnModal({ app, onClose, onUpdated }: { app: Appointment; onClose:
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           status, 
-          notes,
-          paymentMethod: status === "completado" ? paymentMethod : null,
-          shopSales: status === "completado" ? Number(shopSales) : 0
+          notes: receiptBase64 ? `${notes}\n\n[COMPROBANTE]${receiptBase64}` : notes,
+          paymentMethod,
+          shopSales: Number(shopSales)
         })
       });
       onUpdated();
@@ -337,23 +373,21 @@ function EditTurnModal({ app, onClose, onUpdated }: { app: Appointment; onClose:
                 <option value="cancelado">Cancelado</option>
               </select>
             </div>
-            {status === "completado" && (
-              <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}>
-                <label className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted-foreground block mb-1.5 text-emerald-500">Método de pago</label>
-                <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}
-                  className="w-full bg-background border border-emerald-500/50 rounded-sm px-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-emerald-500">
-                  <option value="Efectivo">Efectivo</option>
-                  <option value="Transferencia">Transferencia</option>
-                  <option value="Tarjeta">Tarjeta</option>
-                  <option value="Mercado Pago">Mercado Pago</option>
-                </select>
-              </motion.div>
-            )}
+            <div>
+              <label className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted-foreground block mb-1.5 text-emerald-500">Método de pago</label>
+              <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}
+                className="w-full bg-background border border-emerald-500/50 rounded-sm px-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-emerald-500">
+                <option value="Efectivo">Efectivo</option>
+                <option value="Transferencia">Transferencia</option>
+                <option value="Tarjeta">Tarjeta</option>
+                <option value="Mercado Pago">Mercado Pago</option>
+              </select>
+            </div>
           </div>
-          {status === "completado" && (
-            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
               <label className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted-foreground block mb-1.5 text-emerald-500">
-                Ventas de Shop ($) (Opcional)
+                Ventas de Shop ($)
               </label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">$</span>
@@ -366,11 +400,26 @@ function EditTurnModal({ app, onClose, onUpdated }: { app: Appointment; onClose:
                   className="w-full bg-background border border-emerald-500/50 rounded-sm pl-8 pr-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-emerald-500"
                 />
               </div>
-              <p className="text-[9px] text-muted-foreground mt-1">
-                Suma a las ventas y objetivos de la profesional.
-              </p>
-            </motion.div>
+            </div>
+            <div>
+              <label className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted-foreground block mb-1.5 text-emerald-500">Comprobante</label>
+              <div className="relative w-full h-[38px] bg-background border border-emerald-500/50 rounded-sm overflow-hidden flex items-center justify-center group cursor-pointer hover:bg-emerald-500/10 transition-colors">
+                <input type="file" accept="image/*" onChange={handleFileChange} className="absolute inset-0 opacity-0 cursor-pointer z-10" />
+                <span className="text-xs text-emerald-500 font-medium">
+                  {receiptBase64 ? "Ver / Cambiar" : "Subir foto"}
+                </span>
+              </div>
+            </div>
+          </div>
+          {receiptBase64 && (
+            <div className="w-full h-32 rounded-sm border border-border overflow-hidden bg-muted/20 flex justify-center items-center relative">
+              <img src={receiptBase64} alt="Comprobante" className="max-w-full max-h-full object-contain" />
+              <button onClick={() => setReceiptBase64("")} className="absolute top-1 right-1 bg-black/50 text-white rounded-full p-1 hover:bg-black/70">
+                <X size={12} />
+              </button>
+            </div>
           )}
+
           <div>
             <label className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted-foreground block mb-1.5">Notas</label>
             <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Opcional..."
