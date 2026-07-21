@@ -9,6 +9,9 @@ interface AppointmentRow {
   clientName: string; professionalName: string; serviceName: string; paymentMethod: string;
   shopSales?: number;
 }
+interface Professional { id: string; name: string; }
+interface Client { id: string; name: string; phone: string; }
+interface Service { id: string; name: string; price: number; }
 
 interface ExpenseRow {
   id: string; concept: string; amount: number; category: string; date: string;
@@ -31,7 +34,12 @@ export default function Caja() {
   const [loading, setLoading] = useState(true);
   const [newExpense, setNewExpense] = useState({ concept: "", amount: "", category: "General" });
   const [showExpenseForm, setShowExpenseForm] = useState(false);
-  const [activeTab, setActiveTab] = useState<"dia" | "mes">("dia");
+  const [professionals, setProfessionals] = useState<Professional[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
+  const [activeTab, setActiveTab] = useState<"dia" | "mes" | "rapido">("dia");
+  const [quickAction, setQuickAction] = useState<"cobro" | "shop" | "egreso">("cobro");
+  const [newQuickApp, setNewQuickApp] = useState({ clientId: "", professionalId: "", serviceId: "", amount: "", paymentMethod: "Efectivo", time: "10:00" });
 
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
 
@@ -40,10 +48,16 @@ export default function Caja() {
     Promise.all([
       fetchAPI("/api/data/appointments").then(r => r.json()),
       fetchAPI("/api/data/expenses").then(r => r.json()),
+      fetchAPI("/api/data/professionals").then(r => r.json()),
+      fetchAPI("/api/data/clients").then(r => r.json()),
+      fetchAPI("/api/data/services").then(r => r.json()),
     ])
-      .then(([apps, exps]) => {
+      .then(([apps, exps, profs, clis, srvs]) => {
         setAppointments(apps);
         setExpenses(exps);
+        setProfessionals(profs);
+        setClients(clis);
+        setServices(srvs);
       })
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -110,6 +124,33 @@ export default function Caja() {
     }
   };
 
+  const handleAddQuickApp = async (type: "cobro" | "shop") => {
+    if (!newQuickApp.clientId || !newQuickApp.professionalId || !newQuickApp.serviceId || !newQuickApp.amount) return;
+    try {
+      await fetchAPI("/api/data/appointments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientId: newQuickApp.clientId,
+          professionalId: newQuickApp.professionalId,
+          serviceId: newQuickApp.serviceId,
+          date: selectedDate,
+          time: newQuickApp.time,
+          duration: 30, // Default duration for quick add
+          price: type === "cobro" ? Number(newQuickApp.amount) : 0,
+          shopSales: type === "shop" ? Number(newQuickApp.amount) : 0,
+          status: "completado",
+          paymentMethod: newQuickApp.paymentMethod,
+        }),
+      });
+      setNewQuickApp({ clientId: "", professionalId: "", serviceId: "", amount: "", paymentMethod: "Efectivo", time: "10:00" });
+      alert("Registro guardado exitosamente");
+      loadData();
+    } catch {
+      alert("Error al guardar el registro");
+    }
+  };
+
   const handleDeleteExpense = async (id: string) => {
     if (!confirm("¿Eliminar este egreso?")) return;
     await fetchAPI(`/api/data/expenses/${id}`, { method: "DELETE" });
@@ -160,12 +201,12 @@ export default function Caja() {
       }
     >
       {/* Tabs */}
-      <div className="flex gap-1 bg-card border border-border/50 rounded-lg p-1 w-fit mb-6">
-        {([["dia", "📅 Día"], ["mes", "📊 Balance Mensual"]] as const).map(([id, label]) => (
+      <div className="flex gap-1 bg-card border border-border/50 rounded-lg p-1 w-fit mb-6 overflow-x-auto max-w-full">
+        {([["dia", "📅 Día"], ["mes", "📊 Balance Mensual"], ["rapido", "⚡ Carga Rápida"]] as const).map(([id, label]) => (
           <button
             key={id}
             onClick={() => setActiveTab(id)}
-            className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-all ${activeTab === id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-all whitespace-nowrap ${activeTab === id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
           >
             {label}
           </button>
@@ -178,14 +219,25 @@ export default function Caja() {
             {/* Summary cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
               {[
-                { label: "Cobrado", value: cobrado, color: "text-foreground", bg: "from-primary/10 to-transparent" },
-                { label: "Shop", value: shopToday, color: "text-emerald-400", bg: "from-emerald-500/10 to-transparent" },
-                { label: "Egresos", value: totalEgresos, color: "text-red-400", bg: "from-red-500/5 to-transparent" },
-                { label: "Neto del día", value: neto, color: neto >= 0 ? "text-emerald-400" : "text-red-400", bg: neto >= 0 ? "from-emerald-500/10 to-transparent" : "from-red-500/10 to-transparent" },
+                { label: "Cobrado", value: cobrado, color: "text-foreground", bg: "from-primary/10 to-transparent", action: "cobro" },
+                { label: "Shop", value: shopToday, color: "text-emerald-400", bg: "from-emerald-500/10 to-transparent", action: "shop" },
+                { label: "Egresos", value: totalEgresos, color: "text-red-400", bg: "from-red-500/5 to-transparent", action: "egreso" },
+                { label: "Neto del día", value: neto, color: neto >= 0 ? "text-emerald-400" : "text-red-400", bg: neto >= 0 ? "from-emerald-500/10 to-transparent" : null },
               ].map((card) => (
-                <div key={card.label} className="bg-card border border-border/50 rounded-xl p-4 relative overflow-hidden">
-                  <div className={`absolute inset-0 bg-gradient-to-br ${card.bg} pointer-events-none`} />
-                  <span className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground mb-2 block relative z-10">{card.label}</span>
+                <div key={card.label} className="bg-card border border-border/50 rounded-xl p-4 relative overflow-hidden group">
+                  {card.bg && <div className={`absolute inset-0 bg-gradient-to-br ${card.bg} pointer-events-none`} />}
+                  <div className="flex items-center justify-between mb-2 relative z-10">
+                    <span className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground">{card.label}</span>
+                    {card.action && (
+                      <button 
+                        onClick={() => { setQuickAction(card.action as any); setActiveTab("rapido"); }} 
+                        className="opacity-0 group-hover:opacity-100 transition-opacity bg-background border border-border/50 hover:bg-accent rounded-full p-1 text-muted-foreground hover:text-foreground"
+                        title={`Agregar ${card.label} rápido`}
+                      >
+                        <Plus size={12} />
+                      </button>
+                    )}
+                  </div>
                   <span className={`text-xl font-bold relative z-10 ${card.color}`}>$ {card.value.toLocaleString("es-AR")}</span>
                 </div>
               ))}
@@ -338,6 +390,66 @@ export default function Caja() {
                 <div className="py-16 flex flex-col items-center justify-center text-muted-foreground">
                   <Wallet size={24} className="mb-3 opacity-50" />
                   <p className="text-xs">No hay ventas registradas para este día.</p>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        ) : activeTab === "rapido" ? (
+          <motion.div key="rapido" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }} className="max-w-2xl">
+            <div className="flex gap-2 mb-4 bg-background border border-border/50 p-1 rounded-lg w-fit">
+              <button onClick={() => setQuickAction("cobro")} className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-all ${quickAction === "cobro" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>Cobro de Servicio</button>
+              <button onClick={() => setQuickAction("shop")} className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-all ${quickAction === "shop" ? "bg-emerald-500 text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>Venta Shop</button>
+              <button onClick={() => setQuickAction("egreso")} className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-all ${quickAction === "egreso" ? "bg-red-500 text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>Registrar Egreso</button>
+            </div>
+            
+            <div className="bg-card border border-border/50 rounded-xl p-5 mb-6">
+              <span className="text-[10px] uppercase tracking-widest font-bold text-foreground mb-4 flex items-center gap-2">
+                <Plus size={14} className={quickAction === "egreso" ? "text-red-400" : quickAction === "shop" ? "text-emerald-400" : "text-primary"} /> 
+                {quickAction === "egreso" ? "Nuevo Egreso" : quickAction === "shop" ? "Nueva Venta de Shop" : "Nuevo Ingreso por Servicio"}
+              </span>
+
+              {quickAction === "egreso" ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <input placeholder="Concepto (ej: Gas de agosto)" value={newExpense.concept} onChange={e => setNewExpense(f => ({ ...f, concept: e.target.value }))} className="bg-background border border-border rounded-md px-3 py-2 text-xs" />
+                  <select value={newExpense.category} onChange={e => setNewExpense(f => ({ ...f, category: e.target.value }))} className="bg-background border border-border rounded-md px-3 py-2 text-xs">
+                    {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{CATEGORY_ICONS[c]} {c}</option>)}
+                  </select>
+                  <div className="relative flex items-center">
+                    <span className="absolute left-3 text-muted-foreground text-xs font-semibold">$</span>
+                    <input type="number" placeholder="Monto" value={newExpense.amount} onChange={e => setNewExpense(f => ({ ...f, amount: e.target.value }))} className="w-full bg-background border border-border rounded-md pl-7 pr-3 py-2 text-xs focus:border-primary focus:outline-none" />
+                  </div>
+                  <button onClick={handleAddExpense} className="bg-primary text-primary-foreground text-xs px-4 py-2 rounded-md font-semibold hover:bg-primary/90 transition-colors">Guardar Egreso</button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <select value={newQuickApp.clientId} onChange={e => setNewQuickApp(prev => ({ ...prev, clientId: e.target.value }))} className="bg-background border border-border rounded-md px-3 py-2 text-xs">
+                    <option value="">-- Seleccionar Cliente --</option>
+                    {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                  
+                  <select value={newQuickApp.professionalId} onChange={e => setNewQuickApp(prev => ({ ...prev, professionalId: e.target.value }))} className="bg-background border border-border rounded-md px-3 py-2 text-xs">
+                    <option value="">-- Seleccionar Profesional --</option>
+                    {professionals.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                  
+                  <select value={newQuickApp.serviceId} onChange={e => setNewQuickApp(prev => ({ ...prev, serviceId: e.target.value }))} className="bg-background border border-border rounded-md px-3 py-2 text-xs">
+                    <option value="">-- Seleccionar Servicio --</option>
+                    {services.map(s => <option key={s.id} value={s.id}>{s.name} (${s.price})</option>)}
+                  </select>
+
+                  <select value={newQuickApp.paymentMethod} onChange={e => setNewQuickApp(prev => ({ ...prev, paymentMethod: e.target.value }))} className="bg-background border border-border rounded-md px-3 py-2 text-xs">
+                    <option value="Efectivo">Efectivo</option>
+                    <option value="Transferencia">Transferencia</option>
+                    <option value="Tarjeta">Tarjeta</option>
+                    <option value="Mercado Pago">Mercado Pago</option>
+                  </select>
+
+                  <div className="relative flex items-center">
+                    <span className="absolute left-3 text-muted-foreground text-xs font-semibold">$</span>
+                    <input type="number" placeholder={quickAction === "shop" ? "Monto Venta Shop" : "Monto Cobrado"} value={newQuickApp.amount} onChange={e => setNewQuickApp(f => ({ ...f, amount: e.target.value }))} className="w-full bg-background border border-border rounded-md pl-7 pr-3 py-2 text-xs focus:border-primary focus:outline-none" />
+                  </div>
+                  
+                  <button onClick={() => handleAddQuickApp(quickAction)} className="bg-primary text-primary-foreground text-xs px-4 py-2 rounded-md font-semibold hover:bg-primary/90 transition-colors">Guardar {quickAction === "shop" ? "Venta Shop" : "Ingreso"}</button>
                 </div>
               )}
             </div>
