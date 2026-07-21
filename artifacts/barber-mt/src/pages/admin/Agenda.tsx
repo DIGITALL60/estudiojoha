@@ -20,10 +20,10 @@ interface Appointment {
 const hours = Array.from({ length: 14 }, (_, i) => `${String(i + 7).padStart(2, "0")}:00`);
 const viewModes = [{ id: "dia", label: "Día" }, { id: "semana", label: "Semana" }, { id: "mes", label: "Mes" }];
 const STATUS_COLORS: Record<string, string> = {
-  agendado: "bg-primary/20 border-primary/40 text-primary",
-  confirmado: "bg-teal-500/20 border-teal-500/40 text-teal-400",
-  completado: "bg-emerald-500/20 border-emerald-500/40 text-emerald-400",
-  cancelado: "bg-red-500/20 border-red-500/40 text-red-400",
+  agendado: "border-l-2 bg-primary/10 border-primary text-foreground",
+  confirmado: "border-l-2 bg-teal-500/10 border-teal-500 text-foreground",
+  completado: "border-l-2 bg-emerald-500/10 border-emerald-500 text-foreground",
+  cancelado: "border-l-2 bg-red-500/10 border-red-500 text-foreground",
 };
 
 
@@ -748,9 +748,14 @@ export default function Agenda() {
                         const isAgendado = app.status === "agendado" || !app.status;
                         return (
                           <div key={app.id} onClick={(e) => { e.stopPropagation(); setEditingApp(app); }}
-                            className={`text-[9px] px-1.5 py-1 rounded-sm truncate border shadow-sm ${!isAgendado ? STATUS_COLORS[app.status] : ""}`}
-                            style={isAgendado ? { backgroundColor: `${profColor}30`, borderColor: `${profColor}60`, color: "white" } : {}}>
-                            <span className="font-semibold">{app.time}</span> {app.clientName}
+                            className="text-[9px] px-1.5 py-0.5 rounded-sm truncate cursor-pointer hover:opacity-80 transition-opacity"
+                            style={{
+                              backgroundColor: `${profColor}22`,
+                              borderLeft: `2px solid ${profColor}`,
+                              color: "inherit",
+                            }}>
+                            <span className="font-bold" style={{ color: profColor }}>{app.time}</span>{" "}
+                            <span className="font-medium text-foreground">{app.clientName}</span>
                           </div>
                         );
                       })}
@@ -788,23 +793,30 @@ export default function Agenda() {
                           <div key={h} className="h-16 hover:bg-accent/5 cursor-pointer group" onClick={() => { setSelectedSlotDate(dayStr); setSelectedSlotTime(h); setShowModal(true); }} />
                         ))}
                       </div>
-                        {dAppsWithPos.map(app => {
+                       {dAppsWithPos.map(app => {
                            const width = 100 / app.totalColumns;
                            const left = app.column * width;
-                           const isAgendado = app.status === "agendado" || !app.status;
                            const profColor = app.professionalColor || professionals.find(p => p.name === app.professionalName)?.color || "hsl(var(--primary))";
+                           const isAgendado = app.status === "agendado" || !app.status;
+                           const bgAlpha = isAgendado ? "22" : "";
                            return (
                             <div key={app.id} onClick={(e) => { e.stopPropagation(); setEditingApp(app); }}
-                              className={`absolute rounded-sm border px-1.5 py-1 flex flex-col justify-start overflow-hidden shadow-sm transition-all hover:z-10 z-10 cursor-pointer ${!isAgendado ? STATUS_COLORS[app.status] : ""}`}
+                              className={`absolute rounded-sm overflow-hidden shadow-sm transition-all hover:z-20 z-10 cursor-pointer flex flex-col justify-start px-1.5 py-1 ${!isAgendado ? STATUS_COLORS[app.status] || STATUS_COLORS.agendado : ""}`}
                               style={{ 
                                 top: `${app.top}px`, 
-                                height: `${app.height}px`, 
+                                height: `${Math.max(app.height, 22)}px`, 
                                 left: `calc(${left}% + 1px)`, 
                                 width: `calc(${width}% - 2px)`,
-                                ...(isAgendado ? { backgroundColor: `${profColor}40`, borderColor: `${profColor}90`, color: "#ffffff" } : {}) 
+                                ...(isAgendado ? {
+                                  backgroundColor: `${profColor}22`,
+                                  borderLeft: `3px solid ${profColor}`,
+                                  borderTop: `1px solid ${profColor}44`,
+                                  borderRight: `1px solid ${profColor}33`,
+                                  borderBottom: `1px solid ${profColor}33`,
+                                } : {}) 
                               }}>
-                              <p className="text-[9px] font-semibold truncate leading-tight drop-shadow-md">{app.clientName}</p>
-                              <p className="text-[8px] opacity-90 truncate leading-tight mt-0.5 drop-shadow-md">{app.serviceName}</p>
+                              <p className="text-[8px] font-bold truncate leading-tight" style={isAgendado ? { color: profColor } : {}}>{app.time}</p>
+                              <p className="text-[9px] font-semibold truncate leading-tight text-foreground">{app.clientName}</p>
                             </div>
                            );
                         })}
@@ -853,22 +865,24 @@ export default function Agenda() {
                 return (
                   <div key={app.id}
                     onClick={(e) => { e.stopPropagation(); setEditingApp(app); }}
-                    className={`absolute rounded-sm border px-2 py-1 flex flex-col justify-start overflow-hidden shadow-sm transition-all hover:z-10 z-10 cursor-pointer ${!isAgendado ? STATUS_COLORS[app.status] || STATUS_COLORS.cancelado : ""}`}
+                    className={`absolute rounded-sm overflow-hidden shadow-sm transition-all hover:z-20 z-10 cursor-pointer flex flex-col justify-start px-2 py-1 ${!isAgendado ? STATUS_COLORS[app.status] || STATUS_COLORS.cancelado : ""}`}
                     style={{
                       top: `${app.top}px`,
-                      height: `${app.height}px`,
+                      height: `${Math.max(app.height, 26)}px`,
                       left: `calc(${left}% + 4px)`,
                       width: `calc(${width}% - 8px)`,
                       ...(isAgendado ? {
-                        backgroundColor: `${profColor}40`,
-                        borderColor: `${profColor}90`,
-                        color: "#ffffff",
+                        backgroundColor: `${profColor}20`,
+                        borderLeft: `3px solid ${profColor}`,
+                        borderTop: `1px solid ${profColor}44`,
+                        borderRight: `1px solid ${profColor}33`,
+                        borderBottom: `1px solid ${profColor}33`,
                       } : {})
                     }}
                   >
-                    <p className="text-[10px] font-semibold truncate leading-tight drop-shadow-md">{app.clientName}</p>
-                    <p className="text-[9px] opacity-90 truncate leading-tight mt-0.5 drop-shadow-md">{app.serviceName}</p>
-                    <p className="text-[8px] opacity-75 truncate leading-tight mt-0.5 drop-shadow-md">{app.time} · {app.professionalName}</p>
+                    <p className="text-[9px] font-bold truncate leading-tight" style={isAgendado ? { color: profColor } : {}}>{app.time} · {app.professionalName}</p>
+                    <p className="text-[10px] font-semibold truncate leading-tight text-foreground">{app.clientName}</p>
+                    <p className="text-[9px] truncate leading-tight text-muted-foreground">{app.serviceName}</p>
                   </div>
                 );
               })}
