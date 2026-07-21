@@ -8,8 +8,8 @@ const router = Router();
 
 router.get("/status", (_req, res) => {
   res.json({
-    connected: isConnected,
-    qr: currentQR,
+    connected: true, // Meta Cloud API is always connected via webhook
+    qr: null,
   });
 });
 
@@ -20,10 +20,7 @@ router.post("/send-bulk", requireAuth, async (req, res) => {
     return;
   }
 
-  if (!isConnected) {
-    res.status(503).json({ error: "WhatsApp is not connected" });
-    return;
-  }
+  // WhatsApp Cloud is always connected via API
 
   // Responder inmediatamente al frontend para no bloquear la petición HTTP (evitar timeout)
   res.json({ 

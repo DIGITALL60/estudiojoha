@@ -234,11 +234,7 @@ export default function VouchersCumple() {
 
           {/* Action Box */}
           <div className="bg-card border border-border rounded-sm p-5">
-            {!waStatus.connected ? (
-              <div className="text-xs text-amber-500 bg-amber-500/10 p-3 rounded-lg border border-amber-500/20 mb-4">
-                ⚠️ El bot de WhatsApp (Baileys) no está conectado.
-              </div>
-            ) : sendingStatus === "done" ? (
+            {sendingStatus === "done" ? (
               <div className="text-sm text-emerald-500 bg-emerald-500/10 p-4 rounded-lg border border-emerald-500/20 text-center mb-4">
                 <p className="font-bold mb-1">¡Campaña finalizada!</p>
                 <p>Se enviaron {sendResult?.sent} mensajes. Fallaron {sendResult?.failed}.</p>
@@ -251,7 +247,7 @@ export default function VouchersCumple() {
 
             <button
               onClick={handleBulkSend}
-              disabled={sendingStatus === "sending" || targetClients.filter(c => c.phone).length === 0 || !waStatus.connected}
+              disabled={sendingStatus === "sending" || targetClients.filter(c => c.phone).length === 0}
               className={`w-full flex items-center justify-center gap-2 text-white text-sm font-semibold px-4 py-4 rounded-xl transition-colors disabled:opacity-50 ${
                 activeType === "cumple" ? "bg-pink-500 hover:bg-pink-600" : "bg-violet-500 hover:bg-violet-600"
               }`}

@@ -355,11 +355,7 @@ export default function Reactivacion() {
             </div>
 
             <div className="p-5 border-t border-border/50 bg-background/50 rounded-b-xl">
-              {!waStatus.connected ? (
-                <div className="text-sm text-amber-500 bg-amber-500/10 p-3 rounded-lg border border-amber-500/20 mb-4">
-                  ⚠️ El bot de WhatsApp (Baileys) no está conectado. Podés usar los botones manuales de arriba o escanear el QR desde la sección WhatsApp Bot para habilitar el envío automático.
-                </div>
-              ) : sendingStatus === "done" ? (
+              {sendingStatus === "done" ? (
                 <div className="text-sm text-emerald-500 bg-emerald-500/10 p-4 rounded-lg border border-emerald-500/20 text-center">
                   <p className="font-bold mb-1">¡Campaña finalizada!</p>
                   <p>Se enviaron {sendResult?.sent} mensajes. Fallaron {sendResult?.failed}.</p>
