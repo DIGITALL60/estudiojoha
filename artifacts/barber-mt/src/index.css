@@ -254,3 +254,36 @@ body {
   font-family: var(--app-font-sans);
   -webkit-font-smoothing: antialiased;
 }
+
+/* ─── Auto-shimmer for Capacitate button ────────────────────────────────── */
+@keyframes btn-shimmer {
+  /* sit still for 70% of the cycle, then sweep across */
+  0%,
+  60% {
+    transform: translateX(-120%);
+    opacity: 0;
+  }
+  65% {
+    opacity: 1;
+  }
+  90%,
+  100% {
+    transform: translateX(120%);
+    opacity: 0;
+  }
+}
+
+.btn-shimmer-auto::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 35%,
+    rgba(236, 72, 153, 0.45) 50%,
+    transparent 65%
+  );
+  transform: translateX(-120%);
+  animation: btn-shimmer 3.5s ease-in-out infinite;
+  pointer-events: none;
+}

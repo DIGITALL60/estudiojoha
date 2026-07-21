@@ -232,19 +232,12 @@ export default function Home() {
                   Reservar Turno
                   <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                 </button>
-                {/* Capacitate con nosotras - shimmer button */}
+                {/* Capacitate con nosotras - auto shimmer button */}
                 <button
                   onClick={() => window.open("https://instagram.com/" + igHandle, "_blank")}
                   data-testid="button-hero-courses"
-                  className="relative overflow-hidden border border-primary/60 text-primary font-sans text-xs tracking-[0.3em] uppercase px-10 py-4 hover:border-primary hover:text-primary transition-all duration-300 w-full sm:w-auto group"
+                  className="btn-shimmer-auto relative overflow-hidden border border-primary/60 text-primary font-sans text-xs tracking-[0.3em] uppercase px-10 py-4 hover:border-primary hover:text-primary transition-all duration-300 w-full sm:w-auto"
                 >
-                  {/* shimmer sweep */}
-                  <span
-                    className="pointer-events-none absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-in-out"
-                    style={{
-                      background: "linear-gradient(105deg, transparent 40%, rgba(236,72,153,0.35) 50%, transparent 60%)",
-                    }}
-                  />
                   Capacitate con nosotras
                 </button>
               </div>
