@@ -151,6 +151,9 @@ export default function Reactivacion() {
       // 1. Create voucher in backend
       await fetchAPI("/api/vouchers/bulk-create", {
         method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
         body: JSON.stringify({ 
           codes: [codeToCreate], 
           discountType: "percent", 
@@ -161,6 +164,9 @@ export default function Reactivacion() {
       // 2. Send messages
       const res = await fetchAPI("/api/whatsapp/send-bulk", {
         method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
         body: JSON.stringify({ messages })
       });
       const data = await res.json();
@@ -412,8 +418,8 @@ export default function Reactivacion() {
             <div className="p-5 border-t border-border/50 bg-background/50 rounded-b-xl">
               {sendingStatus === "done" ? (
                 <div className="text-sm text-emerald-500 bg-emerald-500/10 p-4 rounded-lg border border-emerald-500/20 text-center">
-                  <p className="font-bold mb-1">¡Campaña finalizada!</p>
-                  <p>Se enviaron {sendResult?.sent} mensajes. Fallaron {sendResult?.failed}.</p>
+                  <p className="font-bold mb-1">¡Campaña iniciada con éxito!</p>
+                  <p>Los mensajes se están enviando en segundo plano poco a poco para evitar bloqueos por SPAM de Meta.</p>
                 </div>
               ) : sendingStatus === "error" ? (
                 <div className="text-sm text-red-500 bg-red-500/10 p-3 rounded-lg border border-red-500/20">

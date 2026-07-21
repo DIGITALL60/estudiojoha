@@ -101,6 +101,9 @@ export default function VouchersCumple() {
       // 1. Create vouchers in backend
       await fetchAPI("/api/vouchers/bulk-create", {
         method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
         body: JSON.stringify({ 
           codes: codesToCreate, 
           discountType: activeType === "cumple" ? "percent" : "percent", 
@@ -111,6 +114,9 @@ export default function VouchersCumple() {
       // 2. Send messages
       const res = await fetchAPI("/api/whatsapp/send-bulk", {
         method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
         body: JSON.stringify({ messages })
       });
       const data = await res.json();
@@ -291,10 +297,10 @@ export default function VouchersCumple() {
           {/* Action Box */}
           <div className="bg-card border border-border rounded-sm p-5">
             {sendingStatus === "done" ? (
-              <div className="text-sm text-emerald-500 bg-emerald-500/10 p-4 rounded-lg border border-emerald-500/20 text-center mb-4">
-                <p className="font-bold mb-1">¡Campaña finalizada!</p>
-                <p>Se enviaron {sendResult?.sent} mensajes. Fallaron {sendResult?.failed}.</p>
-              </div>
+                <div className="text-sm text-emerald-500 bg-emerald-500/10 p-4 rounded-lg border border-emerald-500/20 text-center mb-4">
+                  <p className="font-bold mb-1">¡Campaña iniciada con éxito!</p>
+                  <p>Los mensajes se están enviando en segundo plano poco a poco para evitar bloqueos por SPAM de Meta.</p>
+                </div>
             ) : sendingStatus === "error" ? (
               <div className="text-xs text-red-500 bg-red-500/10 p-3 rounded-lg border border-red-500/20 mb-4">
                 Ocurrió un error al procesar el envío masivo. Intentá nuevamente.
