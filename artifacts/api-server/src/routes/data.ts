@@ -482,21 +482,33 @@ router.post("/appointments/:id/remind", requireAuth, async (req, res) => {
       return res.status(400).json({ error: "Client phone not found" });
     }
 
-    const businessAddress = await getSetting("business_address", "Río Segundo, Córdoba");
     const professionalName = prof?.name ?? "el profesional";
     const serviceName = srv?.name ?? "tu servicio";
+    const [d, m, y] = app.date.split("-");
+    const dateDisplay = `${d}/${m}/${y}`;
 
-    const msg =
-      `¡Hola ${client.name}! 👋\n\n` +
-      `Te escribimos de *Estudio Joha Molinero* para recordarte tu turno para mañana:\n\n` +
-      `📅 Fecha: *${app.date}*\n` +
-      `⏰ Hora: *${app.time}*\n` +
-      `💅 Servicio: ${serviceName}\n` +
-      `👩‍🎨 Profesional: ${professionalName}\n\n` +
-      `📍 ${businessAddress}\n\n` +
-      `Por favor, recordá que si necesitás reprogramar o cancelar, debés avisarnos con 24hs de anticipación.\n¡Te esperamos! 💜`;
-
-    await cloudSendText(client.phone, msg);
+    // Try to send with interactive buttons first
+    try {
+      const { cloudSendButtons } = await import("../lib/whatsapp-cloud.js");
+      await cloudSendButtons(
+        client.phone,
+        `¡Hola ${client.name}! 👋\n\nTe recordamos tu turno en *Estudio Joha Molinero* 💅\n\n📅 ${dateDisplay} a las *${app.time}hs*\n💅 Servicio: ${serviceName}\n👩‍🎨 Profesional: ${professionalName}\n\n¿Podés confirmar tu asistencia?`,
+        [
+          { id: "reminder_confirm", title: "✅ Confirmo" },
+          { id: "reminder_cancel", title: "❌ No puedo ir" },
+        ]
+      );
+    } catch {
+      // Fallback to plain text
+      const msg =
+        `¡Hola ${client.name}! 👋\n\n` +
+        `Te recordamos tu turno en *Estudio Joha Molinero* 💅\n\n` +
+        `📅 ${dateDisplay} a las *${app.time}hs*\n` +
+        `💅 Servicio: ${serviceName}\n` +
+        `👩‍🎨 Profesional: ${professionalName}\n\n` +
+        `Respondé *SI* para confirmar o *NO* para cancelar/reprogramar.\n¡Te esperamos! 💜`;
+      await cloudSendText(client.phone, msg);
+    }
     
     // Mark as reminded
     await db.update(appointments).set({ reminderSent: true }).where(eq(appointments.id, id));
@@ -507,6 +519,7 @@ router.post("/appointments/:id/remind", requireAuth, async (req, res) => {
     return res.status(500).json({ error: "Failed to send reminder" });
   }
 });
+
 
 
 // ─── SCHEDULES ─────────────────────────────────────────────

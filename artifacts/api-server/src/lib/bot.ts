@@ -4,7 +4,7 @@
  */
 
 import { db, services, professionals, clients, appointments, professional_schedules } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { cloudSendText, cloudSendList, cloudSendButtons } from "./whatsapp-cloud.js";
 import { logger } from "./logger.js";
@@ -18,6 +18,8 @@ type Step =
   | "choosing_time"
   | "asking_name"
   | "confirming"
+  | "rescheduling_choosing_date"
+  | "rescheduling_choosing_time"
   | "done";
 
 interface Session {
@@ -30,6 +32,8 @@ interface Session {
   date?: string;          // YYYY-MM-DD
   time?: string;          // HH:mm
   clientName?: string;
+  // For rescheduling flow
+  appointmentIdToReschedule?: string;
 }
 
 const sessions = new Map<string, Session>();
@@ -85,6 +89,162 @@ export async function handleBotMessage(from: string, text: string, interactiveId
     (w) => normalized.includes(w)
   );
 
+  // ── Check if client is confirming/canceling from a reminder ──────────────
+  // These are standalone messages outside of a booking session
+  if (session.step === "idle" || session.step === "done") {
+    const isConfirmation = input === "reminder_confirm" || normalized === "si" || normalized === "sí" || normalized.includes("confirmo");
+    const isCancellation = input === "reminder_cancel" || normalized === "no" || normalized === "cancelar" || normalized.includes("cancelo");
+
+    if (isConfirmation || isCancellation) {
+      // Look for upcoming appointment for this phone number
+      const clientRows = db.select().from(clients).where(eq(clients.phone, from)).all();
+      const clientId = clientRows[0]?.id;
+      if (clientId) {
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const tomorrowStr = tomorrow.toISOString().split("T")[0];
+        const today = new Date().toISOString().split("T")[0];
+
+        const upcomingApps = await db.select().from(appointments).where(
+          and(eq(appointments.clientId, clientId), eq(appointments.status, "agendado"))
+        );
+
+        // Find the closest upcoming appointment (today or tomorrow)
+        const relevant = upcomingApps
+          .filter(a => a.date >= today)
+          .sort((a, b) => a.date.localeCompare(b.date));
+        const app = relevant[0];
+
+        if (app) {
+          if (isConfirmation) {
+            await db.update(appointments).set({ status: "confirmado" } as any).where(eq(appointments.id, app.id));
+            const [srv] = await db.select().from(services).where(eq(services.id, app.serviceId)).limit(1);
+            const [prof] = await db.select().from(professionals).where(eq(professionals.id, app.professionalId)).limit(1);
+            const [d, m, y] = app.date.split("-");
+            await cloudSendText(from,
+              `✅ *¡Turno confirmado!*\n\n` +
+              `Nos alegra que puedas venir 💜\n\n` +
+              `📅 ${d}/${m}/${y} a las ${app.time}hs\n` +
+              `💅 ${srv?.name || "tu servicio"}\n` +
+              `👩‍🎨 ${prof?.name || "tu profesional"}\n\n` +
+              `¡Te esperamos! 🌸`
+            );
+            logger.info({ from, appointmentId: app.id }, "[Bot] Turno confirmado por cliente");
+            return;
+          } else if (isCancellation) {
+            // Offer to reschedule instead of cancelling directly
+            session.step = "rescheduling_choosing_date";
+            session.appointmentIdToReschedule = app.id;
+            session.serviceId = app.serviceId;
+            session.serviceDuration = (await db.select().from(services).where(eq(services.id, app.serviceId)).limit(1))[0]?.duration;
+            session.professionalId = app.professionalId;
+            session.professionalName = (await db.select().from(professionals).where(eq(professionals.id, app.professionalId)).limit(1))[0]?.name;
+            session.serviceName = (await db.select().from(services).where(eq(services.id, app.serviceId)).limit(1))[0]?.name;
+            sessions.set(from, session);
+            await cloudSendButtons(from,
+              `😕 ¡Qué lástima que no puedas venir!\n\n¿Querés *reprogramar* tu turno para otro día, o preferís cancelarlo definitivamente?`,
+              [
+                { id: "reschedule_yes", title: "📅 Reprogramar" },
+                { id: "reschedule_no", title: "❌ Cancelar definitivo" },
+              ]
+            );
+            return;
+          }
+        }
+      }
+    }
+  }
+
+  // ── RESCHEDULING FLOW ─────────────────────────────────────────────────────
+  if (session.step === "rescheduling_choosing_date") {
+    if (input === "reschedule_no") {
+      // Actually cancel the appointment
+      if (session.appointmentIdToReschedule) {
+        await db.update(appointments).set({ status: "cancelado" }).where(eq(appointments.id, session.appointmentIdToReschedule));
+      }
+      sessions.delete(from);
+      await cloudSendText(from, "Tu turno fue cancelado 🙈\n\nCuando quieras reservar de nuevo, ¡escribinos y te ayudamos! 💜");
+      return;
+    }
+    if (input === "reschedule_yes") {
+      await cloudSendText(from, `¡Perfecto! ¿Qué fecha te queda mejor?\n\nEscribila así: *DD/MM/AAAA*\nEj: *28/07/2025*`);
+      return;
+    }
+
+    // Parse date
+    let dateStr = "";
+    const matchDDMM = input.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    const matchISO = input.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (matchDDMM) {
+      dateStr = `${matchDDMM[3]}-${matchDDMM[2].padStart(2, "0")}-${matchDDMM[1].padStart(2, "0")}`;
+    } else if (matchISO) {
+      dateStr = input;
+    } else {
+      await cloudSendText(from, "No entendí la fecha 😅 Escribila así: *DD/MM/AAAA*\nEj: *28/07/2025*");
+      return;
+    }
+
+    const availableTimes = await getAvailableTimes(session.professionalId!, dateStr, session.serviceDuration!);
+    if (!availableTimes.length) {
+      await cloudSendText(from, `No hay horarios disponibles para esa fecha con ${session.professionalName}. Probá con otro día 📅`);
+      return;
+    }
+
+    session.date = dateStr;
+    session.step = "rescheduling_choosing_time";
+    sessions.set(from, session);
+
+    const [d, m, y] = dateStr.split("-");
+    const timeRows = availableTimes.slice(0, 10).map((t) => ({ id: `retime_${t}`, title: t, description: "Disponible" }));
+    await cloudSendList(from, `Horarios para ${d}/${m}/${y}`,
+      `Estos son los horarios disponibles con *${session.professionalName}*:`,
+      "Ver Horarios",
+      [{ title: "Horarios disponibles", rows: timeRows }]
+    );
+    return;
+  }
+
+  if (session.step === "rescheduling_choosing_time") {
+    let timeStr = input.replace("retime_", "");
+    if (!/^\d{1,2}:\d{2}$/.test(timeStr)) {
+      await cloudSendText(from, "Escribí el horario en formato HH:MM, ej: *10:00*");
+      return;
+    }
+
+    // Cancel old appointment and create new one
+    if (session.appointmentIdToReschedule) {
+      const [oldApp] = await db.select().from(appointments).where(eq(appointments.id, session.appointmentIdToReschedule)).limit(1);
+      if (oldApp) {
+        await db.update(appointments).set({ status: "cancelado" }).where(eq(appointments.id, session.appointmentIdToReschedule));
+        const newId = randomUUID();
+        db.insert(appointments).values({
+          id: newId,
+          clientId: oldApp.clientId,
+          professionalId: oldApp.professionalId,
+          serviceId: oldApp.serviceId,
+          date: session.date!,
+          time: timeStr,
+          duration: oldApp.duration,
+          price: oldApp.price,
+          status: "agendado",
+          notes: `Reprogramado via WhatsApp Bot`,
+          createdAt: new Date(),
+        }).run();
+      }
+    }
+
+    sessions.delete(from);
+    const [d, m, y] = (session.date || "").split("-");
+    await cloudSendText(from,
+      `✅ *¡Turno reprogramado!*\n\n` +
+      `💅 ${session.serviceName}\n` +
+      `👩‍🎨 ${session.professionalName}\n` +
+      `📅 ${d}/${m}/${y} a las ${timeStr}hs\n\n` +
+      `¡Perfecto, te esperamos! 💜`
+    );
+    return;
+  }
+
   try {
     // ── WELCOME ──────────────────────────────────────────────────────────────
     if (session.step === "idle" || isGreeting) {
@@ -134,7 +294,6 @@ export async function handleBotMessage(from: string, text: string, interactiveId
 
     // ── CHOOSING DATE ────────────────────────────────────────────────────────
     if (session.step === "choosing_date") {
-      // Parse DD/MM/YYYY or YYYY-MM-DD
       let dateStr = "";
       const matchDDMM = input.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
       const matchISO = input.match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -148,7 +307,7 @@ export async function handleBotMessage(from: string, text: string, interactiveId
       }
 
       const dateObj = new Date(dateStr);
-      const dayOfWeek = dateObj.getUTCDay(); // 0=Dom, 6=Sab
+      const dayOfWeek = dateObj.getUTCDay();
       if (dayOfWeek === 0) {
         await cloudSendText(from, "Los domingos estamos cerradas 🙏 Elegí otro día (Martes a Sábado).");
         return;
@@ -164,7 +323,6 @@ export async function handleBotMessage(from: string, text: string, interactiveId
       session.step = "choosing_time";
       sessions.set(from, session);
 
-      // Show available times in chunks of 3 as buttons or list
       const timeRows = availableTimes.slice(0, 10).map((t) => ({ id: `time_${t}`, title: t, description: "Disponible" }));
       await cloudSendList(
         from,
@@ -179,7 +337,6 @@ export async function handleBotMessage(from: string, text: string, interactiveId
     // ── CHOOSING TIME ────────────────────────────────────────────────────────
     if (session.step === "choosing_time") {
       let timeStr = input.replace("time_", "");
-      // Validate HH:mm
       if (!/^\d{1,2}:\d{2}$/.test(timeStr)) {
         await cloudSendText(from, "Escribí el horario en formato HH:MM, ej: *10:00*");
         return;
@@ -198,7 +355,7 @@ export async function handleBotMessage(from: string, text: string, interactiveId
       sessions.set(from, session);
 
       const [d, m, y] = (session.date || "").split("-");
-      const dateDisplay = `${y}-${m}-${d}` === session.date ? `${d}/${m}/${y}` : session.date;
+      const dateDisplay = `${d}/${m}/${y}`;
 
       await cloudSendButtons(
         from,
@@ -214,10 +371,8 @@ export async function handleBotMessage(from: string, text: string, interactiveId
     // ── CONFIRMING ────────────────────────────────────────────────────────────
     if (session.step === "confirming") {
       if (input === "confirm_yes" || normalized.includes("sí") || normalized === "si" || normalized === "confirmar") {
-        // Create booking in DB
         const appointmentId = randomUUID();
 
-        // Find or create client
         const existingClients = db.select().from(clients).where(eq(clients.phone, from)).all();
         let clientId = existingClients[0]?.id;
         if (!clientId) {
@@ -251,12 +406,18 @@ export async function handleBotMessage(from: string, text: string, interactiveId
 
         await cloudSendText(
           from,
-          `✅ *¡Turno confirmado!*\n\n👤 ${session.clientName}\n💅 ${session.serviceName}\n👩‍🎨 ${session.professionalName}\n📅 ${dateDisplay}\n⏰ ${session.time}\n\n📍 Río Segundo, Córdoba (te confirmamos la dirección el día anterior)\n\n¡Gracias por elegirnos! 💜 Si necesitás cancelar, avisanos con 24hs de anticipación.`
+          `✅ *¡Turno confirmado!*\n\n👤 ${session.clientName}\n💅 ${session.serviceName}\n👩‍🎨 ${session.professionalName}\n📅 ${dateDisplay}\n⏰ ${session.time}hs\n\n📍 Río Segundo, Córdoba\n\n*Tu turno quedó registrado* para el día ${dateDisplay} a las ${session.time}hs ✨\n\n¡Gracias por elegirnos! 💜 Si necesitás reprogramar, avisanos con 24hs de anticipación.`
         );
         logger.info({ from, appointmentId }, "[Bot] Turno creado desde WhatsApp");
-      } else {
+      } else if (input === "confirm_no") {
+        // Offer to reschedule instead of just cancelling
         sessions.delete(from);
-        await cloudSendText(from, "Turno cancelado 🙈 Cuando quieras reservar de nuevo escribinos y arrancamos de nuevo!");
+        await cloudSendText(from,
+          `Entendido 🙈 Tu turno no fue reservado.\n\nCuando quieras intentar de nuevo, ¡escribinos "Hola" y arrancamos! 💜`
+        );
+      } else {
+        // Unknown reply during confirming — re-show confirmation
+        await cloudSendText(from, "Por favor usá los botones para confirmar o cancelar tu turno 👆");
       }
       return;
     }
@@ -290,7 +451,6 @@ async function showProfessionals(to: string, serviceId: string): Promise<void> {
   const activeProfs = allProfs.filter((p) => p.role?.toLowerCase() !== "admin" || allProfs.length === 1);
 
   if (activeProfs.length === 1) {
-    // Auto-select if only one professional
     const prof = activeProfs[0];
     const session = getSession(to);
     session.professionalId = prof.id;

@@ -2,13 +2,12 @@ import cron from "node-cron";
 import { db, appointments, clients, services, professionals, vouchers } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
-import { cloudSendText } from "./whatsapp-cloud.js";
+import { cloudSendText, cloudSendButtons } from "./whatsapp-cloud.js";
 import { logger } from "./logger.js";
 import { getBoolSetting, getSetting } from "./settings.js";
 
-// Schedule: Runs every day at 18:00 (6:00 PM)
-// The user asked for it to run at 18:00 hs
-const CRON_EXPRESSION = "0 18 * * *";
+// Schedule: Runs every day at 10:00 AM (hora fija para todos los recordatorios)
+const CRON_EXPRESSION = "0 10 * * *";
 
 export function initCronJobs() {
   logger.info(`Starting cron jobs with schedule: ${CRON_EXPRESSION}`);
@@ -87,16 +86,28 @@ export function initCronJobs() {
           const [prof] = await db.select().from(professionals).where(eq(professionals.id, app.professionalId)).limit(1);
 
           if (client && client.phone && service && prof) {
-            const msg = 
-              `¡Hola ${client.name}! 👋\n\n` +
-              `Te recordamos que mañana a las *${app.time}hs* tenés turno en *Estudio Joha Molinero* 💅\n\n` +
-              `Servicio: ${service.name}\n` +
-              `Profesional: ${prof.name}\n\n` +
-              `Por favor, si no podés asistir, avisanos para liberar el lugar.\n¡Te esperamos! 💜`;
+            const [d, m, y] = app.date.split("-");
+            const dateDisplay = `${d}/${m}/${y}`;
 
-            await cloudSendText(client.phone, msg);
+            // Send reminder with confirm/cancel buttons
+            try {
+              await cloudSendButtons(
+                client.phone,
+                `¡Hola ${client.name}! 👋\n\nTe recordamos que mañana tenés turno en *Estudio Joha Molinero* 💅\n\n📅 ${dateDisplay} a las *${app.time}hs*\n💅 Servicio: ${service.name}\n👩‍🎨 Profesional: ${prof.name}\n\n¿Podés confirmar tu asistencia?`,
+                [
+                  { id: "reminder_confirm", title: "✅ Confirmo" },
+                  { id: "reminder_cancel", title: "❌ No puedo ir" },
+                ]
+              );
+            } catch {
+              // Fallback to plain text if buttons fail
+              await cloudSendText(
+                client.phone,
+                `¡Hola ${client.name}! 👋\n\nTe recordamos que mañana tenés turno en *Estudio Joha Molinero* 💅\n\n📅 ${dateDisplay} a las *${app.time}hs*\n💅 Servicio: ${service.name}\n👩‍🎨 Profesional: ${prof.name}\n\nResponde *SI* para confirmar o *NO* para cancelar/reprogramar.\n¡Te esperamos! 💜`
+              );
+            }
 
-            // Mark as sent
+            // Mark as sent so it doesn't send again
             await db.update(appointments).set({ reminderSent: true }).where(eq(appointments.id, app.id));
             logger.info(`Sent reminder to ${client.phone} for appointment ${app.id}`);
           }

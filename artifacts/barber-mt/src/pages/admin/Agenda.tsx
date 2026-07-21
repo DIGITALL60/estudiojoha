@@ -19,9 +19,11 @@ const hours = Array.from({ length: 14 }, (_, i) => `${String(i + 7).padStart(2, 
 const viewModes = [{ id: "dia", label: "Día" }, { id: "semana", label: "Semana" }, { id: "mes", label: "Mes" }];
 const STATUS_COLORS: Record<string, string> = {
   agendado: "bg-primary/20 border-primary/40 text-primary",
+  confirmado: "bg-teal-500/20 border-teal-500/40 text-teal-400",
   completado: "bg-emerald-500/20 border-emerald-500/40 text-emerald-400",
   cancelado: "bg-red-500/20 border-red-500/40 text-red-400",
 };
+
 
 function NewTurnModal({ onClose, defaultDate, defaultTime = "10:00", onCreated }: { onClose: () => void; defaultDate: string; defaultTime?: string; onCreated: () => void }) {
   const [professionals, setProfessionals] = useState<(Professional & { role?: string })[]>([]);
@@ -330,6 +332,7 @@ function EditTurnModal({ app, onClose, onUpdated }: { app: Appointment; onClose:
               <select value={status} onChange={e => setStatus(e.target.value)}
                 className="w-full bg-background border border-border rounded-sm px-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-primary">
                 <option value="agendado">Agendado</option>
+                <option value="confirmado">✅ Confirmado</option>
                 <option value="completado">Completado</option>
                 <option value="cancelado">Cancelado</option>
               </select>
@@ -697,13 +700,13 @@ export default function Agenda() {
               {appsWithPos.map(app => {
                 const width = 100 / app.totalColumns;
                 const left = app.column * width;
-                const isAgendado = app.status === "agendado" || !app.status;
+                const isAgendado = app.status === "agendado" || app.status === "confirmado" || !app.status;
                 const profColor = app.professionalColor || professionals.find(p => p.name === app.professionalName)?.color || "hsl(var(--primary))";
                 
                 return (
                   <div key={app.id}
                     onClick={(e) => { e.stopPropagation(); setEditingApp(app); }}
-                    className={`absolute rounded-sm border px-2 py-1 flex flex-col justify-start overflow-hidden shadow-sm transition-all hover:z-10 z-10 cursor-pointer ${!isAgendado ? STATUS_COLORS[app.status] : ""}`}
+                    className={`absolute rounded-sm border px-2 py-1 flex flex-col justify-start overflow-hidden shadow-sm transition-all hover:z-10 z-10 cursor-pointer ${!isAgendado ? STATUS_COLORS[app.status] || STATUS_COLORS.cancelado : ""}`}
                     style={{
                       top: `${app.top}px`,
                       height: `${app.height}px`,
