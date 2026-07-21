@@ -5,10 +5,26 @@ import AdminLayout from "./AdminLayout";
 import { fetchAPI } from "@/lib/api";
 
 const toggleSettings = [
-  { id: "whatsapp_notif", label: "Notificaciones por WhatsApp", desc: "Enviar alertas de turnos y recordatorios por WhatsApp" },
-  { id: "birthday_auto", label: "Voucher de cumpleaños automático", desc: "Crea y envía vouchers el día del cumpleaños del cliente" },
-  { id: "reminder_24h", label: "Recordatorio 24 hs antes", desc: "Enviar recordatorio al cliente 24 hs antes del turno (cron 18:00)" },
-  { id: "reminder_2h", label: "Recordatorio 2 hs antes", desc: "Próximamente: recordatorio 2 hs antes del turno" },
+  {
+    id: "whatsapp_notif",
+    label: "🤖 Bot de WhatsApp activo",
+    desc: "Activa o desactiva el bot completamente. Si está apagado, el bot no responderá ningún mensaje ni enviará recordatorios automáticos.",
+  },
+  {
+    id: "reminder_24h",
+    label: "⏰ Recordatorio 24 hs antes",
+    desc: "El bot envía automáticamente un mensaje de confirmación a la cliente el día anterior al turno.",
+  },
+  {
+    id: "birthday_auto",
+    label: "🎂 Voucher de cumpleaños automático",
+    desc: "El bot envía un voucher de descuento del 15% el día del cumpleaños de la cliente.",
+  },
+  {
+    id: "reminder_2h",
+    label: "⚡ Recordatorio 2 hs antes",
+    desc: "Próximamente: recordatorio automático 2 horas antes del turno.",
+  },
 ];
 
 function Toggle({ enabled, onChange }: { enabled: boolean; onChange: () => void }) {
