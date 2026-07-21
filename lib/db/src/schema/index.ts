@@ -115,6 +115,19 @@ export const insertProfessionalScheduleSchema = createInsertSchema(professional_
 export const selectProfessionalScheduleSchema = createSelectSchema(professional_schedules);
 export type ProfessionalSchedule = z.infer<typeof selectProfessionalScheduleSchema>;
 
+// Blocked Dates Table (days off for a professional)
+export const blocked_dates = sqliteTable("blocked_dates", {
+  id: text("id").primaryKey(),
+  professionalId: text("professional_id").notNull().references(() => professionals.id, { onDelete: "cascade" }),
+  date: text("date").notNull(), // YYYY-MM-DD
+  reason: text("reason"), // optional note e.g. "Vacaciones", "Feriado"
+});
+
+export const insertBlockedDateSchema = createInsertSchema(blocked_dates);
+export const selectBlockedDateSchema = createSelectSchema(blocked_dates);
+export type BlockedDate = z.infer<typeof selectBlockedDateSchema>;
+
+
 // Professional <-> Service assignment Table
 export const professional_services = sqliteTable("professional_services", {
   id: text("id").primaryKey(),

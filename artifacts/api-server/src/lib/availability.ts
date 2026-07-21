@@ -1,5 +1,5 @@
-import { db, appointments, professional_schedules } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { db, appointments, professional_schedules, blocked_dates } from "@workspace/db";
+import { eq, and } from "drizzle-orm";
 
 function parseTime(timeStr: string): number {
   const [h, m] = timeStr.split(":").map(Number);
@@ -16,6 +16,20 @@ export async function isTimeSlotAvailable(
   const dateObj = new Date(date);
   if (isNaN(dateObj.getTime())) {
     return { available: false, reason: "Fecha inválida" };
+  }
+
+  // Check blocked dates first
+  const blocked = await db
+    .select()
+    .from(blocked_dates)
+    .where(and(
+      eq(blocked_dates.professionalId, professionalId),
+      eq(blocked_dates.date, date)
+    ));
+
+  if (blocked.length > 0) {
+    const reason = blocked[0].reason ? `Día bloqueado: ${blocked[0].reason}` : "La profesional no está disponible ese día";
+    return { available: false, reason };
   }
 
   const dayOfWeek = dateObj.getUTCDay();

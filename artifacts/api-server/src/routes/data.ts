@@ -1,5 +1,6 @@
 import { Router } from "express";
-import { db, professionals, services, clients, appointments, professional_schedules, professional_services, products, service_products, expenses, app_settings } from "@workspace/db";
+import { db, professionals, services, clients, appointments, professional_schedules, professional_services, products, service_products, expenses, app_settings, blocked_dates } from "@workspace/db";
+
 import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { cloudSendText } from "../lib/whatsapp-cloud.js";
@@ -558,6 +559,51 @@ router.delete("/schedules/:id", requireAuth, async (req, res) => {
     res.status(500).json({ error: "Failed to delete schedule" });
   }
 });
+
+// ─── BLOCKED DATES ─────────────────────────────────────────────
+router.get("/blocked-dates", async (req, res) => {
+  try {
+    const data = await db.select().from(blocked_dates);
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch blocked dates" });
+  }
+});
+
+router.post("/blocked-dates", requireAuth, async (req, res) => {
+  try {
+    const { professionalId, date, reason } = req.body;
+    if (!professionalId || !date) {
+      return res.status(400).json({ error: "professionalId and date are required" });
+    }
+    // Check if already blocked
+    const existing = await db.select().from(blocked_dates)
+      .where(eq(blocked_dates.professionalId, professionalId))
+      .all?.() ?? await db.select().from(blocked_dates).where(eq(blocked_dates.professionalId, professionalId));
+    const alreadyBlocked = (Array.isArray(existing) ? existing : []).find((b: any) => b.date === date);
+    if (alreadyBlocked) {
+      return res.status(409).json({ error: "Date already blocked" });
+    }
+    const id = randomUUID();
+    await db.insert(blocked_dates).values({ id, professionalId, date, reason: reason || null });
+    const [created] = await db.select().from(blocked_dates).where(eq(blocked_dates.id, id)).limit(1);
+    return res.status(201).json(created);
+  } catch (err) {
+    logger.error({ err }, "Failed to create blocked date");
+    return res.status(500).json({ error: "Failed to create blocked date" });
+  }
+});
+
+router.delete("/blocked-dates/:id", requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params as { id: string };
+    await db.delete(blocked_dates).where(eq(blocked_dates.id, id));
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to delete blocked date" });
+  }
+});
+
 
 // ─── PROFESSIONAL SERVICES ─────────────────────────────────
 router.get("/professional-services", async (req, res) => {

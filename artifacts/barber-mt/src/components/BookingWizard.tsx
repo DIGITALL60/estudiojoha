@@ -26,6 +26,8 @@ export default function BookingWizard({ onClose, initialServiceId, publicInfo: p
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [professionalServices, setProfessionalServices] = useState<{ id: string; professionalId: string; serviceId: string }[]>([]);
   const [professionalSchedules, setProfessionalSchedules] = useState<{ dayOfWeek: number }[]>([]);
+  const [blockedDates, setBlockedDates] = useState<string[]>([]); // YYYY-MM-DD array
+
   const [publicInfo, setPublicInfo] = useState<PublicInfo | null>(publicInfoProp ?? null);
   const [dataLoading, setDataLoading] = useState(true);
   const [dataError, setDataError] = useState(false);
@@ -105,10 +107,16 @@ export default function BookingWizard({ onClose, initialServiceId, publicInfo: p
         .then(r => r.json())
         .then(data => setProfessionalSchedules(data.filter((s: any) => s.professionalId === selectedProfessional.id)))
         .catch(console.error);
+      fetchAPI("/api/data/blocked-dates")
+        .then(r => r.json())
+        .then((data: any[]) => setBlockedDates(data.filter(b => b.professionalId === selectedProfessional.id).map(b => b.date)))
+        .catch(console.error);
     } else {
       setProfessionalSchedules([]);
+      setBlockedDates([]);
     }
   }, [selectedProfessional]);
+
 
   useEffect(() => {
     if (selectedDate && selectedProfessional && selectedServices.length > 0) {
@@ -326,6 +334,8 @@ export default function BookingWizard({ onClose, initialServiceId, publicInfo: p
   };
 
   const allowedDaysOfWeek = Array.from(new Set(professionalSchedules.map(s => s.dayOfWeek)));
+  const blockedDatesSet = new Set(blockedDates);
+
 
   const settings = publicInfo?.settings;
   const businessName = settings?.business_name || "Estudio Joha Molinero";
@@ -667,7 +677,8 @@ export default function BookingWizard({ onClose, initialServiceId, publicInfo: p
                     const dateISO = formatISO(d);
                     const isSelected = selectedDate === dateISO;
                     const isAllowed = allowedDaysOfWeek.length === 0 || allowedDaysOfWeek.includes(d.getDay());
-                    if (!isAllowed) return null;
+                    const isBlocked = blockedDatesSet.has(dateISO);
+                    if (!isAllowed || isBlocked) return null;
 
                     return (
                       <button
