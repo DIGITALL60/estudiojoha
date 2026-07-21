@@ -18,6 +18,7 @@ export default function Stock() {
   const [stockItems, setStockItems] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [filterType, setFilterType] = useState<"Todos" | "Insumos" | "Shop">("Todos");
   const [sortBy, setSortBy] = useState<"name" | "stock">("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [editing, setEditing] = useState<Product | null>(null);
@@ -38,7 +39,11 @@ export default function Stock() {
   const lowStockItems = stockItems.filter(i => i.stock <= i.minStock);
 
   const filtered = stockItems
-    .filter(i => i.name.toLowerCase().includes(search.toLowerCase()))
+    .filter(i => {
+      if (filterType === "Insumos" && i.category !== "Insumos") return false;
+      if (filterType === "Shop" && i.category !== "Shop") return false;
+      return i.name.toLowerCase().includes(search.toLowerCase());
+    })
     .sort((a, b) => {
       const dir = sortDir === "asc" ? 1 : -1;
       if (sortBy === "name") return a.name.localeCompare(b.name) * dir;
@@ -114,15 +119,30 @@ export default function Stock() {
         </div>
       </div>
 
-      {/* Search */}
-      <div className="relative mb-4">
-        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-        <input
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Buscar producto..."
-          className="w-full bg-card border border-border rounded-sm pl-9 pr-4 py-2.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
-        />
+      <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-4">
+        {/* Tabs */}
+        <div className="flex bg-card border border-border/50 rounded-sm overflow-hidden p-1 gap-1 flex-shrink-0">
+          {(["Todos", "Insumos", "Shop"] as const).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setFilterType(tab)}
+              className={`px-4 py-1.5 text-xs font-semibold rounded-sm transition-colors ${filterType === tab ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"}`}
+            >
+              {tab === "Insumos" ? "Uso Interno" : tab === "Shop" ? "Venta Shop" : "Todos"}
+            </button>
+          ))}
+        </div>
+
+        {/* Search */}
+        <div className="relative flex-1">
+          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar producto..."
+            className="w-full bg-card border border-border rounded-sm pl-9 pr-4 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
+          />
+        </div>
       </div>
 
       {/* Table */}
@@ -265,8 +285,15 @@ function ProductModal({ product, onClose, onSave }: { product: Product; onClose:
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-[9px] font-bold tracking-widest text-muted-foreground uppercase block mb-1.5">Categoría</label>
-              <input type="text" value={form.category} onChange={e => setForm({...form, category: e.target.value})} className="w-full bg-background border border-border rounded-sm px-3 py-2 text-xs focus:border-primary focus:outline-none" />
+              <label className="text-[9px] font-bold tracking-widest text-muted-foreground uppercase block mb-1.5">Tipo de Producto</label>
+              <select 
+                value={form.category} 
+                onChange={e => setForm({...form, category: e.target.value})} 
+                className="w-full bg-background border border-border rounded-sm px-3 py-2 text-xs focus:border-primary focus:outline-none"
+              >
+                <option value="Insumos">Insumo (Uso Interno)</option>
+                <option value="Shop">Producto (Venta Shop)</option>
+              </select>
             </div>
             <div>
               <label className="text-[9px] font-bold tracking-widest text-muted-foreground uppercase block mb-1.5">Unidad</label>
@@ -302,7 +329,7 @@ function ProductModal({ product, onClose, onSave }: { product: Product; onClose:
           </div>
         </div>
 
-        {form.category.toLowerCase().includes("insumo") && (
+        {form.category === "Insumos" && (
           <div className="mt-4 border-t border-border/50 pt-4">
             <label className="text-[9px] font-bold tracking-widest text-muted-foreground uppercase block mb-2">Servicios que lo utilizan</label>
             
