@@ -126,8 +126,9 @@ function EditModal({
           </button>
         </div>
 
-        <div className="p-5 space-y-4">
+        <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto scrollbar-thin">
           {/* Avatar preview */}
+
           <div className="flex justify-center mb-2">
             <div
               className="w-14 h-14 rounded-full flex items-center justify-center text-lg font-bold"
