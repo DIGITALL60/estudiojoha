@@ -90,15 +90,23 @@ export async function handleBotMessage(from: string, text: string, interactiveId
   );
 
   // ── Check if client is confirming/canceling from a reminder ──────────────
-  // These are standalone messages outside of a booking session
-  if (session.step === "idle" || session.step === "done") {
-    const isConfirmation = input === "reminder_confirm" || normalized === "si" || normalized === "sí" || normalized.includes("confirmo");
-    const isCancellation = input === "reminder_cancel" || normalized === "no" || normalized === "cancelar" || normalized.includes("cancelo");
+  // These are standalone messages outside of a booking session and should bypass any current step
+  const isConfirmation = input === "reminder_confirm" || normalized === "si" || normalized === "sí" || normalized.includes("confirmo");
+  const isCancellation = input === "reminder_cancel" || normalized === "no" || normalized === "cancelar" || normalized.includes("cancelo");
 
+  if (input === "reminder_confirm" || input === "reminder_cancel") {
+    // If it's explicitly a button click, we always process it as a reminder response
+    // For text matches (si/no), we only process if idle/done to avoid conflicts with other flows
+    // But since buttons send the exact ID, we can intercept them safely.
+  }
+
+  if (input === "reminder_confirm" || input === "reminder_cancel" || ((session.step === "idle" || session.step === "done") && (isConfirmation || isCancellation))) {
     if (isConfirmation || isCancellation) {
       // Look for upcoming appointment for this phone number
       const clientRows = db.select().from(clients).where(eq(clients.phone, from)).all();
       const clientId = clientRows[0]?.id;
+      let app = null;
+
       if (clientId) {
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
@@ -113,43 +121,49 @@ export async function handleBotMessage(from: string, text: string, interactiveId
         const relevant = upcomingApps
           .filter(a => a.date >= today)
           .sort((a, b) => a.date.localeCompare(b.date));
-        const app = relevant[0];
+        app = relevant[0];
+      }
 
-        if (app) {
-          if (isConfirmation) {
-            await db.update(appointments).set({ status: "confirmado" } as any).where(eq(appointments.id, app.id));
-            const [srv] = await db.select().from(services).where(eq(services.id, app.serviceId)).limit(1);
-            const [prof] = await db.select().from(professionals).where(eq(professionals.id, app.professionalId)).limit(1);
-            const [d, m, y] = app.date.split("-");
-            await cloudSendText(from,
-              `✅ *¡Turno confirmado!*\n\n` +
-              `Nos alegra que puedas venir 💜\n\n` +
-              `📅 ${d}/${m}/${y} a las ${app.time}hs\n` +
-              `💅 ${srv?.name || "tu servicio"}\n` +
-              `👩‍🎨 ${prof?.name || "tu profesional"}\n\n` +
-              `¡Te esperamos! 🌸`
-            );
-            logger.info({ from, appointmentId: app.id }, "[Bot] Turno confirmado por cliente");
-            return;
-          } else if (isCancellation) {
-            // Offer to reschedule instead of cancelling directly
-            session.step = "rescheduling_choosing_date";
-            session.appointmentIdToReschedule = app.id;
-            session.serviceId = app.serviceId;
-            session.serviceDuration = (await db.select().from(services).where(eq(services.id, app.serviceId)).limit(1))[0]?.duration;
-            session.professionalId = app.professionalId;
-            session.professionalName = (await db.select().from(professionals).where(eq(professionals.id, app.professionalId)).limit(1))[0]?.name;
-            session.serviceName = (await db.select().from(services).where(eq(services.id, app.serviceId)).limit(1))[0]?.name;
-            sessions.set(from, session);
-            await cloudSendButtons(from,
-              `😕 ¡Qué lástima que no puedas venir!\n\n¿Querés *reprogramar* tu turno para otro día, o preferís cancelarlo definitivamente?`,
-              [
-                { id: "reschedule_yes", title: "📅 Reprogramar" },
-                { id: "reschedule_no", title: "❌ Cancelar definitivo" },
-              ]
-            );
-            return;
-          }
+      if (app) {
+        if (isConfirmation) {
+          await db.update(appointments).set({ status: "confirmado" } as any).where(eq(appointments.id, app.id));
+          const [srv] = await db.select().from(services).where(eq(services.id, app.serviceId)).limit(1);
+          const [prof] = await db.select().from(professionals).where(eq(professionals.id, app.professionalId)).limit(1);
+          const [d, m, y] = app.date.split("-");
+          await cloudSendText(from,
+            `✅ *¡Turno confirmado!*\n\n` +
+            `Nos alegra que puedas venir 💜\n\n` +
+            `📅 ${d}/${m}/${y} a las ${app.time}hs\n` +
+            `💅 ${srv?.name || "tu servicio"}\n` +
+            `👩‍🎨 ${prof?.name || "tu profesional"}\n\n` +
+            `¡Te esperamos! 🌸`
+          );
+          logger.info({ from, appointmentId: app.id }, "[Bot] Turno confirmado por cliente");
+          return;
+        } else if (isCancellation) {
+          // Offer to reschedule instead of cancelling directly
+          session.step = "rescheduling_choosing_date";
+          session.appointmentIdToReschedule = app.id;
+          session.serviceId = app.serviceId;
+          session.serviceDuration = (await db.select().from(services).where(eq(services.id, app.serviceId)).limit(1))[0]?.duration;
+          session.professionalId = app.professionalId;
+          session.professionalName = (await db.select().from(professionals).where(eq(professionals.id, app.professionalId)).limit(1))[0]?.name;
+          session.serviceName = (await db.select().from(services).where(eq(services.id, app.serviceId)).limit(1))[0]?.name;
+          sessions.set(from, session);
+          await cloudSendButtons(from,
+            `😕 ¡Qué lástima que no puedas venir!\n\n¿Querés *reprogramar* tu turno para otro día, o preferís cancelarlo definitivamente?`,
+            [
+              { id: "reschedule_yes", title: "📅 Reprogramar" },
+              { id: "reschedule_no", title: "❌ Cancelar definitivo" },
+            ]
+          );
+          return;
+        }
+      } else {
+        // No appointments found to confirm/cancel
+        if (input === "reminder_confirm" || input === "reminder_cancel") {
+           await cloudSendText(from, "No encontré turnos pendientes para confirmar o cancelar.");
+           return;
         }
       }
     }
@@ -431,18 +445,36 @@ export async function handleBotMessage(from: string, text: string, interactiveId
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 async function showServices(to: string): Promise<void> {
   const allServices = await db.select().from(services);
-  const rows = allServices.slice(0, 10).map((s) => ({
-    id: s.id,
-    title: s.name.length > 24 ? s.name.substring(0, 21) + "..." : s.name,
-    description: `${s.duration} min · $${s.price}`,
-  }));
+  
+  const grouped: Record<string, typeof allServices> = {};
+  for (const s of allServices) {
+    if (!grouped[s.category]) grouped[s.category] = [];
+    grouped[s.category].push(s);
+  }
+
+  const sections = [];
+  for (const [category, svcs] of Object.entries(grouped)) {
+    const rows = svcs.slice(0, 10).map((s) => ({
+      id: s.id,
+      title: s.name.length > 24 ? s.name.substring(0, 21) + "..." : s.name,
+      description: `${s.duration} min · $${s.price}`,
+    }));
+    if (rows.length > 0) {
+      sections.push({
+        title: category.length > 24 ? category.substring(0, 24) : category,
+        rows
+      });
+    }
+  }
+
+  const validSections = sections.slice(0, 10);
 
   await cloudSendList(
     to,
     "Estudio Joha Molinero 💅",
     "¡Hola! Bienvenida 🌸\nEstamos en *Río Segundo, Córdoba*\n📅 Martes a Sábado · 10:00 a 20:00 hs\n\n¿Qué servicio querés reservar?",
     "Ver Servicios",
-    [{ title: "Nuestros Servicios", rows }]
+    validSections
   );
 }
 
