@@ -9,6 +9,7 @@ import AdminLayout from "./AdminLayout";
 interface Professional { id: string; name: string; color: string; initial: string; }
 interface Client { id: string; name: string; phone: string; }
 interface Service { id: string; name: string; duration: number; price: number; }
+interface Product { id: string; name: string; price: number; stock: number; }
 interface Appointment {
   id: string; date: string; time: string; duration: number; price: number;
   status: string; clientName: string; professionalColor: string;
@@ -260,13 +261,30 @@ function EditTurnModal({ app, onClose, onUpdated }: { app: Appointment; onClose:
   const [error, setError] = useState("");
   const [reminding, setReminding] = useState(false);
   const [remindSuccess, setRemindSuccess] = useState(false);
+  
+  const [products, setProducts] = useState<Product[]>([]);
+  const [selectedProducts, setSelectedProducts] = useState<{id: string, name: string, price: number, qty: number}[]>([]);
 
   useEffect(() => {
-    if (app.notes && app.notes.includes("[COMPROBANTE]")) {
-      const parts = app.notes.split("[COMPROBANTE]");
-      setNotes(parts[0].trim());
+    fetchAPI("/api/data/products").then(r => r.json()).then(setProducts).catch(console.error);
+    
+    let currentNotes = app.notes || "";
+    
+    if (currentNotes.includes("[SHOP_SALES]")) {
+      const match = currentNotes.match(/\[SHOP_SALES\](.*?)\[\/SHOP_SALES\]/);
+      if (match) {
+        try { setSelectedProducts(JSON.parse(match[1])); } catch(e) {}
+        currentNotes = currentNotes.replace(match[0], "");
+      }
+    }
+
+    if (currentNotes.includes("[COMPROBANTE]")) {
+      const parts = currentNotes.split("[COMPROBANTE]");
+      currentNotes = parts[0];
       setReceiptBase64(parts[1]);
     }
+    
+    setNotes(currentNotes.trim());
   }, [app]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -313,12 +331,20 @@ function EditTurnModal({ app, onClose, onUpdated }: { app: Appointment; onClose:
   const handleUpdate = async () => {
     setSaving(true);
     try {
+      let finalNotes = notes.trim();
+      if (selectedProducts.length > 0) {
+        finalNotes += `\n\n[SHOP_SALES]${JSON.stringify(selectedProducts)}[/SHOP_SALES]`;
+      }
+      if (receiptBase64) {
+        finalNotes += `\n\n[COMPROBANTE]${receiptBase64}`;
+      }
+
       await fetchAPI(`/api/data/appointments/${app.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           status, 
-          notes: receiptBase64 ? `${notes}\n\n[COMPROBANTE]${receiptBase64}` : notes,
+          notes: finalNotes,
           paymentMethod,
           shopSales: Number(shopSales)
         })
@@ -396,28 +422,72 @@ function EditTurnModal({ app, onClose, onUpdated }: { app: Appointment; onClose:
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div>
+            <div className="col-span-2">
               <label className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted-foreground block mb-1.5 text-emerald-500">
-                Ventas de Shop ($)
+                Ventas de Shop
               </label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">$</span>
-                <input
-                  type="number"
-                  min={0}
-                  value={shopSales || ""}
-                  onChange={e => setShopSales(e.target.value ? Number(e.target.value) : 0)}
-                  placeholder="Ej: 5000"
-                  className="w-full bg-background border border-emerald-500/50 rounded-sm pl-8 pr-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-emerald-500"
-                />
+              <div className="space-y-2 bg-emerald-500/5 border border-emerald-500/20 p-2.5 rounded-sm">
+                {selectedProducts.map((sp, idx) => (
+                  <div key={idx} className="flex justify-between items-center text-xs">
+                    <span>{sp.qty}x {sp.name}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground">${sp.price * sp.qty}</span>
+                      <button onClick={() => {
+                        const next = [...selectedProducts];
+                        next.splice(idx, 1);
+                        setSelectedProducts(next);
+                        setShopSales(next.reduce((acc, item) => acc + (item.price * item.qty), 0));
+                      }} className="text-red-400 hover:text-red-500"><X size={12} /></button>
+                    </div>
+                  </div>
+                ))}
+                <div className="flex items-center gap-2">
+                  <select 
+                    className="flex-1 bg-background border border-emerald-500/50 rounded-sm px-2 py-1.5 text-xs focus:outline-none"
+                    value=""
+                    onChange={e => {
+                      const p = products.find(prod => prod.id === e.target.value);
+                      if (p) {
+                        // Check if already in list, just increase qty
+                        const existingIdx = selectedProducts.findIndex(sp => sp.id === p.id);
+                        let next = [...selectedProducts];
+                        if (existingIdx >= 0) {
+                           next[existingIdx].qty += 1;
+                        } else {
+                           next = [...selectedProducts, { id: p.id, name: p.name, price: p.price, qty: 1 }];
+                        }
+                        setSelectedProducts(next);
+                        setShopSales(next.reduce((acc, item) => acc + (item.price * item.qty), 0));
+                      }
+                    }}
+                  >
+                    <option value="">+ Agregar producto vendido...</option>
+                    {products.map(p => <option key={p.id} value={p.id} disabled={p.stock <= 0}>{p.name} (${p.price}) {p.stock <= 0 ? '(Sin stock)' : ''}</option>)}
+                  </select>
+                </div>
+                
+                <div className="flex items-center justify-between pt-2 border-t border-emerald-500/20 mt-2">
+                   <span className="text-[10px] font-medium text-emerald-600 uppercase">Ajuste Manual / Total:</span>
+                   <div className="relative w-24">
+                     <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">$</span>
+                     <input
+                       type="number"
+                       min={0}
+                       value={shopSales || ""}
+                       onChange={e => setShopSales(e.target.value ? Number(e.target.value) : 0)}
+                       className="w-full bg-background border border-emerald-500/50 rounded-sm pl-6 pr-2 py-1 text-xs text-foreground focus:outline-none focus:border-emerald-500"
+                     />
+                   </div>
+                </div>
               </div>
             </div>
-            <div>
+            
+            <div className="col-span-2">
               <label className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted-foreground block mb-1.5 text-emerald-500">Comprobante</label>
               <div className="relative w-full h-[38px] bg-background border border-emerald-500/50 rounded-sm overflow-hidden flex items-center justify-center group cursor-pointer hover:bg-emerald-500/10 transition-colors">
                 <input type="file" accept="image/*" onChange={handleFileChange} className="absolute inset-0 opacity-0 cursor-pointer z-10" />
                 <span className="text-xs text-emerald-500 font-medium">
-                  {receiptBase64 ? "Ver / Cambiar" : "Subir foto"}
+                  {receiptBase64 ? "Ver / Cambiar foto" : "Subir foto del comprobante"}
                 </span>
               </div>
             </div>

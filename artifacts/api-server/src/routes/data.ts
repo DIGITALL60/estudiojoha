@@ -453,6 +453,37 @@ router.patch("/appointments/:id", requireAuth, async (req, res) => {
             await db.update(products).set({ stock: newStock }).where(eq(products.id, product.id));
           }
         }
+
+        // Handle shop sales stock deduction / refund by parsing notes
+        const parseShopSales = (notesStr: string | null) => {
+          if (!notesStr) return [];
+          const match = notesStr.match(/\[SHOP_SALES\](.*?)\[\/SHOP_SALES\]/);
+          if (match) {
+            try { return JSON.parse(match[1]); } catch(e) { return []; }
+          }
+          return [];
+        };
+
+        const oldShopSales = parseShopSales(current.notes);
+        const newShopSales = parseShopSales(notes);
+
+        if (isCompleting) {
+          // Deduct stock for newShopSales
+          for (const item of newShopSales) {
+            const [product] = await db.select().from(products).where(eq(products.id, item.id));
+            if (product) {
+              await db.update(products).set({ stock: product.stock - item.qty }).where(eq(products.id, product.id));
+            }
+          }
+        } else if (isReverting) {
+          // Refund stock for oldShopSales
+          for (const item of oldShopSales) {
+            const [product] = await db.select().from(products).where(eq(products.id, item.id));
+            if (product) {
+              await db.update(products).set({ stock: product.stock + item.qty }).where(eq(products.id, product.id));
+            }
+          }
+        }
       }
     }
 
