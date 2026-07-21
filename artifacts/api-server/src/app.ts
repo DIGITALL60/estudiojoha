@@ -13,6 +13,7 @@ import bookingsRouter from "./routes/bookings.js";
 import dataRouter from "./routes/data.js";
 import authRouter from "./routes/auth.js";
 import vouchersRouter from "./routes/vouchers.js";
+import webhookRouter from "./routes/webhook.js";
 
 const app = express();
 
@@ -34,8 +35,8 @@ app.use(cors({
   },
   credentials: true,
 }));
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
 // Health check for Railway
@@ -55,5 +56,6 @@ app.use("/api/bookings", bookingsRouter);
 app.use("/api/data", dataRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/vouchers", vouchersRouter);
+app.use("/api/webhook", webhookRouter); // WhatsApp Cloud API bot
 
 export default app;
