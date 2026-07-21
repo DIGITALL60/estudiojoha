@@ -125,6 +125,7 @@ function initSchema() {
     try { sqlite.exec("ALTER TABLE appointments ADD COLUMN shop_sales integer DEFAULT 0"); } catch (e) {}
     try { sqlite.exec("ALTER TABLE professionals ADD COLUMN base_salary integer DEFAULT 0"); } catch (e) {}
     try { sqlite.exec("ALTER TABLE professionals ADD COLUMN sales_target integer DEFAULT 0"); } catch (e) {}
+    try { sqlite.exec("ALTER TABLE services ADD COLUMN image_url text"); } catch (e) {}
 
 
     logger.info("Database schema initialized successfully");
