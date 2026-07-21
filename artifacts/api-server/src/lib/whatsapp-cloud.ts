@@ -10,7 +10,7 @@ const API_URL = `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`;
 
 import { logger } from "./logger.js";
 
-async function post(body: object): Promise<void> {
+async function post(body: object): Promise<boolean> {
   try {
     const res = await fetch(API_URL, {
       method: "POST",
@@ -23,20 +23,30 @@ async function post(body: object): Promise<void> {
     if (!res.ok) {
       const err = await res.text();
       logger.error({ err }, "[WhatsApp Cloud] API Error");
+      return false;
     }
+    return true;
   } catch (err) {
     logger.error({ err }, "[WhatsApp Cloud] Network Error");
+    return false;
   }
 }
 
-export async function cloudSendText(to: string, text: string): Promise<void> {
-  await post({
+export async function cloudSendText(to: string, text: string): Promise<boolean> {
+  const cleanPhone = to.replace(/\D/g, "").replace(/@s\.whatsapp\.net$/, "");
+  // Ensure Argentina mobile format has '9'
+  const formattedPhone = cleanPhone.startsWith("54") && !cleanPhone.startsWith("549")
+    ? `549${cleanPhone.slice(2)}`
+    : cleanPhone;
+
+  return post({
     messaging_product: "whatsapp",
-    to,
+    to: formattedPhone,
     type: "text",
     text: { body: text },
   });
 }
+
 
 export async function cloudSendList(
   to: string,
