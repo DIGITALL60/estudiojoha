@@ -160,8 +160,11 @@ function ServiceModal({
             </div>
             <div>
               <label className="text-[9px] font-bold tracking-widest text-muted-foreground uppercase block mb-1.5">Precio ($)</label>
-              <input type="number" value={form.price} onChange={e => setForm(f => ({ ...f, price: Number(e.target.value) }))}
-                className="w-full bg-background border border-border rounded-sm px-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-primary" />
+              <div className="relative flex items-center">
+                <span className="absolute left-3 text-muted-foreground text-xs font-semibold">$</span>
+                <input type="number" value={form.price} onChange={e => setForm(f => ({ ...f, price: Number(e.target.value) }))}
+                  className="w-full bg-background border border-border rounded-sm pl-7 pr-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-primary" />
+              </div>
             </div>
           </div>
 

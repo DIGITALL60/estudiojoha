@@ -323,8 +323,11 @@ function ProductModal({ product, onClose, onSave }: { product: Product; onClose:
               <input type="number" value={form.minStock} onChange={e => setForm({...form, minStock: Number(e.target.value)})} className="w-full bg-background border border-border rounded-sm px-3 py-2 text-xs focus:border-primary focus:outline-none" />
             </div>
             <div>
-              <label className="text-[9px] font-bold tracking-widest text-muted-foreground uppercase block mb-1.5">Precio Unit</label>
-              <input type="number" value={form.price} onChange={e => setForm({...form, price: Number(e.target.value)})} className="w-full bg-background border border-border rounded-sm px-3 py-2 text-xs focus:border-primary focus:outline-none" />
+              <label className="text-[9px] font-bold tracking-widest text-muted-foreground uppercase block mb-1.5">Precio Unit ($)</label>
+              <div className="relative flex items-center">
+                <span className="absolute left-3 text-muted-foreground text-xs font-semibold">$</span>
+                <input type="number" value={form.price} onChange={e => setForm({...form, price: Number(e.target.value)})} className="w-full bg-background border border-border rounded-sm pl-7 pr-3 py-2 text-xs focus:border-primary focus:outline-none" />
+              </div>
             </div>
           </div>
         </div>

@@ -232,11 +232,14 @@ export default function Caja() {
                           <option key={c} value={c}>{CATEGORY_ICONS[c]} {c}</option>
                         ))}
                       </select>
-                      <input
-                        type="number" placeholder="Monto $" value={newExpense.amount}
-                        onChange={e => setNewExpense(f => ({ ...f, amount: e.target.value }))}
-                        className="bg-card border border-border rounded-sm px-3 py-2 text-xs"
-                      />
+                      <div className="relative flex items-center">
+                        <span className="absolute left-3 text-muted-foreground text-xs font-semibold">$</span>
+                        <input
+                          type="number" placeholder="Monto" value={newExpense.amount}
+                          onChange={e => setNewExpense(f => ({ ...f, amount: e.target.value }))}
+                          className="w-full bg-card border border-border rounded-sm pl-7 pr-3 py-2 text-xs focus:border-primary focus:outline-none"
+                        />
+                      </div>
                       <button onClick={handleAddExpense} className="bg-primary text-primary-foreground text-xs px-4 py-2 rounded-sm font-semibold">
                         Guardar
                       </button>
