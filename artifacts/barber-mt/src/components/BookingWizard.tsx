@@ -37,7 +37,8 @@ export default function BookingWizard({ onClose, initialServiceId, publicInfo: p
   const [selectedProfessional, setSelectedProfessional] = useState<Professional | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>("");
   const [selectedTime, setSelectedTime] = useState<string>("");
-  const [clientData, setClientData] = useState({ name: "", phone: "", birthday: "" });
+  const [clientData, setClientData] = useState({ name: "", phone: "", birthday: "", notes: "" });
+
   const [voucherCode, setVoucherCode] = useState("");
   const [voucherDiscount, setVoucherDiscount] = useState<{ type: string; value: number } | null>(null);
   const [voucherStatus, setVoucherStatus] = useState<"idle" | "validating" | "valid" | "invalid">("idle");
@@ -266,20 +267,24 @@ export default function BookingWizard({ onClose, initialServiceId, publicInfo: p
         }
       }
 
+      const payload = {
+        services: selectedServices.map(s => s.id),
+        professionalId: selectedProfessional.id,
+        date: selectedDate,
+        time: selectedTime,
+        clientName: clientData.name,
+        clientPhone: clientData.phone,
+        clientBirthday: clientData.birthday || undefined,
+        notes: clientData.notes || undefined,
+        voucherCode: voucherStatus === "valid" ? voucherCode.toUpperCase() : undefined,
+      };
+
       const res = await fetchAPI("/api/bookings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           client: clientData,
-          appointment: {
-            serviceIds: selectedServices.map(s => s.id),
-            professionalId: selectedProfessional.id,
-            date: selectedDate,
-            time: selectedTime,
-            duration: totalDuration,
-            price: totalPrice,
-            voucherCode: voucherStatus === "valid" ? voucherCode.toUpperCase() : undefined,
-          },
+          appointment: payload,
         }),
       });
 
@@ -569,66 +574,87 @@ export default function BookingWizard({ onClose, initialServiceId, publicInfo: p
                 {services.length === 0 ? (
                   <p className="text-xs text-muted-foreground text-center py-6">No hay servicios disponibles en este momento.</p>
                 ) : (
-                  <div className="space-y-2">
-                    {categories.map(cat => {
-                      const catServices = services.filter(s => s.category === cat);
-                      const isOpen = openCategory === cat;
-                      return (
-                        <div key={cat} className="border border-border/50 rounded-xl overflow-hidden">
-                          <button
-                            onClick={() => setOpenCategory(isOpen ? null : cat)}
-                            className="w-full p-4 flex items-center justify-between text-left hover:bg-accent/5 transition-colors"
-                          >
-                            <span className="font-medium text-sm text-foreground">{cat}</span>
-                            <div className="flex items-center gap-3 text-muted-foreground text-xs">
-                              {catServices.length} servicios
-                              <ChevronDown size={14} className={`transition-transform ${isOpen ? "rotate-180" : ""}`} />
-                            </div>
-                          </button>
-                          <AnimatePresence>
-                            {isOpen && (
-                              <motion.div
-                                initial={{ height: 0 }} animate={{ height: "auto" }} exit={{ height: 0 }}
-                                className="overflow-hidden border-t border-border/50"
+                  <div className="space-y-4">
+                    {/* Chips for selected services */}
+                    {selectedServices.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mb-4">
+                        {selectedServices.map(sel => (
+                          <span key={sel.id} className="flex items-center gap-1.5 bg-primary/10 text-primary text-[10px] font-bold tracking-wide uppercase px-3 py-1.5 rounded-full">
+                            {sel.name}
+                            <button onClick={(e) => { e.stopPropagation(); toggleService(sel); }} className="hover:text-primary/70">
+                              <X size={12} />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {openCategory === null ? (
+                      <div className="grid grid-cols-2 gap-3">
+                        {categories.map(cat => {
+                          const catServices = services.filter(s => s.category === cat);
+                          const isSelected = selectedServices.some(sel => sel.category === cat);
+                          return (
+                            <button
+                              key={cat}
+                              onClick={() => setOpenCategory(cat)}
+                              className={`flex flex-col items-start p-4 rounded-2xl border transition-all hover:border-primary/50 text-left ${
+                                isSelected ? "border-primary bg-primary/5" : "border-border/50 bg-card"
+                              }`}
+                            >
+                              <span className="font-semibold text-sm text-foreground mb-1 leading-tight">{cat}</span>
+                              <span className="text-[10px] text-muted-foreground uppercase tracking-widest">{catServices.length} servicios</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="border border-border/50 rounded-2xl overflow-hidden bg-card">
+                        <button
+                          onClick={() => setOpenCategory(null)}
+                          className="w-full p-4 flex items-center gap-3 text-left border-b border-border/50 bg-muted/20 hover:bg-muted/40 transition-colors"
+                        >
+                          <ChevronDown size={16} className="rotate-90 text-muted-foreground" />
+                          <div>
+                            <span className="font-medium text-sm text-foreground block">{openCategory}</span>
+                            <span className="text-[10px] text-muted-foreground uppercase tracking-widest">Volver a categorías</span>
+                          </div>
+                        </button>
+                        <div className="p-2 space-y-1">
+                          {services.filter(s => s.category === openCategory).map(s => {
+                            const isSelected = selectedServices.some(sel => sel.id === s.id);
+                            return (
+                              <button
+                                key={s.id}
+                                onClick={() => toggleService(s)}
+                                className={`w-full p-4 rounded-xl flex items-center justify-between transition-colors text-left border ${
+                                  isSelected ? "border-primary bg-primary/5" : "border-transparent hover:bg-accent/10"
+                                }`}
                               >
-                                <div className="p-2 space-y-2">
-                                  {catServices.map(s => {
-                                    const isSelected = selectedServices.some(sel => sel.id === s.id);
-                                    return (
-                                      <button
-                                        key={s.id}
-                                        onClick={() => toggleService(s)}
-                                        className={`w-full p-4 rounded-xl flex items-center justify-between transition-colors text-left border ${
-                                          isSelected ? "border-primary bg-primary/5" : "border-transparent hover:bg-accent/10"
-                                        }`}
-                                      >
-                                        <div className="flex-1 min-w-0 pr-3">
-                                          <p className={`text-sm font-medium ${isSelected ? "text-foreground" : "text-foreground/80"}`}>{s.name}</p>
-                                          <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                                            <Clock size={10} /> {s.duration} min
-                                          </p>
-                                        </div>
-                                        <div className="flex items-center gap-3 flex-shrink-0">
-                                          {s.price > 0 && (
-                                            <span className={`font-bold text-sm ${isSelected ? "text-primary" : "text-foreground"}`}>
-                                              ${s.price.toLocaleString("es-AR")}
-                                            </span>
-                                          )}
-                                          <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${isSelected ? "bg-primary border-primary" : "border-muted-foreground/30"}`}>
-                                            {isSelected && <CheckCircle2 size={12} className="text-primary-foreground" />}
-                                          </div>
-                                        </div>
-                                      </button>
-                                    );
-                                  })}
+                                <div className="flex-1 min-w-0 pr-3">
+                                  <p className={`text-sm font-medium ${isSelected ? "text-foreground" : "text-foreground/80"}`}>{s.name}</p>
+                                  <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                                    <Clock size={10} /> {s.duration} min
+                                  </p>
                                 </div>
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
+                                <div className="flex items-center gap-3 flex-shrink-0">
+                                  {s.price > 0 && (
+                                    <span className={`font-bold text-sm ${isSelected ? "text-primary" : "text-foreground"}`}>
+                                      ${s.price.toLocaleString("es-AR")}
+                                    </span>
+                                  )}
+                                  <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${isSelected ? "bg-primary border-primary" : "border-muted-foreground/30"}`}>
+                                    {isSelected && <CheckCircle2 size={12} className="text-primary-foreground" />}
+                                  </div>
+                                </div>
+                              </button>
+                            );
+                          })}
                         </div>
-                      );
-                    })}
+                      </div>
+                    )}
                   </div>
+
                 )}
               </div>
 
@@ -749,6 +775,18 @@ export default function BookingWizard({ onClose, initialServiceId, publicInfo: p
                       className="w-full bg-transparent border border-border/50 rounded-xl px-4 py-3.5 text-sm focus:outline-none focus:border-primary text-foreground"
                     />
                   </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-muted-foreground pl-1">Observaciones / Notas (Opcional)</label>
+                    <textarea
+                      value={clientData.notes}
+                      onChange={(e) => setClientData({ ...clientData, notes: e.target.value })}
+                      placeholder="Alguna alergia, preferencia, o algo que debamos saber..."
+                      rows={2}
+                      className="w-full bg-transparent border border-border/50 rounded-xl px-4 py-3.5 text-sm focus:outline-none focus:border-primary text-foreground resize-none"
+                    />
+                  </div>
+
 
                   <div className="flex flex-col gap-1.5 pt-2">
                     <label className="text-xs text-muted-foreground pl-1">Código de descuento (Opcional)</label>

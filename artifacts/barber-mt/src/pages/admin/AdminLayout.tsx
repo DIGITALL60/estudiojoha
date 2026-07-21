@@ -9,7 +9,9 @@ import {
   MessageSquare, Clock, Image as ImageIcon
 } from "lucide-react";
 import LogoIcon from "@/components/LogoIcon";
+import AdminQRModal from "@/components/AdminQRModal";
 import { fetchAPI } from "@/lib/api";
+import { QrCode } from "lucide-react";
 
 const iconMap: Record<string, React.ReactNode> = {
   home: <Home size={16} />,
@@ -30,6 +32,7 @@ const iconMap: Record<string, React.ReactNode> = {
   "log-out": <LogOut size={16} />,
   clock: <Clock size={16} />,
   image: <ImageIcon size={16} />,
+  qrcode: <QrCode size={16} />,
 };
 
 const navConfig = {
@@ -76,9 +79,9 @@ const navConfig = {
     },
   ],
   footer: [
-    { id: "whatsapp", label: "WhatsApp Bot", icon: "message-square", path: "/admin/whatsapp" },
+    { id: "qr", label: "QR Mostrador", icon: "qrcode" },
     { id: "configuracion", label: "Configuración", icon: "settings", path: "/admin/configuracion" },
-    { id: "logout", label: "Salir", icon: "log-out", path: "/" },
+    { id: "logout", label: "Cerrar sesión", icon: "log-out" },
   ],
 };
 
@@ -159,11 +162,17 @@ interface AdminLayoutProps {
 export default function AdminLayout({ children, title, subtitle, actions }: AdminLayoutProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [showQR, setShowQR] = useState(false);
   const [, navigate] = useLocation();
 
   const [user, setUser] = useState<{name: string, role: string, initial: string} | null>(null);
   const [badges, setBadges] = useState<{ agenda: number; stockLow: number }>({ agenda: 0, stockLow: 0 });
   
+  const handleLogout = () => {
+    localStorage.removeItem("user");
+    window.location.href = "/login";
+  };
+
   useEffect(() => {
     const userStr = localStorage.getItem("user");
     if (userStr) {
@@ -283,8 +292,52 @@ export default function AdminLayout({ children, title, subtitle, actions }: Admi
 
         {/* Footer */}
         <div className="border-t border-sidebar-border px-2 py-2 space-y-0.5">
-          {navConfig.footer.filter(item => isAdmin || item.id === "logout").map((item) => (
-            <NavItem key={item.id} item={item as any} collapsed={collapsed} />
+          {navConfig.footer.filter(item => isAdmin || item.id === "logout" || item.id === "qr").map((item) => (
+            <div key={item.id}>
+              {item.id === "logout" ? (
+                <button
+                  onClick={handleLogout}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-sm transition-all duration-200 text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/60"
+                >
+                  <span className="flex-shrink-0">{iconMap[item.icon]}</span>
+                  <AnimatePresence>
+                    {!collapsed && (
+                      <motion.span
+                        initial={{ opacity: 0, width: 0 }}
+                        animate={{ opacity: 1, width: "auto" }}
+                        exit={{ opacity: 0, width: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="text-xs font-medium tracking-wide whitespace-nowrap overflow-hidden"
+                      >
+                        {item.label}
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
+                </button>
+              ) : item.id === "qr" ? (
+                <button
+                  onClick={() => setShowQR(true)}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-sm transition-all duration-200 text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/60"
+                >
+                  <span className="flex-shrink-0">{iconMap[item.icon]}</span>
+                  <AnimatePresence>
+                    {!collapsed && (
+                      <motion.span
+                        initial={{ opacity: 0, width: 0 }}
+                        animate={{ opacity: 1, width: "auto" }}
+                        exit={{ opacity: 0, width: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="text-xs font-medium tracking-wide whitespace-nowrap overflow-hidden"
+                      >
+                        {item.label}
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
+                </button>
+              ) : (
+                <NavItem item={item as any} collapsed={collapsed} />
+              )}
+            </div>
           ))}
 
           {/* User info */}
@@ -349,6 +402,9 @@ export default function AdminLayout({ children, title, subtitle, actions }: Admi
           </motion.div>
         </main>
       </div>
+      <AnimatePresence>
+        {showQR && <AdminQRModal onClose={() => setShowQR(false)} />}
+      </AnimatePresence>
     </div>
   );
 }
