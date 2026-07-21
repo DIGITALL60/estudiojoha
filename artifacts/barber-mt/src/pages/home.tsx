@@ -1,5 +1,5 @@
 import { motion, AnimatePresence, type Variants } from "framer-motion";
-import { Clock, MapPin, Instagram, ChevronRight, Sparkles, MessageCircle } from "lucide-react";
+import { Clock, MapPin, Instagram, ChevronRight, Sparkles, MessageCircle, X } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import LogoIcon from "@/components/LogoIcon";
 import BookingWizard from "@/components/BookingWizard";
@@ -29,6 +29,7 @@ interface ServiceRow {
   name: string;
   duration: number;
   price: number;
+  imageUrl?: string | null;
 }
 
 interface SectorGroup {
@@ -37,7 +38,7 @@ interface SectorGroup {
   services: ServiceRow[];
 }
 
-function groupServices(data: { id: string; name: string; category: string; duration: number; price: number }[]): SectorGroup[] {
+function groupServices(data: { id: string; name: string; category: string; duration: number; price: number; imageUrl?: string | null }[]): SectorGroup[] {
   const grouped = data.reduce((acc: Record<string, SectorGroup>, service) => {
     // Saneamiento para corregir problemas de codificación desde la base de datos
     let safeCategory = service.category;
@@ -59,6 +60,7 @@ function groupServices(data: { id: string; name: string; category: string; durat
       name: service.name,
       duration: service.duration,
       price: service.price,
+      imageUrl: service.imageUrl,
     });
     return acc;
   }, {});
@@ -70,6 +72,7 @@ export default function Home() {
   const [showBooking, setShowBooking] = useState(false);
   const [showMisTurnos, setShowMisTurnos] = useState(false);
   const [initialServiceId, setInitialServiceId] = useState<string | undefined>();
+  const [selectedServiceImage, setSelectedServiceImage] = useState<string | null>(null);
   const [sectors, setSectors] = useState<SectorGroup[]>([]);
   const [publicInfo, setPublicInfo] = useState<PublicInfo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -386,13 +389,23 @@ export default function Home() {
                                 )}
                               </span>
                             </div>
-                            <button
-                              onClick={() => openBooking(service.id)}
-                              data-testid={`button-book-${service.id}`}
-                              className="font-sans text-[10px] tracking-[0.25em] uppercase text-primary border border-primary/30 px-4 py-1.5 hover:bg-primary hover:text-background transition-all duration-200 flex-shrink-0 sm:opacity-0 sm:group-hover/item:opacity-100"
-                            >
-                              Reservar
-                            </button>
+                            <div className="flex items-center gap-2 flex-shrink-0 sm:opacity-0 sm:group-hover/item:opacity-100 transition-opacity">
+                              {service.imageUrl && (
+                                <button
+                                  onClick={() => setSelectedServiceImage(service.imageUrl || null)}
+                                  className="font-sans text-[10px] tracking-[0.2em] uppercase text-muted-foreground border border-border px-3 py-1.5 hover:bg-muted hover:text-foreground transition-all duration-200"
+                                >
+                                  + Info
+                                </button>
+                              )}
+                              <button
+                                onClick={() => openBooking(service.id)}
+                                data-testid={`button-book-${service.id}`}
+                                className="font-sans text-[10px] tracking-[0.25em] uppercase text-primary border border-primary/30 px-4 py-1.5 hover:bg-primary hover:text-background transition-all duration-200"
+                              >
+                                Reservar
+                              </button>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -554,6 +567,31 @@ export default function Home() {
 
       <AnimatePresence>
         {showMisTurnos && <MisTurnosModal onClose={() => setShowMisTurnos(false)} />}
+        {selectedServiceImage && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setSelectedServiceImage(null)}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm cursor-pointer"
+          >
+            <motion.div
+              initial={{ scale: 0.95 }}
+              animate={{ scale: 1 }}
+              exit={{ scale: 0.95 }}
+              className="relative max-w-3xl max-h-[90vh] overflow-hidden rounded-xl shadow-2xl bg-card border border-border"
+              onClick={e => e.stopPropagation()}
+            >
+              <button
+                onClick={() => setSelectedServiceImage(null)}
+                className="absolute top-4 right-4 bg-background/80 hover:bg-background text-foreground p-2 rounded-full backdrop-blur-md transition-colors"
+              >
+                <X size={20} />
+              </button>
+              <img src={selectedServiceImage} alt="Servicio info" className="w-full h-auto max-h-[85vh] object-contain" />
+            </motion.div>
+          </motion.div>
+        )}
       </AnimatePresence>
       <AnimatePresence>
         {showBooking && (
