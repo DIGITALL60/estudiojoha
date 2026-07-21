@@ -12,6 +12,7 @@ import { logger } from "./logger.js";
 // ─── Session store ─────────────────────────────────────────────────────────
 type Step =
   | "idle"
+  | "choosing_category"
   | "choosing_service"
   | "choosing_professional"
   | "choosing_date"
@@ -32,6 +33,7 @@ interface Session {
   date?: string;          // YYYY-MM-DD
   time?: string;          // HH:mm
   clientName?: string;
+  category?: string;      // chosen category
   // For rescheduling flow
   appointmentIdToReschedule?: string;
 }
@@ -252,19 +254,50 @@ export async function handleBotMessage(from: string, text: string, interactiveId
   try {
     // ── WELCOME ──────────────────────────────────────────────────────────────
     if (session.step === "idle" || isGreeting) {
+      session.step = "choosing_category";
+      sessions.set(from, session);
+      await showCategories(from);
+      return;
+    }
+
+    // ── CHOOSING CATEGORY ────────────────────────────────────────────────────
+    if (session.step === "choosing_category") {
+      const allServices = await db.select().from(services);
+      const cats = Array.from(new Set(allServices.map(s => s.category)));
+      const chosenCat = cats.find(c => c === input || c.toLowerCase().includes(normalized));
+      
+      if (!chosenCat) {
+        await cloudSendText(from, "No encontré esa categoría. Por favor elegí una opción de la lista 👇");
+        await showCategories(from);
+        return;
+      }
+      
+      session.category = chosenCat;
       session.step = "choosing_service";
       sessions.set(from, session);
-      await showServices(from);
+      await showServices(from, chosenCat);
       return;
     }
 
     // ── CHOOSING SERVICE ─────────────────────────────────────────────────────
     if (session.step === "choosing_service") {
       const allServices = await db.select().from(services);
-      const svc = allServices.find((s) => s.id === input || s.name.toLowerCase().includes(normalized));
+      const catServices = allServices.filter(s => s.category === session.category).sort((a, b) => a.name.localeCompare(b.name));
+      
+      let svc = catServices.find((s) => s.id === input || s.name.toLowerCase().includes(normalized));
+      
+      // Also allow numeric selection
+      const numMatch = input.match(/^\d+$/);
+      if (!svc && numMatch) {
+        const index = parseInt(numMatch[0]) - 1;
+        if (index >= 0 && index < catServices.length) {
+          svc = catServices[index];
+        }
+      }
+
       if (!svc) {
-        await cloudSendText(from, "No encontré ese servicio. Por favor elegí una opción del menú 👇");
-        await showServices(from);
+        await cloudSendText(from, "No encontré ese servicio. Por favor respondé con el NÚMERO del servicio 👇");
+        await showServices(from, session.category!);
         return;
       }
       session.serviceId = svc.id;
@@ -433,44 +466,35 @@ export async function handleBotMessage(from: string, text: string, interactiveId
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-async function showServices(to: string): Promise<void> {
+async function showCategories(to: string): Promise<void> {
   const allServices = await db.select().from(services);
-  
-  const grouped: Record<string, typeof allServices> = {};
-  for (const s of allServices) {
-    if (!grouped[s.category]) grouped[s.category] = [];
-    grouped[s.category].push(s);
-  }
+  const categories = Array.from(new Set(allServices.map(s => s.category)));
 
-  let totalRows = 0;
-  const sections = [];
-  for (const [category, svcs] of Object.entries(grouped)) {
-    if (totalRows >= 10) break;
-    const rows = [];
-    for (const s of svcs) {
-      if (totalRows >= 10) break;
-      rows.push({
-        id: s.id,
-        title: s.name.length > 24 ? s.name.substring(0, 21) + "..." : s.name,
-        description: `${s.duration} min · $${s.price}`,
-      });
-      totalRows++;
-    }
-    if (rows.length > 0) {
-      sections.push({
-        title: category.length > 24 ? category.substring(0, 24) : category,
-        rows
-      });
-    }
-  }
+  const rows = categories.slice(0, 10).map((c) => ({
+    id: c,
+    title: c.length > 24 ? c.substring(0, 24) : c,
+  }));
 
   await cloudSendList(
     to,
     "Estudio Joha Molinero 💅",
-    "¡Hola! Bienvenida 🌸\nEstamos en *Río Segundo, Córdoba*\n📅 Martes a Sábado · 10:00 a 20:00 hs\n\n¿Qué servicio querés reservar?",
-    "Ver Servicios",
-    sections
+    "¡Hola! Bienvenida 🌸\nEstamos en *Río Segundo, Córdoba*\n📅 Martes a Sábado · 10:00 a 20:00 hs\n\n¿Qué te gustaría hacerte hoy?",
+    "Ver Categorías",
+    [{ title: "Categorías", rows }]
   );
+}
+
+async function showServices(to: string, category: string): Promise<void> {
+  const allServices = await db.select().from(services);
+  const catServices = allServices.filter(s => s.category === category).sort((a, b) => a.name.localeCompare(b.name));
+  
+  let msg = `Elegiste *${category}* 💅\n\nEscribí el *NÚMERO* del servicio que querés reservar:\n\n`;
+  
+  catServices.forEach((s, idx) => {
+    msg += `*${idx + 1}.* ${s.name} (${s.duration} min - $${s.price})\n`;
+  });
+
+  await cloudSendText(to, msg);
 }
 
 async function showProfessionals(to: string, serviceId: string): Promise<void> {
