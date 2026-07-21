@@ -278,6 +278,49 @@ export default function Home() {
             className="w-px h-12 bg-gradient-to-b from-primary/60 to-transparent"
           />
         </motion.div>
+
+        {/* Floating Promo Widget */}
+        {settings?.carousel_images && settings.carousel_images.length > 0 && (
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{ delay: 0.5, duration: 0.6 }}
+            onClick={() => setSelectedServiceImage(settings.carousel_images![activeImageIndex].url)}
+            className="absolute z-40 bottom-6 right-6 md:bottom-12 md:right-12 w-32 sm:w-48 md:w-64 lg:w-72 rounded-xl overflow-hidden shadow-2xl border border-white/20 bg-background cursor-pointer hover:scale-105 transition-transform"
+          >
+            <div className="bg-primary text-primary-foreground text-[8px] md:text-[10px] text-center py-1 uppercase tracking-widest font-bold">
+              Promociones
+            </div>
+            <div className="relative aspect-[3/4] w-full">
+              <AnimatePresence mode="wait">
+                <motion.img
+                  key={activeImageIndex}
+                  src={settings.carousel_images[activeImageIndex].url}
+                  alt="Promoción"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.5 }}
+                  className="absolute inset-0 w-full h-full object-cover"
+                />
+              </AnimatePresence>
+            </div>
+            {settings.carousel_images.length > 1 && (
+              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-20">
+                {settings.carousel_images.map((_, i) => (
+                  <div
+                    key={i}
+                    className={`transition-all duration-300 rounded-full ${
+                      i === activeImageIndex 
+                        ? "w-4 h-1.5 bg-primary" 
+                        : "w-1.5 h-1.5 bg-white/70 shadow-sm"
+                    }`}
+                  />
+                ))}
+              </div>
+            )}
+          </motion.div>
+        )}
       </section>
 
       {categories.length > 0 && (
@@ -299,40 +342,6 @@ export default function Home() {
               </span>
             ))}
           </motion.div>
-        </section>
-      )}
-
-      {settings?.carousel_images && settings.carousel_images.length > 0 && (
-        <section className="relative w-full bg-card/20 border-b border-border/40 py-8 flex items-center justify-center overflow-hidden min-h-[300px]">
-          <AnimatePresence mode="wait">
-            <motion.img
-              key={activeImageIndex}
-              src={settings.carousel_images[activeImageIndex].url}
-              alt="Promoción del mes"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.5, ease: "easeOut" }}
-              className="w-full max-w-4xl h-auto max-h-[70vh] object-contain shadow-2xl rounded-sm z-10"
-            />
-          </AnimatePresence>
-          
-          {settings.carousel_images.length > 1 && (
-            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 z-20">
-              {settings.carousel_images.map((_, i) => (
-                <button
-                  key={i}
-                  onClick={() => setActiveImageIndex(i)}
-                  className={`transition-all duration-300 rounded-full ${
-                    i === activeImageIndex 
-                      ? "w-6 h-1.5 bg-primary" 
-                      : "w-1.5 h-1.5 bg-primary/30 hover:bg-primary/50"
-                  }`}
-                  aria-label={`Ver promoción ${i + 1}`}
-                />
-              ))}
-            </div>
-          )}
         </section>
       )}
 
