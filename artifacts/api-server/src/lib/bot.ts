@@ -8,6 +8,7 @@ import { eq, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { cloudSendText, cloudSendList, cloudSendButtons } from "./whatsapp-cloud.js";
 import { logger } from "./logger.js";
+import { getBoolSetting } from "./settings.js";
 
 // ─── Session store ─────────────────────────────────────────────────────────
 type Step =
@@ -83,6 +84,12 @@ async function getAvailableTimes(professionalId: string, date: string, duration:
 
 // ─── Main handler ────────────────────────────────────────────────────────────
 export async function handleBotMessage(from: string, text: string, interactiveId?: string): Promise<void> {
+  const isBotEnabled = await getBoolSetting("whatsapp_notif");
+  if (!isBotEnabled) {
+    logger.info({ from }, "[Bot] Ignoring message because whatsapp_notif is disabled in settings");
+    return;
+  }
+
   const session = getSession(from);
   const normalized = text.trim().toLowerCase();
   const input = interactiveId || text.trim();
