@@ -202,6 +202,7 @@ function EditModal({
               <span className="text-emerald-400">●</span>
               Al guardar el teléfono, el sistema le notificará automáticamente sus turnos
             </p>
+          </div>
 
           {/* Username */}
           <div>

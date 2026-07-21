@@ -48,7 +48,7 @@ router.post("/", async (req, res) => {
           if (message.type === "status") continue;
 
           let text = "";
-          let interactiveId: string | undefined;
+          let interactiveId = "";
 
           if (message.type === "text") {
             text = message.text?.body || "";

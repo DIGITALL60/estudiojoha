@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
-import { Ticket, Gift, Cake, Plus, MessageSquare, Send, Calendar, Users } from "lucide-react";
+import { Ticket, Gift, Cake, Plus, MessageSquare, Send, Calendar, Users, CheckSquare } from "lucide-react";
 import AdminLayout from "./AdminLayout";
 import { fetchAPI } from "@/lib/api";
 
@@ -30,10 +30,11 @@ const voucherTypes = [
 export default function VouchersCumple() {
   const [activeType, setActiveType] = useState("cumple");
   const [clients, setClients] = useState<any[]>([]);
-  const [waStatus, setWaStatus] = useState<{connected: boolean}>({ connected: false });
   const [sendingStatus, setSendingStatus] = useState<"idle" | "sending" | "done" | "error">("idle");
   const [sendResult, setSendResult] = useState<{sent: number, failed: number} | null>(null);
   
+  const [selectedClientIds, setSelectedClientIds] = useState<Set<string>>(new Set());
+
   const [templates, setTemplates] = useState<Record<string, string>>({
     cumple: voucherTypes[0].defaultTemplate,
     voucher: voucherTypes[1].defaultTemplate
@@ -41,7 +42,6 @@ export default function VouchersCumple() {
 
   useEffect(() => {
     fetchAPI("/api/data/clients").then(r => r.json()).then(setClients).catch(console.error);
-    fetchAPI("/api/whatsapp/status").then(r => r.json()).then(setWaStatus).catch(console.error);
   }, []);
 
   const active = voucherTypes.find(v => v.id === activeType)!;
@@ -55,18 +55,26 @@ export default function VouchersCumple() {
   const today = new Date();
   const currentMonth = today.getMonth() + 1;
   
-  const targetClients = activeType === "cumple" 
-    ? clients.filter(c => {
-        if (!c.birthday) return false;
-        let m = null;
-        if (c.birthday.includes("-")) {
-          m = parseInt(c.birthday.split("-")[1], 10);
-        } else if (c.birthday.includes("/")) {
-          m = parseInt(c.birthday.split("/")[1], 10);
-        }
-        return m === currentMonth;
-      })
-    : clients; 
+  const targetClients = useMemo(() => {
+    return activeType === "cumple" 
+      ? clients.filter(c => {
+          if (!c.birthday) return false;
+          let m = null;
+          if (c.birthday.includes("-")) {
+            m = parseInt(c.birthday.split("-")[1], 10);
+          } else if (c.birthday.includes("/")) {
+            m = parseInt(c.birthday.split("/")[1], 10);
+          }
+          return m === currentMonth;
+        })
+      : clients; 
+  }, [activeType, clients, currentMonth]);
+
+  // Al cambiar de pestaña o cargar clientes, seleccionar todos por defecto (los que tengan teléfono)
+  useEffect(() => {
+    const withPhone = targetClients.filter(c => c.phone).map(c => c.id as string);
+    setSelectedClientIds(new Set(withPhone));
+  }, [targetClients]);
 
   const generateMessageText = (clientName: string) => {
     const firstName = clientName.split(" ")[0] || clientName;
@@ -76,20 +84,18 @@ export default function VouchersCumple() {
   const handleBulkSend = async () => {
     setSendingStatus("sending");
     
-    const messages = targetClients
-      .filter(c => c.phone)
-      .map(c => ({
-        phone: c.phone,
-        message: generateMessageText(c.name)
-      }));
+    const finalClients = targetClients.filter(c => selectedClientIds.has(c.id));
+
+    const messages = finalClients.map(c => ({
+      phone: c.phone,
+      message: generateMessageText(c.name)
+    }));
 
     // Extract codes based on active type for registration in DB
-    const codesToCreate = targetClients
-      .filter(c => c.phone)
-      .map(c => {
-         const firstName = c.name.split(" ")[0] || c.name;
-         return activeType === "cumple" ? `CUMPLE-${firstName}-15`.toUpperCase() : `REGALO-${firstName}`.toUpperCase();
-      });
+    const codesToCreate = finalClients.map(c => {
+      const firstName = c.name.split(" ")[0] || c.name;
+      return activeType === "cumple" ? `CUMPLE-${firstName}-15`.toUpperCase() : `REGALO-${firstName}`.toUpperCase();
+    });
 
     try {
       // 1. Create vouchers in backend
@@ -116,6 +122,18 @@ export default function VouchersCumple() {
       }
     } catch (e) {
       setSendingStatus("error");
+    }
+  };
+
+  const clientsWithPhoneCount = targetClients.filter(c => c.phone).length;
+  const isAllSelected = selectedClientIds.size === clientsWithPhoneCount && clientsWithPhoneCount > 0;
+
+  const toggleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedClientIds(new Set());
+    } else {
+      const withPhone = targetClients.filter(c => c.phone).map(c => c.id as string);
+      setSelectedClientIds(new Set(withPhone));
     }
   };
 
@@ -196,9 +214,21 @@ export default function VouchersCumple() {
                 <Users size={14} className="text-primary" />
                 Destinatarios
               </h3>
-              <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-sm">
-                {targetClients.length} encontrados
-              </span>
+              
+              {clientsWithPhoneCount > 0 && (
+                <div className="flex items-center gap-3">
+                  <button 
+                    onClick={toggleSelectAll}
+                    className="text-xs text-primary hover:underline flex items-center gap-1 font-medium"
+                  >
+                    <CheckSquare size={12} />
+                    {isAllSelected ? "Deseleccionar todos" : "Seleccionar todos"}
+                  </button>
+                  <span className="text-[10px] font-semibold text-foreground bg-muted px-2 py-1 rounded-sm">
+                    {selectedClientIds.size} / {clientsWithPhoneCount}
+                  </span>
+                </div>
+              )}
             </div>
 
             {targetClients.length === 0 ? (
@@ -213,21 +243,47 @@ export default function VouchersCumple() {
               </div>
             ) : (
               <div className="space-y-2 flex-1 overflow-y-auto max-h-[350px] pr-2">
-                {targetClients.map((client) => (
-                  <div key={client.id} className="flex items-center justify-between p-3 bg-background border border-border/50 rounded-lg">
-                    <div>
-                      <p className="text-sm font-medium">{client.name}</p>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-[10px] text-muted-foreground">{client.phone || "Sin teléfono"}</span>
-                        {activeType === "cumple" && client.birthday && (
-                          <span className="text-[10px] font-semibold text-pink-500 bg-pink-500/10 px-1.5 py-0.5 rounded-sm">
-                            🎂 {client.birthday}
-                          </span>
-                        )}
+                {targetClients.map((client) => {
+                  const hasPhone = !!client.phone;
+                  const isSelected = selectedClientIds.has(client.id);
+
+                  return (
+                    <div 
+                      key={client.id} 
+                      className={`flex items-center gap-3 p-3 bg-background border rounded-lg transition-colors ${
+                        hasPhone ? (isSelected ? 'border-primary/40 bg-primary/5' : 'border-border/50') : 'border-border/20 opacity-50'
+                      }`}
+                    >
+                      {hasPhone ? (
+                        <input 
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={(e) => {
+                            const newSet = new Set(selectedClientIds);
+                            if (e.target.checked) newSet.add(client.id);
+                            else newSet.delete(client.id);
+                            setSelectedClientIds(newSet);
+                          }}
+                          className="w-4 h-4 accent-primary rounded-sm cursor-pointer"
+                        />
+                      ) : (
+                        <div className="w-4 h-4" /> // placeholder for alignment
+                      )}
+                      
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">{client.name}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-[10px] text-muted-foreground">{client.phone || "Sin teléfono (no se puede enviar)"}</span>
+                          {activeType === "cumple" && client.birthday && (
+                            <span className="text-[10px] font-semibold text-pink-500 bg-pink-500/10 px-1.5 py-0.5 rounded-sm">
+                              🎂 {client.birthday}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -247,13 +303,13 @@ export default function VouchersCumple() {
 
             <button
               onClick={handleBulkSend}
-              disabled={sendingStatus === "sending" || targetClients.filter(c => c.phone).length === 0}
+              disabled={sendingStatus === "sending" || selectedClientIds.size === 0}
               className={`w-full flex items-center justify-center gap-2 text-white text-sm font-semibold px-4 py-4 rounded-xl transition-colors disabled:opacity-50 ${
                 activeType === "cumple" ? "bg-pink-500 hover:bg-pink-600" : "bg-violet-500 hover:bg-violet-600"
               }`}
             >
               <Send size={16} />
-              {sendingStatus === "sending" ? "Enviando en proceso (no cierres)..." : `Enviar automáticamente a todos (${targetClients.filter(c => c.phone).length})`}
+              {sendingStatus === "sending" ? "Enviando en proceso (no cierres)..." : `Enviar a ${selectedClientIds.size} seleccionados`}
             </button>
           </div>
         </motion.div>

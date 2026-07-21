@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
-import { MessageSquare, Users, Clock, Send } from "lucide-react";
+import { MessageSquare, Users, Clock, Send, CheckSquare } from "lucide-react";
 import AdminLayout from "./AdminLayout";
 import { fetchAPI } from "@/lib/api";
 
@@ -42,48 +42,52 @@ export default function Reactivacion() {
     loadData();
   }, []);
 
-  const now = new Date();
-  const MS_PER_DAY = 1000 * 60 * 60 * 24;
+  const inactiveClients = useMemo(() => {
+    const now = new Date();
+    const MS_PER_DAY = 1000 * 60 * 60 * 24;
 
-  const inactiveClients = {
-    "90d": [] as any[],
-    "60d": [] as any[],
-    "30d": [] as any[],
-  };
+    const res = {
+      "90d": [] as any[],
+      "60d": [] as any[],
+      "30d": [] as any[],
+    };
 
-  clients.forEach((c) => {
-    const clientApps = appointments.filter((a) => a.clientId === c.id && a.status === "completado");
+    clients.forEach((c) => {
+      const clientApps = appointments.filter((a) => a.clientId === c.id && a.status === "completado");
 
-    if (clientApps.length === 0) {
-      const createdDate = c.createdAt ? new Date(c.createdAt) : new Date();
-      const diffDays = (now.getTime() - createdDate.getTime()) / MS_PER_DAY;
+      if (clientApps.length === 0) {
+        const createdDate = c.createdAt ? new Date(c.createdAt) : new Date();
+        const diffDays = (now.getTime() - createdDate.getTime()) / MS_PER_DAY;
+
+        if (diffDays >= 90) {
+          res["90d"].push(c);
+        } else if (diffDays >= 60) {
+          res["60d"].push(c);
+        } else if (diffDays >= 30) {
+          res["30d"].push(c);
+        }
+        return;
+      }
+
+      // Find last appointment date
+      const latestDate = clientApps.reduce((latest, app) => {
+        const appDate = new Date(app.date + "T" + (app.time || "00:00"));
+        return appDate > latest ? appDate : latest;
+      }, new Date(0));
+
+      const diffDays = (now.getTime() - latestDate.getTime()) / MS_PER_DAY;
 
       if (diffDays >= 90) {
-        inactiveClients["90d"].push(c);
+        res["90d"].push(c);
       } else if (diffDays >= 60) {
-        inactiveClients["60d"].push(c);
+        res["60d"].push(c);
       } else if (diffDays >= 30) {
-        inactiveClients["30d"].push(c);
+        res["30d"].push(c);
       }
-      return;
-    }
+    });
 
-    // Find last appointment date
-    const latestDate = clientApps.reduce((latest, app) => {
-      const appDate = new Date(app.date + "T" + (app.time || "00:00"));
-      return appDate > latest ? appDate : latest;
-    }, new Date(0));
-
-    const diffDays = (now.getTime() - latestDate.getTime()) / MS_PER_DAY;
-
-    if (diffDays >= 90) {
-      inactiveClients["90d"].push(c);
-    } else if (diffDays >= 60) {
-      inactiveClients["60d"].push(c);
-    } else if (diffDays >= 30) {
-      inactiveClients["30d"].push(c);
-    }
-  });
+    return res;
+  }, [clients, appointments]);
 
   const segments = [
     { id: "90d", label: "Sin visitas 90+ días", count: inactiveClients["90d"].length, color: "#f87171" },
@@ -91,27 +95,24 @@ export default function Reactivacion() {
     { id: "30d", label: "Sin visitas 30+ días", count: inactiveClients["30d"].length, color: "#facc15" },
   ];
 
-  const currentSegmentClients =
-    selectedSegment === "90d"
-      ? inactiveClients["90d"]
-      : selectedSegment === "60d"
-      ? inactiveClients["60d"]
-      : inactiveClients["30d"];
+  const currentSegmentClients = useMemo(() => {
+    return inactiveClients[selectedSegment as keyof typeof inactiveClients] || [];
+  }, [inactiveClients, selectedSegment]);
+
   const [showModal, setShowModal] = useState(false);
   const [discount, setDiscount] = useState(10);
   const [validity, setValidity] = useState(7);
   const [customTemplate, setCustomTemplate] = useState(messageTemplate);
-  const [waStatus, setWaStatus] = useState<{connected: boolean}>({ connected: false });
   const [sendingStatus, setSendingStatus] = useState<"idle" | "sending" | "done" | "error">("idle");
   const [sendResult, setSendResult] = useState<{sent: number, failed: number} | null>(null);
 
+  const [selectedClientIds, setSelectedClientIds] = useState<Set<string>>(new Set());
+
   useEffect(() => {
-    // Check WhatsApp status when opening this page
-    fetchAPI("/api/whatsapp/status")
-      .then(r => r.json())
-      .then(data => setWaStatus(data))
-      .catch(console.error);
-  }, []);
+    // When segment changes, pre-select all valid clients
+    const withPhone = currentSegmentClients.filter(c => c.phone).map(c => c.id as string);
+    setSelectedClientIds(new Set(withPhone));
+  }, [currentSegmentClients]);
 
   const handleLaunchCampaign = () => {
     setShowModal(true);
@@ -137,12 +138,12 @@ export default function Reactivacion() {
   const handleBulkSend = async () => {
     setSendingStatus("sending");
     
-    const messages = currentSegmentClients
-      .filter(c => c.phone)
-      .map(c => ({
-        phone: c.phone,
-        message: generateMessageText(c.name)
-      }));
+    const finalClients = currentSegmentClients.filter(c => selectedClientIds.has(c.id));
+
+    const messages = finalClients.map(c => ({
+      phone: c.phone,
+      message: generateMessageText(c.name)
+    }));
 
     const codeToCreate = `VOLVISTE-${discount}OFF`;
 
@@ -171,6 +172,18 @@ export default function Reactivacion() {
       }
     } catch (e) {
       setSendingStatus("error");
+    }
+  };
+
+  const clientsWithPhoneCount = currentSegmentClients.filter(c => c.phone).length;
+  const isAllSelected = selectedClientIds.size === clientsWithPhoneCount && clientsWithPhoneCount > 0;
+
+  const toggleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedClientIds(new Set());
+    } else {
+      const withPhone = currentSegmentClients.filter(c => c.phone).map(c => c.id as string);
+      setSelectedClientIds(new Set(withPhone));
     }
   };
 
@@ -319,7 +332,7 @@ export default function Reactivacion() {
               <div>
                 <h3 className="font-semibold text-lg">Campaña de Reactivación</h3>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Enviando a {currentSegmentClients.length} clientes ({selectedSegment})
+                  Revisá la lista y seleccioná a quiénes enviar el mensaje ({selectedSegment})
                 </p>
               </div>
               <button 
@@ -330,28 +343,70 @@ export default function Reactivacion() {
               </button>
             </div>
             
+            {clientsWithPhoneCount > 0 && (
+              <div className="px-5 py-3 bg-muted/20 border-b border-border/50 flex justify-between items-center">
+                <button 
+                  onClick={toggleSelectAll}
+                  className="text-xs text-primary hover:underline flex items-center gap-1 font-medium"
+                >
+                  <CheckSquare size={12} />
+                  {isAllSelected ? "Deseleccionar todos" : "Seleccionar todos"}
+                </button>
+                <span className="text-[10px] font-semibold text-foreground bg-muted px-2 py-1 rounded-sm">
+                  {selectedClientIds.size} / {clientsWithPhoneCount} seleccionados
+                </span>
+              </div>
+            )}
+
             <div className="p-5 overflow-y-auto flex-1 space-y-3">
-              {currentSegmentClients.map((client) => (
-                <div key={client.id} className="bg-background border border-border/50 rounded-lg p-3 flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-sm">{client.name}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{client.phone || "Sin teléfono"}</p>
-                  </div>
-                  <a
-                    href={generateWhatsAppLink(client.name, client.phone)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${
-                      !client.phone 
-                        ? 'bg-muted text-muted-foreground pointer-events-none' 
-                        : 'bg-[#25D366] hover:bg-[#20b858] text-white'
+              {currentSegmentClients.map((client) => {
+                const hasPhone = !!client.phone;
+                const isSelected = selectedClientIds.has(client.id);
+
+                return (
+                  <div 
+                    key={client.id} 
+                    className={`bg-background border rounded-lg p-3 flex items-center justify-between transition-colors ${
+                      hasPhone ? (isSelected ? 'border-primary/40 bg-primary/5' : 'border-border/50') : 'border-border/20 opacity-50'
                     }`}
                   >
-                    <MessageSquare size={14} />
-                    Enviar manual
-                  </a>
-                </div>
-              ))}
+                    <div className="flex items-center gap-3">
+                      {hasPhone ? (
+                        <input 
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={(e) => {
+                            const newSet = new Set(selectedClientIds);
+                            if (e.target.checked) newSet.add(client.id);
+                            else newSet.delete(client.id);
+                            setSelectedClientIds(newSet);
+                          }}
+                          className="w-4 h-4 accent-primary rounded-sm cursor-pointer"
+                        />
+                      ) : (
+                        <div className="w-4 h-4" /> // placeholder
+                      )}
+                      <div>
+                        <p className="font-medium text-sm">{client.name}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{client.phone || "Sin teléfono"}</p>
+                      </div>
+                    </div>
+                    <a
+                      href={generateWhatsAppLink(client.name, client.phone)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-semibold transition-colors ${
+                        !client.phone 
+                          ? 'bg-muted text-muted-foreground pointer-events-none' 
+                          : 'bg-[#25D366] hover:bg-[#20b858] text-white'
+                      }`}
+                    >
+                      <MessageSquare size={12} />
+                      Manual
+                    </a>
+                  </div>
+                );
+              })}
             </div>
 
             <div className="p-5 border-t border-border/50 bg-background/50 rounded-b-xl">
@@ -367,11 +422,11 @@ export default function Reactivacion() {
               ) : (
                 <button
                   onClick={handleBulkSend}
-                  disabled={sendingStatus === "sending" || currentSegmentClients.filter(c => c.phone).length === 0}
+                  disabled={sendingStatus === "sending" || selectedClientIds.size === 0}
                   className="w-full bg-[#b5506a] hover:bg-[#9c4258] text-white font-bold py-3 px-4 rounded-xl flex justify-center items-center gap-2 transition-colors disabled:opacity-50"
                 >
                   <Send size={16} />
-                  {sendingStatus === "sending" ? "Enviando en proceso (no cierres)..." : `Enviar automáticamente a todos (${currentSegmentClients.filter(c => c.phone).length})`}
+                  {sendingStatus === "sending" ? "Enviando en proceso (no cierres)..." : `Enviar a ${selectedClientIds.size} seleccionados`}
                 </button>
               )}
             </div>
