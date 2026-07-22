@@ -155,7 +155,7 @@ export default function Home() {
         </div>
       </nav>
 
-      <section className="relative min-h-[100dvh] flex items-center justify-center overflow-hidden">
+      <section className="relative min-h-[100dvh] flex items-center justify-center overflow-hidden pt-24 pb-12 lg:py-0">
         <div className="absolute inset-0 z-0 bg-background">
           <img 
             src="/hero-premium.jpg" 
@@ -197,7 +197,7 @@ export default function Home() {
                 versión
               </em>
               ,<br />
-              cada visita.
+              en cada visita.
             </h1>
 
 
@@ -285,18 +285,18 @@ export default function Home() {
             initial={{ opacity: 0, scale: 0.9, y: 30 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             transition={{ delay: 0.5, duration: 0.8, ease: "easeOut" }}
-            className="absolute z-40 bottom-6 right-6 md:bottom-12 md:right-12 w-44 sm:w-64 md:w-80 lg:w-[360px]"
+            className="absolute z-40 bottom-4 right-4 md:bottom-8 md:right-8 lg:bottom-12 lg:right-12"
           >
             <motion.div
               animate={{ y: [0, -12, 0] }}
               transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
               onClick={() => setSelectedServiceImage(settings.carousel_images![activeImageIndex].url)}
-              className="rounded-xl overflow-hidden shadow-2xl border border-white/20 bg-background/95 backdrop-blur-sm cursor-pointer hover:scale-[1.02] transition-transform"
+              className="rounded-xl overflow-hidden shadow-2xl border border-white/20 bg-background/95 backdrop-blur-sm cursor-pointer hover:scale-[1.02] transition-transform flex flex-col"
             >
-              <div className="bg-primary text-primary-foreground text-[9px] md:text-[11px] text-center py-1.5 uppercase tracking-widest font-bold">
+              <div className="bg-primary text-primary-foreground text-[9px] md:text-[11px] text-center py-1.5 uppercase tracking-widest font-bold w-full">
                 Promociones
               </div>
-              <div className="relative w-full bg-muted/10 overflow-hidden" style={{ aspectRatio: "4/5" }}>
+              <div className="relative flex justify-center bg-muted/10 overflow-hidden">
                 <AnimatePresence mode="wait">
                   <motion.img
                     key={activeImageIndex}
@@ -306,24 +306,25 @@ export default function Home() {
                     animate={{ opacity: 1, x: 0, scale: 1 }}
                     exit={{ opacity: 0, x: -30, scale: 0.95 }}
                     transition={{ duration: 0.5, ease: "easeInOut" }}
-                    className="absolute inset-0 w-full h-full object-contain p-2"
+                    className="w-auto h-auto max-w-[80vw] max-h-[55vh] md:max-w-[400px] md:max-h-[65vh] object-contain"
                   />
                 </AnimatePresence>
+                
+                {settings.carousel_images.length > 1 && (
+                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-20 bg-background/70 backdrop-blur-md px-3 py-1.5 rounded-full shadow-sm">
+                    {settings.carousel_images.map((_, i) => (
+                      <div
+                        key={i}
+                        className={`transition-all duration-300 rounded-full ${
+                          i === activeImageIndex 
+                            ? "w-5 h-1.5 bg-primary" 
+                            : "w-1.5 h-1.5 bg-primary/40"
+                        }`}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
-              {settings.carousel_images.length > 1 && (
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-20 bg-background/60 backdrop-blur-md px-3 py-1.5 rounded-full shadow-sm">
-                  {settings.carousel_images.map((_, i) => (
-                    <div
-                      key={i}
-                      className={`transition-all duration-300 rounded-full ${
-                        i === activeImageIndex 
-                          ? "w-5 h-1.5 bg-primary" 
-                          : "w-1.5 h-1.5 bg-primary/40"
-                      }`}
-                    />
-                  ))}
-                </div>
-              )}
             </motion.div>
           </motion.div>
         )}
