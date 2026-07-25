@@ -143,30 +143,34 @@ export default function Home() {
   return (
     <div className="bg-background text-foreground min-h-screen overflow-x-hidden">
 
-      <nav className="fixed top-0 w-full z-50 flex items-center justify-between px-6 py-5 bg-background/85 backdrop-blur-md border-b border-border/40">
+      <nav className="fixed top-0 w-full z-50 flex items-center justify-between px-3 sm:px-6 py-2.5 sm:py-3 bg-background/90 backdrop-blur-md border-b border-border/40 shadow-xs">
         <button
           onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-          className="flex items-center gap-3 opacity-90 hover:opacity-100 transition-all duration-300"
+          className="flex items-center gap-2 sm:gap-3 opacity-95 hover:opacity-100 transition-all duration-300 text-left"
           aria-label="Inicio"
         >
-          <LogoIcon size={120} />
-          <div className="flex flex-col items-center leading-none">
-            <span className="font-serif text-base font-light tracking-[0.2em] text-foreground uppercase">
+          <div className="w-8 h-8 sm:w-11 sm:h-11 flex-shrink-0 flex items-center justify-center">
+            <LogoIcon size={44} />
+          </div>
+          <div className="flex flex-col leading-tight">
+            <span className="font-serif text-xs sm:text-sm font-semibold tracking-[0.15em] sm:tracking-[0.2em] text-foreground uppercase">
               ESTUDIO JOHA MOLINERO
             </span>
-            <span className="font-sans text-[9px] tracking-[0.4em] text-primary uppercase font-medium mt-1 self-center">
+            <span className="font-sans text-[8px] sm:text-[9px] tracking-[0.3em] text-primary uppercase font-medium mt-0.5">
               Beauty Studio
             </span>
           </div>
         </button>
-        <div className="flex items-center gap-3">
+        
+        <div className="flex items-center gap-1.5 sm:gap-3">
           <ThemeToggle />
           <button
             onClick={() => window.location.href = "/admin"}
             data-testid="button-nav-admin"
-            className="border border-primary/50 text-primary/70 font-sans text-[10px] tracking-[0.2em] uppercase px-4 py-2 hover:border-primary hover:text-primary transition-all duration-300"
+            className="border border-primary/50 text-primary font-sans text-[9px] sm:text-[10px] tracking-[0.15em] sm:tracking-[0.2em] uppercase px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-sm hover:bg-primary hover:text-white transition-all duration-300 whitespace-nowrap"
           >
-            Personal autorizado
+            <span className="hidden sm:inline">Personal autorizado</span>
+            <span className="sm:hidden">Acceso</span>
           </button>
         </div>
       </nav>
