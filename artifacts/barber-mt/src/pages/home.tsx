@@ -492,15 +492,15 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="relative w-full h-[60vh] min-h-[400px] flex items-center justify-center overflow-hidden border-y border-border/40">
-        {/* Foto de fondo siempre oscura — funciona en modo claro y oscuro */}
+      <section className="relative w-full min-h-[360px] sm:min-h-[420px] py-16 flex items-center justify-center overflow-hidden border-y border-border/40">
+        {/* Foto de fondo optimizada para móviles (sin bug de bg-fixed en iOS) */}
         <div 
-          className="absolute inset-0 bg-cover bg-center bg-no-repeat bg-fixed"
+          className="absolute inset-0 bg-cover bg-center bg-no-repeat md:bg-fixed"
           style={{ backgroundImage: "url('/hero-premium.jpg')" }}
         />
-        {/* Overlay oscuro permanente para que el texto blanco siempre se lea */}
-        <div className="absolute inset-0 bg-black/55" />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-black/60" />
+        {/* Overlay equilibrado para nitidez de la foto y excelente legibilidad */}
+        <div className="absolute inset-0 bg-black/40" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/20 to-black/50" />
         
         <motion.div 
           initial="hidden"
@@ -509,12 +509,12 @@ export default function Home() {
           variants={fadeUp}
           className="relative z-10 text-center px-6 max-w-2xl mx-auto"
         >
-          <Sparkles className="w-6 h-6 text-primary mx-auto mb-6 opacity-90 drop-shadow-md" />
-          <h2 className="font-serif font-light text-4xl md:text-5xl text-white mb-4 drop-shadow-lg">
+          <Sparkles className="w-6 h-6 text-primary mx-auto mb-4 sm:mb-6 opacity-90 drop-shadow-md" />
+          <h2 className="font-serif font-light text-3xl sm:text-4xl md:text-5xl text-white mb-3 sm:mb-4 drop-shadow-lg leading-tight">
             Un espacio pensado<br />
-            <em className="not-italic text-primary">para vos.</em>
+            <em className="not-italic text-primary font-normal">para vos.</em>
           </h2>
-          <p className="font-sans font-light text-white/85 text-sm tracking-wide drop-shadow-md max-w-md mx-auto">
+          <p className="font-sans font-light text-white/90 text-xs sm:text-sm tracking-wide drop-shadow-md max-w-md mx-auto leading-relaxed">
             Relajate y disfrutá de una experiencia premium. Cada detalle de nuestro salón está diseñado para tu confort.
           </p>
         </motion.div>
