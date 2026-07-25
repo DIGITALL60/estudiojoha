@@ -565,7 +565,7 @@ router.post("/appointments/:id/remind", requireAuth, async (req, res) => {
         `¡Hola ${client.name}! 👋\n\nTe recordamos tu turno en *Estudio Joha Molinero* 💅\n\n📅 ${dateDisplay} a las *${app.time}hs*\n💅 Servicio: ${serviceName}\n👩‍🎨 Profesional: ${professionalName}\n\n¿Podés confirmar tu asistencia?`,
         [
           { id: "reminder_confirm", title: "✅ Confirmo" },
-          { id: "reminder_cancel", title: "❌ No puedo ir" },
+          { id: "reminder_cancel", title: "❌ No asistiré" },
         ]
       );
     } catch {
@@ -576,7 +576,7 @@ router.post("/appointments/:id/remind", requireAuth, async (req, res) => {
         `📅 ${dateDisplay} a las *${app.time}hs*\n` +
         `💅 Servicio: ${serviceName}\n` +
         `👩‍🎨 Profesional: ${professionalName}\n\n` +
-        `Respondé *SI* para confirmar o *NO* para cancelar/reprogramar.\n¡Te esperamos! 💜`;
+        `Respondé *SI* para confirmar o *NO ASISTIRÉ* para reprogramar tu turno.\n¡Te esperamos! 💜`;
       await cloudSendText(client.phone, msg);
     }
     

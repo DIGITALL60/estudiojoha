@@ -89,21 +89,21 @@ export function initCronJobs() {
             const [d, m, y] = app.date.split("-");
             const dateDisplay = `${d}/${m}/${y}`;
 
-            // Send reminder with confirm/cancel buttons
+            // Send reminder with confirm/reschedule buttons
             try {
               await cloudSendButtons(
                 client.phone,
                 `¡Hola ${client.name}! 👋\n\nTe recordamos que mañana tenés turno en *Estudio Joha Molinero* 💅\n\n📅 ${dateDisplay} a las *${app.time}hs*\n💅 Servicio: ${service.name}\n👩‍🎨 Profesional: ${prof.name}\n\n¿Podés confirmar tu asistencia?`,
                 [
                   { id: "reminder_confirm", title: "✅ Confirmo" },
-                  { id: "reminder_cancel", title: "❌ No puedo ir" },
+                  { id: "reminder_cancel", title: "❌ No asistiré" },
                 ]
               );
             } catch {
               // Fallback to plain text if buttons fail
               await cloudSendText(
                 client.phone,
-                `¡Hola ${client.name}! 👋\n\nTe recordamos que mañana tenés turno en *Estudio Joha Molinero* 💅\n\n📅 ${dateDisplay} a las *${app.time}hs*\n💅 Servicio: ${service.name}\n👩‍🎨 Profesional: ${prof.name}\n\nResponde *SI* para confirmar o *NO* para cancelar/reprogramar.\n¡Te esperamos! 💜`
+                `¡Hola ${client.name}! 👋\n\nTe recordamos que mañana tenés turno en *Estudio Joha Molinero* 💅\n\n📅 ${dateDisplay} a las *${app.time}hs*\n💅 Servicio: ${service.name}\n👩‍🎨 Profesional: ${prof.name}\n\nRespondé *SI* para confirmar o *NO ASISTIRÉ* para reprogramar tu turno.\n¡Te esperamos! 💜`
               );
             }
 

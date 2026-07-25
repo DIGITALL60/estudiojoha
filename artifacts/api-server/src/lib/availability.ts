@@ -13,7 +13,8 @@ export async function isTimeSlotAvailable(
   time: string,
   excludeAppointmentId?: string
 ): Promise<{ available: boolean; reason?: string }> {
-  const dateObj = new Date(date);
+  const [yyyy, mm, dd] = date.split("-").map(Number);
+  const dateObj = new Date(Date.UTC(yyyy, mm - 1, dd));
   if (isNaN(dateObj.getTime())) {
     return { available: false, reason: "Fecha inválida" };
   }
@@ -32,14 +33,22 @@ export async function isTimeSlotAvailable(
     return { available: false, reason };
   }
 
-  const dayOfWeek = dateObj.getUTCDay();
+  const dayOfWeek = dateObj.getUTCDay(); // 0 = Sunday, 1 = Monday, 2 = Tuesday, ..., 6 = Saturday
   const schedules = await db
     .select()
     .from(professional_schedules)
     .where(eq(professional_schedules.professionalId, professionalId));
 
-  const daySchedules = schedules.filter((s) => s.dayOfWeek === dayOfWeek);
-  if (daySchedules.length === 0) {
+  // Sunday is closed
+  if (dayOfWeek === 0) {
+    return { available: false, reason: "Los domingos el estudio permanece cerrado" };
+  }
+
+  let daySchedules = schedules.filter((s) => s.dayOfWeek === dayOfWeek);
+  // Fallback to default salon working hours (09:00 - 20:00) if no custom schedule is registered
+  if (schedules.length === 0) {
+    daySchedules = [{ id: "default", professionalId, dayOfWeek, startTime: "09:00", endTime: "20:00" }];
+  } else if (daySchedules.length === 0) {
     return { available: false, reason: "La profesional no trabaja ese día" };
   }
 

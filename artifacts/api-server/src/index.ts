@@ -1,6 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
-import { db, sqlite, professionals, services, app_settings } from "@workspace/db";
+import { db, sqlite, professionals, services, app_settings, professional_schedules } from "@workspace/db";
 import { randomUUID } from "crypto";
 import { DEFAULT_SETTINGS } from "./lib/settings.js";
 
@@ -149,6 +149,27 @@ async function seedIfEmpty() {
         { id: randomUUID(), name: "Depilación Definitiva", role: "Depi Definitiva", color: "#16a34a", initial: "DD", email: "depi@example.com", phone: "5493510000004" },
       ]).run();
       logger.info("Professionals seeded. Admin: admin / 123456789");
+    }
+
+    // Seed schedules for professionals if empty
+    const currentProfs = db.select().from(professionals).all();
+    const existingScheds = db.select().from(professional_schedules).all();
+    if (existingScheds.length === 0 && currentProfs.length > 0) {
+      logger.info("Seeding default working schedules for professionals...");
+      const workDays = [2, 3, 4, 5, 6]; // Tuesday through Saturday
+      const schedValues = [];
+      for (const p of currentProfs) {
+        for (const day of workDays) {
+          schedValues.push({
+            id: randomUUID(),
+            professionalId: p.id,
+            dayOfWeek: day,
+            startTime: "09:00",
+            endTime: "20:00",
+          });
+        }
+      }
+      db.insert(professional_schedules).values(schedValues).run();
     }
 
     // Seed services if empty

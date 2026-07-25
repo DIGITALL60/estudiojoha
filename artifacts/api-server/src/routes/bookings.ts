@@ -15,22 +15,44 @@ router.post("/", validate(createBookingSchema), async (req, res) => {
   try {
     const { client, appointment } = req.body;
 
-    const serviceIds = appointment.serviceIds || (appointment.serviceId ? [appointment.serviceId] : []);
+    const serviceIds = appointment.serviceIds || appointment.services || (appointment.serviceId ? [appointment.serviceId] : []);
     if (!serviceIds.length) {
       return res.status(400).json({ error: "No se seleccionaron servicios" });
     }
 
-    // Fetch the services from DB
+    // Fetch the services from DB or fallback
     const selectedServicesDB = [];
     for (const sId of serviceIds) {
       const [srv] = await db.select().from(services).where(eq(services.id, sId)).limit(1);
-      if (srv) selectedServicesDB.push(srv);
-    }
-    if (selectedServicesDB.length === 0) {
-      return res.status(400).json({ error: "Servicios no encontrados" });
+      if (srv) {
+        selectedServicesDB.push(srv);
+      } else {
+        // Fallback or dynamic insert for standard services
+        const newSrvId = randomUUID();
+        const fallbackName = "Servicio de Belleza";
+        const duration = appointment.duration || 45;
+        const price = appointment.price || 0;
+        db.insert(services).values({
+          id: newSrvId,
+          name: fallbackName,
+          category: "General",
+          duration,
+          price,
+        }).run();
+        selectedServicesDB.push({
+          id: newSrvId,
+          name: fallbackName,
+          category: "General",
+          duration,
+          price,
+          imageUrl: null,
+          createdAt: new Date(),
+        });
+      }
     }
 
-    const totalDuration = selectedServicesDB.reduce((acc, s) => acc + s.duration, 0);
+    const totalDuration = appointment.duration || selectedServicesDB.reduce((acc, s) => acc + s.duration, 0);
+    const totalPrice = appointment.price ?? selectedServicesDB.reduce((acc, s) => acc + s.price, 0);
 
     const availability = await isTimeSlotAvailable(
       appointment.date,
@@ -243,24 +265,30 @@ router.get("/availability", async (req, res) => {
     const duration = Number(serviceDuration);
     
     // Parse date to get day of week (0 = Sunday, 1 = Monday, ..., 6 = Saturday)
-    const dateObj = new Date(requestedDate);
+    const [yyyy, mm, dd] = requestedDate.split("-").map(Number);
+    const dateObj = new Date(Date.UTC(yyyy, mm - 1, dd));
     if (isNaN(dateObj.getTime())) {
       return res.status(400).json({ error: "Invalid date format" });
     }
     
-    // Important: getUTCDay() or normal getDay() depends on how the date is interpreted,
-    // assuming requestedDate is YYYY-MM-DD, parsing it directly gives UTC at midnight.
-    // So getUTCDay() is the correct day.
     const dayOfWeek = dateObj.getUTCDay();
+
+    // Sunday is closed
+    if (dayOfWeek === 0) {
+      return res.json({ availableTimes: [] });
+    }
 
     // 1. Fetch professional schedules for that day
     const schedules = await db.select().from(professional_schedules).where(
       eq(professional_schedules.professionalId, String(professionalId))
     );
     
-    const daySchedules = schedules.filter(s => s.dayOfWeek === dayOfWeek);
+    let daySchedules = schedules.filter(s => s.dayOfWeek === dayOfWeek);
     
-    if (daySchedules.length === 0) {
+    // Fallback to default salon schedule if no schedule rows exist for this professional
+    if (schedules.length === 0) {
+      daySchedules = [{ id: "def", professionalId: String(professionalId), dayOfWeek, startTime: "09:00", endTime: "20:00" }];
+    } else if (daySchedules.length === 0) {
       return res.json({ availableTimes: [] });
     }
 

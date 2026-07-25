@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { X, CheckCircle2, ChevronDown, MapPin, Instagram, MessageCircle, Clock, AlertCircle, Sparkles, Tag } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { fetchAPI } from "@/lib/api";
+import { DEFAULT_SERVICES } from "@/lib/defaultServices";
 import {
   fetchPublicInfo,
   instagramHandle,
@@ -22,7 +23,7 @@ interface BookingWizardProps {
 const norm = (s: string) => s.toLowerCase().trim();
 
 export default function BookingWizard({ onClose, initialServiceId, publicInfo: publicInfoProp }: BookingWizardProps) {
-  const [services, setServices] = useState<Service[]>([]);
+  const [services, setServices] = useState<Service[]>(DEFAULT_SERVICES);
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [professionalServices, setProfessionalServices] = useState<{ id: string; professionalId: string; serviceId: string }[]>([]);
   const [professionalSchedules, setProfessionalSchedules] = useState<{ dayOfWeek: number }[]>([]);
@@ -66,27 +67,36 @@ export default function BookingWizard({ onClose, initialServiceId, publicInfo: p
     setDataLoading(true);
     setDataError(false);
     Promise.all([
-      fetchAPI("/api/data/services").then(r => {
-        if (!r.ok) throw new Error("services fetch failed");
-        return r.json();
-      }),
-      fetchAPI("/api/data/professionals").then(r => {
-        if (!r.ok) throw new Error("professionals fetch failed");
-        return r.json();
-      }),
-      fetchAPI("/api/data/professional-services").then(r => {
-        if (!r.ok) throw new Error("links fetch failed");
-        return r.json();
-      }),
+      fetchAPI("/api/data/services")
+        .then(async r => {
+          if (!r.ok) return DEFAULT_SERVICES;
+          const data = await r.json();
+          return Array.isArray(data) && data.length > 0 ? data : DEFAULT_SERVICES;
+        })
+        .catch(() => DEFAULT_SERVICES),
+      fetchAPI("/api/data/professionals")
+        .then(async r => {
+          if (!r.ok) return [];
+          return r.json();
+        })
+        .catch(() => []),
+      fetchAPI("/api/data/professional-services")
+        .then(async r => {
+          if (!r.ok) return [];
+          return r.json();
+        })
+        .catch(() => []),
       publicInfoProp ? Promise.resolve(publicInfoProp) : fetchPublicInfo(),
     ])
       .then(([svcs, profs, links, info]) => {
-        setServices(Array.isArray(svcs) ? svcs : []);
-        setProfessionals(profs);
-        setProfessionalServices(links);
+        setServices(Array.isArray(svcs) && svcs.length > 0 ? svcs : DEFAULT_SERVICES);
+        setProfessionals(Array.isArray(profs) ? profs : []);
+        setProfessionalServices(Array.isArray(links) ? links : []);
         setPublicInfo(info);
       })
-      .catch(() => setDataError(true))
+      .catch(() => {
+        setServices(DEFAULT_SERVICES);
+      })
       .finally(() => setDataLoading(false));
   };
 
@@ -268,10 +278,14 @@ export default function BookingWizard({ onClose, initialServiceId, publicInfo: p
       }
 
       const payload = {
+        serviceId: selectedServices[0]?.id,
+        serviceIds: selectedServices.map(s => s.id),
         services: selectedServices.map(s => s.id),
         professionalId: selectedProfessional.id,
         date: selectedDate,
         time: selectedTime,
+        duration: totalDuration,
+        price: totalPrice,
         clientName: clientData.name,
         clientPhone: clientData.phone,
         clientBirthday: clientData.birthday || undefined,
@@ -289,8 +303,13 @@ export default function BookingWizard({ onClose, initialServiceId, publicInfo: p
       });
 
       if (res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setFirstAppointmentId(data.appointmentId || "");
+        const contentType = res.headers.get("content-type") || "";
+        let appointmentId = "";
+        if (contentType.includes("application/json")) {
+          const data = await res.json().catch(() => ({}));
+          appointmentId = data.appointmentId || "";
+        }
+        setFirstAppointmentId(appointmentId);
         setUpsellDismissed(false);
         setUpsellBookingSuccess(false);
         setUpsellBookingError("");
@@ -301,15 +320,19 @@ export default function BookingWizard({ onClose, initialServiceId, publicInfo: p
         const bookedCats = encodeURIComponent(selectedServices.map(s => s.category).join(","));
         setUpsellLoading(true);
         fetchAPI(`/api/bookings/upsell-suggestion?date=${selectedDate}&professionalId=${selectedProfessional.id}&endTime=${endTime}&bookedCategories=${bookedCats}`)
-          .then(r => r.json())
-          .then(d => setUpsellSuggestion(d.suggestion ?? null))
+          .then(r => (r.ok && (r.headers.get("content-type") || "").includes("json") ? r.json() : null))
+          .then(d => setUpsellSuggestion(d?.suggestion ?? null))
           .catch(() => setUpsellSuggestion(null))
           .finally(() => setUpsellLoading(false));
         return;
       }
 
       const errData = await res.json().catch(() => ({}));
-      setSubmitError(errData.error || "No se pudo confirmar el turno. Intentá de nuevo.");
+      let rawError = errData.error || "";
+      if (rawError === "Validation error") {
+        rawError = "Por favor verificá que todos los datos estén completos correctamente.";
+      }
+      setSubmitError(rawError || "No se pudo confirmar el turno. Intentá de nuevo.");
     } catch {
       setSubmitError("Error de conexión. Verificá tu internet e intentá nuevamente.");
     } finally {

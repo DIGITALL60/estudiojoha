@@ -98,40 +98,64 @@ export async function handleBotMessage(from: string, text: string, interactiveId
     (w) => normalized.includes(w)
   );
 
+  // ── Phone number normalization helper ────────────────────────────────────
+  function cleanPhone(phone: string): string {
+    let digits = (phone || "").replace(/\D/g, "");
+    if (digits.startsWith("549")) digits = digits.slice(3);
+    else if (digits.startsWith("54")) digits = digits.slice(2);
+    if (digits.startsWith("0")) digits = digits.slice(1);
+    return digits;
+  }
+
+  function phonesMatch(p1: string, p2: string): boolean {
+    const c1 = cleanPhone(p1);
+    const c2 = cleanPhone(p2);
+    if (!c1 || !c2) return false;
+    return c1 === c2 || c1.endsWith(c2) || c2.endsWith(c1);
+  }
+
   // ── Check if client is confirming/canceling from a reminder ──────────────
   // These are standalone messages outside of a booking session and should bypass any current step
-  const isConfirmation = input === "reminder_confirm" || normalized === "si" || normalized === "sí" || normalized.includes("confirmo");
-  const isCancellation = input === "reminder_cancel" || normalized === "no" || normalized === "cancelar" || normalized.includes("cancelo");
+  const isConfirmation =
+    input === "reminder_confirm" ||
+    normalized === "si" ||
+    normalized === "sí" ||
+    normalized.includes("confirmo") ||
+    normalized.includes("confirmar") ||
+    normalized.includes("asistire") ||
+    normalized.includes("asistiré") ||
+    normalized.includes("voy a ir");
+
+  const isCancellation =
+    input === "reminder_cancel" ||
+    normalized === "no" ||
+    normalized === "cancelar" ||
+    normalized.includes("cancelo") ||
+    normalized.includes("no asist") ||
+    normalized.includes("no puedo") ||
+    normalized.includes("no voy") ||
+    normalized.includes("reprogram");
 
   if (input === "reminder_confirm" || input === "reminder_cancel") {
-    // If it's explicitly a button click, we always process it as a reminder response
-    // For text matches (si/no), we only process if idle/done to avoid conflicts with other flows
-    // But since buttons send the exact ID, we can intercept them safely.
+    // Explicit button clicks are always processed as a reminder response
   }
 
   if (input === "reminder_confirm" || input === "reminder_cancel" || ((session.step === "idle" || session.step === "done") && (isConfirmation || isCancellation))) {
     if (isConfirmation || isCancellation) {
       // Look for upcoming appointment for this phone number by normalizing
       const allClients = await db.select().from(clients);
-      const client = allClients.find(c => {
-        const raw = (c.phone || "").replace(/\D/g, "");
-        if (!raw) return false;
-        return from.includes(raw) || raw.includes(from.replace(/^549?/, ""));
-      });
+      const client = allClients.find(c => phonesMatch(c.phone || "", from));
       const clientId = client?.id;
       let app = null;
 
       if (clientId) {
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        const tomorrowStr = tomorrow.toISOString().split("T")[0];
         const today = new Date().toISOString().split("T")[0];
 
         const upcomingApps = await db.select().from(appointments).where(
           and(eq(appointments.clientId, clientId), eq(appointments.status, "agendado"))
         );
 
-        // Find the closest upcoming appointment (today or tomorrow)
+        // Find the closest upcoming appointment
         const relevant = upcomingApps
           .filter(a => a.date >= today)
           .sort((a, b) => a.date.localeCompare(b.date));
@@ -155,7 +179,7 @@ export async function handleBotMessage(from: string, text: string, interactiveId
           logger.info({ from, appointmentId: app.id }, "[Bot] Turno confirmado por cliente");
           return;
         } else if (isCancellation) {
-          // Offer to reschedule instead of cancelling directly
+          // Offer ONLY to reschedule instead of direct cancellation without alternative
           session.step = "rescheduling_choosing_date";
           session.appointmentIdToReschedule = app.id;
           session.serviceId = app.serviceId;
@@ -168,7 +192,10 @@ export async function handleBotMessage(from: string, text: string, interactiveId
           await db.update(appointments).set({ status: "cancelado" }).where(eq(appointments.id, app.id));
           
           await cloudSendText(from,
-            `😕 ¡Qué lástima que no puedas venir!\n\nTu turno actual fue cancelado, pero vamos a *reprogramarlo* para otra fecha.\n\n¿Qué día te queda mejor?\nEscribilo así: *DD/MM/AAAA*\nEj: *28/07/2026*`
+            `😕 ¡Lamentamos que no puedas asistir!\n\n` +
+            `Tu turno anterior fue cancelado, pero vamos a *reprogramarlo* para otra fecha que te quede cómoda 📅\n\n` +
+            `¿Para qué fecha te gustaría reprogramar?\n` +
+            `Escribila en formato: *DD/MM/AAAA*\nEj: *28/07/2026*`
           );
           return;
         }

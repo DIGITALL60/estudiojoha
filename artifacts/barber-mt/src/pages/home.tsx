@@ -14,6 +14,8 @@ import {
   type PublicInfo,
 } from "@/lib/publicInfo";
 
+import { DEFAULT_SERVICES } from "@/lib/defaultServices";
+
 const fadeUp: Variants = {
   hidden: { opacity: 0, y: 28 },
   show: { opacity: 1, y: 0, transition: { duration: 0.65, ease: "easeOut" } },
@@ -73,7 +75,7 @@ export default function Home() {
   const [showMisTurnos, setShowMisTurnos] = useState(false);
   const [initialServiceId, setInitialServiceId] = useState<string | undefined>();
   const [selectedServiceImage, setSelectedServiceImage] = useState<string | null>(null);
-  const [sectors, setSectors] = useState<SectorGroup[]>([]);
+  const [sectors, setSectors] = useState<SectorGroup[]>(() => groupServices(DEFAULT_SERVICES));
   const [publicInfo, setPublicInfo] = useState<PublicInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -81,17 +83,30 @@ export default function Home() {
 
   useEffect(() => {
     Promise.all([
-      fetchAPI("/api/data/services").then(r => {
-        if (!r.ok) throw new Error("services failed");
-        return r.json();
-      }),
+      fetchAPI("/api/data/services")
+        .then(async r => {
+          if (!r.ok) return DEFAULT_SERVICES;
+          const data = await r.json();
+          return Array.isArray(data) && data.length > 0 ? data : DEFAULT_SERVICES;
+        })
+        .catch(() => DEFAULT_SERVICES),
       fetchPublicInfo(),
     ])
       .then(([services, info]) => {
-        setSectors(groupServices(services));
+        const grp = groupServices(services);
+        setSectors(grp);
+        if (grp.length > 0 && !openSector) {
+          setOpenSector(grp[0].id);
+        }
         setPublicInfo(info);
       })
-      .catch(() => setLoadError(true))
+      .catch(() => {
+        const grp = groupServices(DEFAULT_SERVICES);
+        setSectors(grp);
+        if (grp.length > 0 && !openSector) {
+          setOpenSector(grp[0].id);
+        }
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -357,7 +372,7 @@ export default function Home() {
           <motion.div
             initial="hidden"
             whileInView="show"
-            viewport={{ once: true, margin: "-80px" }}
+            viewport={{ once: true }}
             variants={stagger}
           >
             <motion.div variants={fadeUp} className="mb-16 text-center">
