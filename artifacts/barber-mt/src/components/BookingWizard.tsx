@@ -54,7 +54,8 @@ export default function BookingWizard({ onClose, initialServiceId, publicInfo: p
 
   // Upsell post-confirmación (con disponibilidad real)
   interface UpsellSuggestion { service: Service; time: string; date: string; }
-  const [upsellSuggestion, setUpsellSuggestion] = useState<UpsellSuggestion | null>(null);
+  const [upsellSuggestions, setUpsellSuggestions] = useState<UpsellSuggestion[]>([]);
+  const [selectedUpsellIndex, setSelectedUpsellIndex] = useState<number>(0);
   const [upsellLoading, setUpsellLoading] = useState(false);
   const [upsellDismissed, setUpsellDismissed] = useState(false);
   const [upsellBookingLoading, setUpsellBookingLoading] = useState(false);
@@ -228,22 +229,23 @@ export default function BookingWizard({ onClose, initialServiceId, publicInfo: p
   };
 
   const handleUpsellBooking = async () => {
-    if (!upsellSuggestion || !selectedProfessional) return;
+    const currentUpsell = upsellSuggestions[selectedUpsellIndex];
+    if (!currentUpsell || !selectedProfessional) return;
     setUpsellBookingLoading(true);
     setUpsellBookingError("");
     try {
-      const discountedPrice = Math.round(upsellSuggestion.service.price * 0.95);
+      const discountedPrice = Math.round(currentUpsell.service.price * 0.95);
       const res = await fetchAPI("/api/bookings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           client: clientData,
           appointment: {
-            serviceIds: [upsellSuggestion.service.id],
+            serviceIds: [currentUpsell.service.id],
             professionalId: selectedProfessional.id,
-            date: upsellSuggestion.date,
-            time: upsellSuggestion.time,
-            duration: upsellSuggestion.service.duration,
+            date: currentUpsell.date,
+            time: currentUpsell.time,
+            duration: currentUpsell.service.duration,
             price: discountedPrice,
             notes: `UPSELL_5PCT - vinculado a turno ${firstAppointmentId}`,
           },
@@ -336,8 +338,12 @@ export default function BookingWizard({ onClose, initialServiceId, publicInfo: p
         setUpsellLoading(true);
         fetchAPI(`/api/bookings/upsell-suggestion?date=${selectedDate}&professionalId=${selectedProfessional.id}&endTime=${endTime}&bookedCategories=${bookedCats}`)
           .then(r => (r.ok && (r.headers.get("content-type") || "").includes("json") ? r.json() : null))
-          .then(d => setUpsellSuggestion(d?.suggestion ?? null))
-          .catch(() => setUpsellSuggestion(null))
+          .then(d => {
+            const list = d?.suggestions || (d?.suggestion ? [d.suggestion] : []);
+            setUpsellSuggestions(list);
+            setSelectedUpsellIndex(0);
+          })
+          .catch(() => setUpsellSuggestions([]))
           .finally(() => setUpsellLoading(false));
         return;
       }
@@ -445,46 +451,6 @@ export default function BookingWizard({ onClose, initialServiceId, publicInfo: p
               Tu reserva ya está registrada en la agenda del estudio.
             </motion.p>
 
-            {/* Direct WhatsApp Confirmation Button */}
-            {(() => {
-              const rawPhone = (publicInfo?.settings?.business_phone || "5493510000000").replace(/\D/g, "");
-              const servicesList = selectedServices.map(s => s.name).join(", ");
-              const waText = encodeURIComponent(
-                `¡Hola Estudio Joha Molinero! 🌸\nMi nombre es ${clientData.name}.\nAcabo de reservar un turno:\n💅 *${servicesList}*\n🗓️ *Fecha:* ${selectedDate}\n⏰ *Hora:* ${selectedTime} hs\n👤 *Profesional:* ${selectedProfessional?.name || "Estudio"}\n\n¡Confirmado!`
-              );
-              const waLink = `https://wa.me/${rawPhone.startsWith("54") ? rawPhone : "54" + rawPhone}?text=${waText}`;
-
-              return (
-                <motion.a
-                  href={waLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.35 }}
-                  className="w-full max-w-sm flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm py-3.5 px-4 rounded-xl shadow-lg shadow-emerald-500/20 transition-all hover:scale-[1.02] active:scale-[0.98] mb-6"
-                >
-                  <MessageCircle size={18} />
-                  <span>Enviar Confirmación por WhatsApp</span>
-                </motion.a>
-              );
-            })()}
-
-            {/* Salon Policy Card */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.4 }}
-              className="w-full max-w-sm bg-muted/30 border border-border/50 rounded-xl p-4 mb-6 text-left text-xs text-muted-foreground space-y-1.5"
-            >
-              <div className="flex items-center gap-1.5 font-semibold text-foreground mb-1">
-                <AlertCircle size={14} className="text-primary" />
-                <span>Política del Estudio</span>
-              </div>
-              <p>• Tolerancia de puntualidad: <strong>10 minutos</strong>.</p>
-              <p>• Reprogramación o cancelación con <strong>24 hs de anticipación</strong>.</p>
-            </motion.div>
-
             {/* Confirmación de segundo turno agregado */}
             <AnimatePresence>
               {upsellBookingSuccess && (
@@ -496,7 +462,7 @@ export default function BookingWizard({ onClose, initialServiceId, publicInfo: p
                   <div>
                     <p className="text-sm font-semibold text-emerald-400">¡Segundo turno reservado!</p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {upsellSuggestion?.service.name} a las {upsellSuggestion?.time} hs.
+                      {upsellSuggestions[selectedUpsellIndex]?.service?.name} a las {upsellSuggestions[selectedUpsellIndex]?.time} hs.
                       Te llega un WhatsApp con los detalles.
                     </p>
                   </div>
@@ -504,26 +470,22 @@ export default function BookingWizard({ onClose, initialServiceId, publicInfo: p
               )}
             </AnimatePresence>
 
-            {/* Card de upsell con disponibilidad real */}
+            {/* Card de 3 Ofertas Exclusivas con disponibilidad real */}
             <AnimatePresence>
-              {!upsellDismissed && (upsellLoading || upsellSuggestion) && (
+              {!upsellDismissed && (upsellLoading || upsellSuggestions.length > 0) && (
                 <motion.div
                   initial={{ opacity: 0, y: 20, scale: 0.95 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 10, scale: 0.97 }}
                   transition={{ delay: 0.4, duration: 0.4, ease: "easeOut" }}
-                  className="w-full max-w-sm rounded-2xl border border-primary/50 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent p-5 mb-6 relative overflow-hidden"
+                  className="w-full max-w-sm rounded-2xl border border-primary/50 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent p-5 mb-6 relative overflow-hidden text-left"
                 >
                   <div className="absolute -top-8 -right-8 w-32 h-32 bg-primary/10 rounded-full blur-2xl pointer-events-none" />
-                  <div className="absolute -bottom-4 -left-4 w-20 h-20 bg-primary/5 rounded-full blur-xl pointer-events-none" />
 
                   <div className="relative">
                     <div className="flex items-center gap-2 mb-3">
                       <Sparkles size={14} className="text-primary flex-shrink-0" />
-                      <span className="text-[11px] font-bold text-primary uppercase tracking-wider">Oferta exclusiva para vos</span>
-                      <span className="ml-auto text-[10px] font-black bg-primary text-primary-foreground px-2 py-0.5 rounded-full flex items-center gap-1">
-                        <Tag size={8} /> 5% OFF
-                      </span>
+                      <span className="text-[11px] font-bold text-primary uppercase tracking-wider">Ofertas Exclusivas con 5% OFF</span>
                     </div>
 
                     {upsellLoading ? (
@@ -531,46 +493,70 @@ export default function BookingWizard({ onClose, initialServiceId, publicInfo: p
                         <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: "linear" }}>
                           <Clock size={14} />
                         </motion.div>
-                        <span className="text-xs">Buscando turno disponible...</span>
+                        <span className="text-xs">Buscando servicios disponibles...</span>
                       </div>
-                    ) : upsellSuggestion ? (
+                    ) : upsellSuggestions.length > 0 ? (
                       <>
-                        <p className="text-sm text-foreground leading-snug mb-0.5">
-                          Al finalizar tu turno, ¿te gustaría hacerte
+                        <p className="text-xs text-foreground leading-snug mb-3 font-medium">
+                          Al finalizar tu turno, ¿te gustaría aprovechar alguna de estas opciones disponibles?
                         </p>
-                        <p className="text-lg font-serif font-semibold text-foreground mb-1">
-                          {upsellSuggestion.service.name}
-                        </p>
-                        <div className="flex items-center gap-3 mb-1">
-                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <Clock size={10} /> {upsellSuggestion.service.duration} min
-                          </span>
-                          <span className="text-xs font-bold text-primary">a las {upsellSuggestion.time} hs</span>
+
+                        <div className="space-y-2 mb-4">
+                          {upsellSuggestions.map((item, idx) => {
+                            const isSelected = selectedUpsellIndex === idx;
+                            const discPrice = Math.round(item.service.price * 0.95);
+                            return (
+                              <button
+                                key={item.service.id + idx}
+                                onClick={() => setSelectedUpsellIndex(idx)}
+                                className={`w-full p-3 rounded-xl border text-left transition-all flex items-start justify-between ${
+                                  isSelected
+                                    ? "border-primary bg-primary/10 shadow-sm"
+                                    : "border-border/40 bg-card/60 hover:bg-card"
+                                }`}
+                              >
+                                <div className="flex items-start gap-2.5 min-w-0 pr-2">
+                                  <div className={`w-4 h-4 rounded-full border flex items-center justify-center mt-0.5 flex-shrink-0 ${
+                                    isSelected ? "border-primary bg-primary" : "border-muted-foreground/40"
+                                  }`}>
+                                    {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-primary-foreground" />}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="text-xs font-semibold text-foreground truncate">{item.service.name}</p>
+                                    <p className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-1">
+                                      <Clock size={9} /> {item.service.duration} min • <span className="font-semibold text-primary">a las {item.time} hs</span>
+                                    </p>
+                                  </div>
+                                </div>
+                                {item.service.price > 0 && (
+                                  <div className="text-right flex-shrink-0">
+                                    <p className="text-[10px] text-muted-foreground line-through">${item.service.price.toLocaleString("es-AR")}</p>
+                                    <p className="text-xs font-bold text-primary">${discPrice.toLocaleString("es-AR")}</p>
+                                  </div>
+                                )}
+                              </button>
+                            );
+                          })}
                         </div>
-                        {upsellSuggestion.service.price > 0 && (
-                          <div className="flex items-center gap-2 mb-4">
-                            <span className="text-xs text-muted-foreground line-through">${upsellSuggestion.service.price.toLocaleString("es-AR")}</span>
-                            <span className="text-base font-bold text-primary">${Math.round(upsellSuggestion.service.price * 0.95).toLocaleString("es-AR")}</span>
-                            <span className="text-[10px] text-emerald-400">(-5%)</span>
-                          </div>
-                        )}
+
                         {upsellBookingError && (
                           <p className="text-xs text-red-400 mb-3 flex items-center gap-1">
                             <AlertCircle size={11} /> {upsellBookingError}
                           </p>
                         )}
+
                         <div className="flex gap-2">
                           <button
                             onClick={handleUpsellBooking}
                             disabled={upsellBookingLoading}
-                            className="flex-1 bg-primary text-primary-foreground text-sm font-bold py-3 rounded-xl hover:bg-primary/90 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60"
+                            className="flex-1 bg-primary text-primary-foreground text-xs font-bold py-3 rounded-xl hover:bg-primary/90 transition-all disabled:opacity-60"
                           >
-                            {upsellBookingLoading ? "Reservando..." : "¡Sí, lo agrego!"}
+                            {upsellBookingLoading ? "Reservando..." : "¡Sí, agregar este servicio!"}
                           </button>
                           <button
                             onClick={() => setUpsellDismissed(true)}
                             disabled={upsellBookingLoading}
-                            className="text-sm text-muted-foreground border border-border/50 px-4 py-3 rounded-xl hover:border-primary/30 transition-colors"
+                            className="text-xs text-muted-foreground border border-border/50 px-3 py-3 rounded-xl hover:border-primary/30 transition-colors"
                           >
                             No, gracias
                           </button>

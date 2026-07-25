@@ -224,7 +224,7 @@ router.get("/upsell-suggestion", async (req, res) => {
     // Mezclar para no mostrar siempre el mismo
     const shuffled = candidates.sort(() => Math.random() - 0.5);
 
-    // Verificar disponibilidad real para cada candidato en el horario endTime
+    const suggestions = [];
     for (const svc of shuffled) {
       const avail = await isTimeSlotAvailable(
         String(date),
@@ -234,21 +234,23 @@ router.get("/upsell-suggestion", async (req, res) => {
       );
 
       if (avail.available) {
-        return res.json({
-          suggestion: {
-            service: svc,
-            time: String(endTime),
-            date: String(date),
-          },
+        suggestions.push({
+          service: svc,
+          time: String(endTime),
+          date: String(date),
         });
+        if (suggestions.length >= 3) break;
       }
     }
 
-    return res.json({ suggestion: null });
+    return res.json({
+      suggestion: suggestions[0] || null,
+      suggestions,
+    });
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error);
     logger.error({ error, errMsg }, "Error fetching upsell suggestion");
-    return res.json({ suggestion: null });
+    return res.json({ suggestion: null, suggestions: [] });
   }
 });
 
