@@ -102,8 +102,10 @@ export default function CierreMensual() {
   }, [selectedYear, selectedMonth]);
 
   // Calculations
-  const completedApps = appointments.filter((a) => a.status === "completado" || a.status === "agendado" || a.status === "confirmado");
+  const completedApps = appointments.filter((a) => a.status === "completado");
+  const pendingApps = appointments.filter((a) => a.status === "agendado" || a.status === "confirmado");
   const totalIncome = completedApps.reduce((sum, a) => sum + (a.price || 0), 0);
+  const expectedPendingIncome = pendingApps.reduce((sum, a) => sum + (a.price || 0), 0);
   const totalExpenses = expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
   const netProfit = totalIncome - totalExpenses;
   const margin = totalIncome > 0 ? Math.round((netProfit / totalIncome) * 100) : 0;
@@ -127,13 +129,17 @@ export default function CierreMensual() {
   // Performance by professional
   const profPerformance = professionals.map((p) => {
     const profApps = completedApps.filter((a) => a.professionalName === p.name);
-    const total = profApps.reduce((sum, a) => sum + a.price, 0);
+    const profPendingApps = pendingApps.filter((a) => a.professionalName === p.name);
+    const total = profApps.reduce((sum, a) => sum + (a.price || 0), 0);
+    const pendingTotal = profPendingApps.reduce((sum, a) => sum + (a.price || 0), 0);
     return {
       id: p.id,
       name: p.name,
       role: p.role,
       color: p.color,
       count: profApps.length,
+      pendingCount: profPendingApps.length,
+      pendingTotal,
       total,
       share: totalIncome > 0 ? Math.round((total / totalIncome) * 100) : 0,
     };
@@ -472,12 +478,14 @@ export default function CierreMensual() {
                   />
                   <div>
                     <p className="text-xs font-medium text-foreground">{prof.name}</p>
-                    <p className="text-[10px] text-muted-foreground">{prof.count} turnos</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {prof.count} completado{prof.count !== 1 ? "s" : ""} {prof.pendingCount > 0 ? `(${prof.pendingCount} pendiente${prof.pendingCount !== 1 ? "s" : ""})` : ""}
+                    </p>
                   </div>
                 </div>
                 <div className="text-right">
                   <p className="text-xs font-semibold text-foreground">${prof.total.toLocaleString("es-AR")}</p>
-                  <p className="text-[10px] text-primary font-medium">{prof.share}% recaudación</p>
+                  <p className="text-[10px] text-primary font-medium">{prof.share}% recaudación cobrada</p>
                 </div>
               </div>
             ))}
