@@ -36,7 +36,8 @@ export default function MiResumen() {
   const [activeProfessionalId, setActiveProfessionalId] = useState<string>("all");
   const [currentMonthDate, setCurrentMonthDate] = useState(new Date());
   const [loading, setLoading] = useState(true);
-  const [shopGoal] = useState<number>(50000); // Meta objetivo mensual de ventas shop por profesional
+  const [shopGoal] = useState<number>(50000);
+  const [feedTab, setFeedTab] = useState<"proximos" | "cancelados">("proximos");
 
   useEffect(() => {
     const userStr = localStorage.getItem("user");
@@ -235,7 +236,12 @@ export default function MiResumen() {
               <p className="text-2xl font-bold text-foreground">{completedApps.length} <span className="text-xs text-muted-foreground font-normal">realizados</span></p>
               <div className="mt-3 flex items-center justify-between text-[11px] text-muted-foreground pt-2 border-t border-border/40">
                 <span>{confirmedApps.length} confirmados</span>
-                <span>{canceledApps.length} cancelados</span>
+                <button 
+                  onClick={() => setFeedTab("cancelados")} 
+                  className="font-bold text-red-500 hover:underline cursor-pointer flex items-center gap-1"
+                >
+                  {canceledApps.length} cancelados ➔
+                </button>
               </div>
             </div>
 
@@ -322,36 +328,106 @@ export default function MiResumen() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Left 2 Cols: Feed de Próximos Turnos */}
+            {/* Left 2 Cols: Feed de Turnos */}
             <div className="lg:col-span-2 bg-card border border-border/60 rounded-2xl p-5 shadow-xs">
-              <div className="flex items-center justify-between mb-4 pb-3 border-b border-border/40">
-                <div className="flex items-center gap-2">
-                  <Clock size={16} className="text-primary" />
-                  <h3 className="text-sm font-bold text-foreground">Próximos Turnos Asignados</h3>
+              <div className="flex items-center justify-between mb-4 pb-3 border-b border-border/40 gap-2 flex-wrap">
+                <div className="flex items-center gap-2 bg-muted/30 p-1 rounded-xl border border-border/40">
+                  <button
+                    onClick={() => setFeedTab("proximos")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                      feedTab === "proximos" 
+                        ? "bg-card text-foreground shadow-xs border border-border/60" 
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <Clock size={14} className="text-primary" /> Próximos / Asignados ({upcomingApps.length})
+                  </button>
+                  <button
+                    onClick={() => setFeedTab("cancelados")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                      feedTab === "cancelados" 
+                        ? "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/30" 
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    🔴 Turnos Cancelados ({canceledApps.length})
+                  </button>
                 </div>
-                <span className="text-xs text-muted-foreground">{upcomingApps.length} turnos</span>
               </div>
 
-              {upcomingApps.length > 0 ? (
-                <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1 scrollbar-thin">
-                  {upcomingApps.map(app => {
-                    const isConfirmed = app.status === "confirmado" || app.status === "completado";
-                    return (
+              {feedTab === "proximos" ? (
+                upcomingApps.length > 0 ? (
+                  <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1 scrollbar-thin">
+                    {upcomingApps.map(app => {
+                      const isConfirmed = app.status === "confirmado" || app.status === "completado";
+                      return (
+                        <div 
+                          key={app.id}
+                          className={`p-3.5 rounded-xl border transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
+                            isConfirmed 
+                              ? "bg-emerald-500/5 border-emerald-500/25" 
+                              : "bg-amber-500/5 border-amber-500/25"
+                          }`}
+                        >
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-bold text-foreground">{app.clientName}</span>
+                              <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md ${
+                                isConfirmed ? "bg-emerald-500 text-white" : "bg-amber-500 text-white"
+                              }`}>
+                                {isConfirmed ? "CONFIRMADO ✓" : "PENDIENTE"}
+                              </span>
+                            </div>
+                            <p className="text-xs text-muted-foreground">{app.serviceName}</p>
+                            <div className="flex items-center gap-3 text-xs font-semibold text-foreground/80 mt-1">
+                              <span>📅 {app.date.split("-").reverse().join("/")}</span>
+                              <span>⏰ {app.time}hs</span>
+                              <span className="text-muted-foreground font-normal">${app.price?.toLocaleString("es-AR")}</span>
+                            </div>
+                          </div>
+
+                          {!isConfirmed && app.clientPhone && (
+                            <div className="flex items-center gap-2 self-end sm:self-center">
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    await fetchAPI(`/api/data/appointments/${app.id}/remind`, { method: "POST" });
+                                    alert("¡Recordatorio automático enviado por WhatsApp!");
+                                    loadData();
+                                  } catch {
+                                    window.open(whatsappUrl(app.clientPhone!, `¡Hola ${app.clientName}! 👋 Te escribimos desde Estudio Joha Molinero para recordarte tu turno de ${app.serviceName} el día ${app.date.split("-").reverse().join("/")} a las ${app.time}hs. Por favor, ¿nos confirmás si vas a asistir? Muchas gracias! 💖`), "_blank");
+                                  }
+                                }}
+                                className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"
+                              >
+                                <MessageCircle size={14} /> Solicitar Confirmación
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="py-12 text-center text-xs text-muted-foreground">
+                    <Calendar size={28} className="mx-auto mb-2 opacity-40" />
+                    No tenés más turnos próximos programados.
+                  </div>
+                )
+              ) : (
+                /* Feed de Turnos Cancelados */
+                canceledApps.length > 0 ? (
+                  <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1 scrollbar-thin">
+                    {canceledApps.map(app => (
                       <div 
                         key={app.id}
-                        className={`p-3.5 rounded-xl border transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
-                          isConfirmed 
-                            ? "bg-emerald-500/5 border-emerald-500/25" 
-                            : "bg-amber-500/5 border-amber-500/25"
-                        }`}
+                        className="p-3.5 rounded-xl border border-red-500/30 bg-red-500/5 transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
                       >
                         <div className="space-y-1">
                           <div className="flex items-center gap-2">
                             <span className="text-sm font-bold text-foreground">{app.clientName}</span>
-                            <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md ${
-                              isConfirmed ? "bg-emerald-500 text-white" : "bg-amber-500 text-white"
-                            }`}>
-                              {isConfirmed ? "CONFIRMADO ✓" : "PENDIENTE"}
+                            <span className="bg-red-600 text-white text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md">
+                              CANCELADO
                             </span>
                           </div>
                           <p className="text-xs text-muted-foreground">{app.serviceName}</p>
@@ -362,33 +438,25 @@ export default function MiResumen() {
                           </div>
                         </div>
 
-                        {!isConfirmed && app.clientPhone && (
-                          <div className="flex items-center gap-2 self-end sm:self-center">
-                            <button
-                              onClick={async () => {
-                                try {
-                                  await fetchAPI(`/api/data/appointments/${app.id}/remind`, { method: "POST" });
-                                  alert("¡Recordatorio automático enviado por WhatsApp!");
-                                  loadData();
-                                } catch {
-                                  window.open(whatsappUrl(app.clientPhone!, `¡Hola ${app.clientName}! 👋 Te escribimos desde Estudio Joha Molinero para recordarte tu turno de ${app.serviceName} el día ${app.date.split("-").reverse().join("/")} a las ${app.time}hs. Por favor, ¿nos confirmás si vas a asistir? Muchas gracias! 💖`), "_blank");
-                                }
-                              }}
-                              className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"
-                            >
-                              <MessageCircle size={14} /> Solicitar Confirmación
-                            </button>
-                          </div>
+                        {app.clientPhone && (
+                          <a
+                            href={whatsappUrl(app.clientPhone, `¡Hola ${app.clientName}! 👋 Te escribimos desde Estudio Joha Molinero. Vimos que tu turno del ${app.date.split("-").reverse().join("/")} quedó cancelado. Si querés reprogramar tu cita, con gusto te ayudamos a buscar un nuevo horario disponible. ✨`)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="bg-red-500/10 hover:bg-red-500/20 text-red-500 text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors self-end sm:self-center"
+                          >
+                            <MessageCircle size={14} /> Reprogramar WA
+                          </a>
                         )}
                       </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="py-12 text-center text-xs text-muted-foreground">
-                  <Calendar size={28} className="mx-auto mb-2 opacity-40" />
-                  No tenés más turnos próximos programados.
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="py-12 text-center text-xs text-muted-foreground">
+                    <Calendar size={28} className="mx-auto mb-2 opacity-40 text-emerald-500" />
+                    ¡Excelente! No tenés turnos cancelados en este período.
+                  </div>
+                )
               )}
             </div>
 

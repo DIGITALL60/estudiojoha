@@ -283,8 +283,8 @@ export default function AdminLayout({ children, title, subtitle, actions }: Admi
           {navConfig.sections.map((section) => {
             const visibleItems = section.items.filter(item => {
               if (isAdmin) return true;
-              // Staff can see: agenda, horarios, mi-resumen, historias
-              return item.id === "agenda" || item.id === "horarios" || item.id === "mi-resumen" || item.id === "historias";
+              // Staff can see: agenda, horarios, mi-resumen, historia-turnos, historias
+              return item.id === "agenda" || item.id === "horarios" || item.id === "mi-resumen" || item.id === "historia-turnos" || item.id === "historias";
             });
             if (visibleItems.length === 0) return null;
 
