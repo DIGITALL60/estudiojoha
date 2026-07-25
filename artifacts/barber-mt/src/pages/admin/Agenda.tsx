@@ -749,6 +749,9 @@ export default function Agenda() {
                         const isAgendado = app.status === "agendado" || !app.status;
                         return (
                           <div key={app.id} onClick={(e) => { e.stopPropagation(); setEditingApp(app); }}
+                            onMouseEnter={(e) => setHoveredApp({ app, x: e.clientX, y: e.clientY })}
+                            onMouseMove={(e) => setHoveredApp(prev => prev ? { ...prev, x: e.clientX, y: e.clientY } : null)}
+                            onMouseLeave={() => setHoveredApp(null)}
                             className="text-[9px] px-1.5 py-0.5 rounded-sm truncate cursor-pointer hover:opacity-80 transition-opacity"
                             style={{
                               backgroundColor: `${profColor}22`,
