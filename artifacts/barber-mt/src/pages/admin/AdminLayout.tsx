@@ -63,6 +63,7 @@ const navConfig = {
       title: "Finanzas",
       items: [
         { id: "caja", label: "Caja", icon: "wallet", path: "/admin/caja" },
+        { id: "cierre-mensual", label: "Cierre Mensual", icon: "calculator", path: "/admin/cierre-mensual" },
         { id: "rentabilidad", label: "Rentabilidad", icon: "chart-line", path: "/admin/rentabilidad" },
         { id: "salarios", label: "Salarios", icon: "badge-dollar-sign", path: "/admin/salarios" },
       ],

@@ -18,6 +18,7 @@ import Stock from "@/pages/admin/Stock";
 import Staff from "@/pages/admin/Staff";
 import Cursos from "@/pages/admin/Cursos";
 import Caja from "@/pages/admin/Caja";
+import CierreMensual from "@/pages/admin/CierreMensual";
 import Rentabilidad from "@/pages/admin/Rentabilidad";
 import Salarios from "@/pages/admin/Salarios";
 import Historias from "@/pages/admin/Historias";
@@ -83,6 +84,7 @@ function Router() {
       <Route path="/admin/staff">{(params) => <AuthRoute component={Staff} adminOnly />}</Route>
       <Route path="/admin/cursos">{(params) => <AuthRoute component={Cursos} adminOnly />}</Route>
       <Route path="/admin/caja">{(params) => <AuthRoute component={Caja} adminOnly />}</Route>
+      <Route path="/admin/cierre-mensual">{(params) => <AuthRoute component={CierreMensual} adminOnly />}</Route>
       <Route path="/admin/rentabilidad">{(params) => <AuthRoute component={Rentabilidad} adminOnly />}</Route>
       <Route path="/admin/salarios">{(params) => <AuthRoute component={Salarios} adminOnly />}</Route>
       <Route path="/admin/marketing/historias">{(params) => <AuthRoute component={Historias} />}</Route>
