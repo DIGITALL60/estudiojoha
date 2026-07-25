@@ -211,11 +211,11 @@ export default function Home() {
               {businessName} · Río Segundo, Cba
             </motion.p>
 
-            <h1 className="font-serif font-light text-5xl sm:text-6xl md:text-8xl lg:text-9xl text-foreground leading-[0.9] mb-8">
+            <h1 className="font-serif font-light text-4xl sm:text-6xl md:text-8xl lg:text-9xl text-foreground leading-[1.15] mb-8">
               Tu mejor{" "}
-              <em className="font-cursive not-italic text-primary text-6xl sm:text-7xl md:text-8xl lg:text-[140px] leading-[0.5] relative top-2 sm:top-4 inline-block transform -rotate-2">
+              <span className="font-cursive not-italic text-primary font-normal">
                 versión
-              </em>
+              </span>
               ,<br />
               en cada visita.
             </h1>
