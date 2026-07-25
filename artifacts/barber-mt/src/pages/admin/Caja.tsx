@@ -7,7 +7,7 @@ import AdminLayout from "./AdminLayout";
 interface AppointmentRow {
   id: string; date: string; time: string; price: number; status: string;
   clientName: string; professionalName: string; serviceName: string; paymentMethod: string;
-  shopSales?: number;
+  shopSales?: number; notes?: string;
 }
 interface Professional { id: string; name: string; }
 interface Client { id: string; name: string; phone: string; }
@@ -40,6 +40,7 @@ export default function Caja() {
   const [activeTab, setActiveTab] = useState<"dia" | "mes" | "rapido">("dia");
   const [quickAction, setQuickAction] = useState<"cobro" | "shop" | "egreso">("cobro");
   const [newQuickApp, setNewQuickApp] = useState({ clientId: "", professionalId: "", serviceId: "", amount: "", paymentMethod: "Efectivo", time: "10:00" });
+  const [viewReceipt, setViewReceipt] = useState<string | null>(null);
 
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
 
@@ -360,30 +361,42 @@ export default function Caja() {
               {completedApps.length > 0 ? (
                 <table className="w-full">
                   <tbody>
-                    {completedApps.map((a, i) => (
-                      <tr key={i} className="border-b border-border/20 last:border-0 hover:bg-accent/5 transition-colors">
-                        <td className="px-5 py-4">
-                          <div className="flex flex-col">
-                            <span className="text-xs font-semibold text-foreground">{a.clientName}</span>
-                            <span className="text-[10px] text-muted-foreground">{a.time} · {a.serviceName}</span>
-                          </div>
-                        </td>
-                        <td className="px-5 py-4 hidden sm:table-cell">
-                          <span className="text-xs text-muted-foreground">{a.professionalName}</span>
-                        </td>
-                        <td className="px-5 py-4 hidden sm:table-cell">
-                          <span className="text-[10px] px-2 py-1 bg-emerald-500/10 text-emerald-500 rounded-sm uppercase tracking-wider">{a.paymentMethod || "Efectivo"}</span>
-                        </td>
-                        <td className="px-5 py-4 text-right">
-                          <div className="flex flex-col items-end">
-                            <span className="text-xs font-bold text-foreground">$ {a.price.toLocaleString("es-AR")}</span>
-                            {(a.shopSales || 0) > 0 && (
-                              <span className="text-[10px] text-emerald-400">+ $ {a.shopSales!.toLocaleString("es-AR")} shop</span>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                    {completedApps.map((a, i) => {
+                      const receiptMatch = a.notes?.includes("[COMPROBANTE]") ? a.notes.split("[COMPROBANTE]")[1] : null;
+                      return (
+                        <tr key={i} className="border-b border-border/20 last:border-0 hover:bg-accent/5 transition-colors">
+                          <td className="px-5 py-4">
+                            <div className="flex flex-col">
+                              <span className="text-xs font-semibold text-foreground">{a.clientName}</span>
+                              <span className="text-[10px] text-muted-foreground">{a.time} · {a.serviceName}</span>
+                              {receiptMatch && (
+                                <button
+                                  type="button"
+                                  onClick={() => setViewReceipt(receiptMatch)}
+                                  className="w-fit mt-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 px-2 py-0.5 rounded flex items-center gap-1 transition-colors"
+                                >
+                                  📷 Ver Comprobante
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-5 py-4 hidden sm:table-cell">
+                            <span className="text-xs text-muted-foreground">{a.professionalName}</span>
+                          </td>
+                          <td className="px-5 py-4 hidden sm:table-cell">
+                            <span className="text-[10px] px-2 py-1 bg-emerald-500/10 text-emerald-500 rounded-sm uppercase tracking-wider">{a.paymentMethod || "Efectivo"}</span>
+                          </td>
+                          <td className="px-5 py-4 text-right">
+                            <div className="flex flex-col items-end">
+                              <span className="text-xs font-bold text-foreground">$ {a.price.toLocaleString("es-AR")}</span>
+                              {(a.shopSales || 0) > 0 && (
+                                <span className="text-[10px] text-emerald-400">+ $ {a.shopSales!.toLocaleString("es-AR")} shop</span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               ) : (

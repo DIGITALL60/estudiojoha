@@ -367,44 +367,48 @@ function EditTurnModal({ app, onClose, onUpdated }: { app: Appointment; onClose:
     }
   };
 
+  const [showFullReceipt, setShowFullReceipt] = useState(false);
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-sm overflow-y-auto">
       <motion.div initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }}
-        className="bg-card border border-border rounded-sm w-full max-w-sm">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+        className="bg-card border border-border rounded-xl w-full max-w-md max-h-[90vh] flex flex-col shadow-2xl overflow-hidden my-auto">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-border flex-shrink-0 bg-muted/20">
           <h2 className="text-sm font-semibold text-foreground">Detalle del turno</h2>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X size={16} /></button>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1 rounded-sm"><X size={16} /></button>
         </div>
-        <div className="p-5 space-y-4">
+
+        <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1 scrollbar-thin">
           <div>
             <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted-foreground mb-1">Cliente</p>
-            <p className="text-sm text-foreground font-medium">{app.clientName}</p>
+            <p className="text-sm text-foreground font-semibold">{app.clientName}</p>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted-foreground mb-1">Servicio</p>
-              <p className="text-sm text-foreground">{app.serviceName}</p>
+              <p className="text-xs text-foreground font-medium">{app.serviceName}</p>
             </div>
             <div>
               <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted-foreground mb-1">Profesional</p>
-              <p className="text-sm text-foreground">{app.professionalName}</p>
+              <p className="text-xs text-foreground font-medium">{app.professionalName}</p>
             </div>
             <div>
               <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted-foreground mb-1">Fecha y Hora</p>
-              <p className="text-sm text-foreground">{app.date} a las {app.time}</p>
+              <p className="text-xs text-foreground font-medium">{app.date} a las {app.time}hs</p>
             </div>
             <div>
-              <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted-foreground mb-1">Precio</p>
-              <p className="text-sm text-foreground">${app.price}</p>
+              <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted-foreground mb-1">Precio Servicio</p>
+              <p className="text-xs text-foreground font-bold">${app.price?.toLocaleString("es-AR")}</p>
             </div>
           </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted-foreground block mb-1.5">Estado</label>
               <select value={status} onChange={e => setStatus(e.target.value)}
-                className="w-full bg-background border border-border rounded-sm px-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-primary">
-                <option value="agendado">Agendado</option>
+                className="w-full bg-background border border-border rounded-sm px-3 py-2 text-xs text-foreground focus:outline-none focus:border-primary">
+                <option value="agendado">Agendado (Pendiente)</option>
                 <option value="confirmado">✅ Confirmado</option>
                 <option value="completado">Completado</option>
                 <option value="cancelado">Cancelado</option>
@@ -413,7 +417,7 @@ function EditTurnModal({ app, onClose, onUpdated }: { app: Appointment; onClose:
             <div>
               <label className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted-foreground block mb-1.5 text-emerald-500">Método de pago</label>
               <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}
-                className="w-full bg-background border border-emerald-500/50 rounded-sm px-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-emerald-500">
+                className="w-full bg-background border border-emerald-500/50 rounded-sm px-3 py-2 text-xs text-foreground focus:outline-none focus:border-emerald-500">
                 <option value="Efectivo">Efectivo</option>
                 <option value="Transferencia">Transferencia</option>
                 <option value="Tarjeta">Tarjeta</option>
@@ -421,120 +425,145 @@ function EditTurnModal({ app, onClose, onUpdated }: { app: Appointment; onClose:
               </select>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2">
-              <label className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted-foreground block mb-1.5 text-emerald-500">
-                Ventas de Shop
-              </label>
-              <div className="space-y-2 bg-emerald-500/5 border border-emerald-500/20 p-2.5 rounded-sm">
-                {selectedProducts.map((sp, idx) => (
-                  <div key={idx} className="flex justify-between items-center text-xs">
-                    <span>{sp.qty}x {sp.name}</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-muted-foreground">${sp.price * sp.qty}</span>
-                      <button onClick={() => {
-                        const next = [...selectedProducts];
-                        next.splice(idx, 1);
-                        setSelectedProducts(next);
-                        setShopSales(next.reduce((acc, item) => acc + (item.price * item.qty), 0));
-                      }} className="text-red-400 hover:text-red-500"><X size={12} /></button>
-                    </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted-foreground block text-emerald-500">
+              Ventas de Shop
+            </label>
+            <div className="space-y-2 bg-emerald-500/5 border border-emerald-500/20 p-2.5 rounded-sm">
+              {selectedProducts.map((sp, idx) => (
+                <div key={idx} className="flex justify-between items-center text-xs">
+                  <span>{sp.qty}x {sp.name}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground">${sp.price * sp.qty}</span>
+                    <button onClick={() => {
+                      const next = [...selectedProducts];
+                      next.splice(idx, 1);
+                      setSelectedProducts(next);
+                      setShopSales(next.reduce((acc, item) => acc + (item.price * item.qty), 0));
+                    }} className="text-red-400 hover:text-red-500 p-1"><X size={12} /></button>
                   </div>
-                ))}
-                <div className="flex items-center gap-2">
-                  <select 
-                    className="flex-1 bg-background border border-emerald-500/50 rounded-sm px-2 py-1.5 text-xs focus:outline-none"
-                    value=""
-                    onChange={e => {
-                      const p = products.find(prod => prod.id === e.target.value);
-                      if (p) {
-                        // Check if already in list, just increase qty
-                        const existingIdx = selectedProducts.findIndex(sp => sp.id === p.id);
-                        let next = [...selectedProducts];
-                        if (existingIdx >= 0) {
-                           next[existingIdx].qty += 1;
-                        } else {
-                           next = [...selectedProducts, { id: p.id, name: p.name, price: p.price, qty: 1 }];
-                        }
-                        setSelectedProducts(next);
-                        setShopSales(next.reduce((acc, item) => acc + (item.price * item.qty), 0));
+                </div>
+              ))}
+              <div className="flex items-center gap-2">
+                <select 
+                  className="flex-1 bg-background border border-emerald-500/50 rounded-sm px-2 py-1.5 text-xs focus:outline-none"
+                  value=""
+                  onChange={e => {
+                    const p = products.find(prod => prod.id === e.target.value);
+                    if (p) {
+                      const existingIdx = selectedProducts.findIndex(sp => sp.id === p.id);
+                      let next = [...selectedProducts];
+                      if (existingIdx >= 0) {
+                         next[existingIdx].qty += 1;
+                      } else {
+                         next = [...selectedProducts, { id: p.id, name: p.name, price: p.price, qty: 1 }];
                       }
-                    }}
-                  >
-                    <option value="">+ Agregar producto vendido...</option>
-                    {products.map(p => <option key={p.id} value={p.id} disabled={p.stock <= 0}>{p.name} (${p.price}) {p.stock <= 0 ? '(Sin stock)' : ''}</option>)}
-                  </select>
-                </div>
-                
-                <div className="flex items-center justify-between pt-2 border-t border-emerald-500/20 mt-2">
-                   <span className="text-[10px] font-medium text-emerald-600 uppercase">Ajuste Manual / Total:</span>
-                   <div className="relative w-24">
-                     <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">$</span>
-                     <input
-                       type="number"
-                       min={0}
-                       value={shopSales || ""}
-                       onChange={e => setShopSales(e.target.value ? Number(e.target.value) : 0)}
-                       className="w-full bg-background border border-emerald-500/50 rounded-sm pl-6 pr-2 py-1 text-xs text-foreground focus:outline-none focus:border-emerald-500"
-                     />
-                   </div>
-                </div>
+                      setSelectedProducts(next);
+                      setShopSales(next.reduce((acc, item) => acc + (item.price * item.qty), 0));
+                    }
+                  }}
+                >
+                  <option value="">+ Agregar producto vendido...</option>
+                  {products.map(p => <option key={p.id} value={p.id} disabled={p.stock <= 0}>{p.name} (${p.price}) {p.stock <= 0 ? '(Sin stock)' : ''}</option>)}
+                </select>
               </div>
-            </div>
-            
-            <div className="col-span-2">
-              <label className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted-foreground block mb-1.5 text-emerald-500">Comprobante</label>
-              <div className="relative w-full h-[38px] bg-background border border-emerald-500/50 rounded-sm overflow-hidden flex items-center justify-center group cursor-pointer hover:bg-emerald-500/10 transition-colors">
-                <input type="file" accept="image/*" onChange={handleFileChange} className="absolute inset-0 opacity-0 cursor-pointer z-10" />
-                <span className="text-xs text-emerald-500 font-medium">
-                  {receiptBase64 ? "Ver / Cambiar foto" : "Subir foto del comprobante"}
-                </span>
+              
+              <div className="flex items-center justify-between pt-2 border-t border-emerald-500/20 mt-2">
+                 <span className="text-[10px] font-medium text-emerald-600 uppercase">Ajuste Manual / Total:</span>
+                 <div className="relative w-24">
+                   <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">$</span>
+                   <input
+                     type="number"
+                     min={0}
+                     value={shopSales || ""}
+                     onChange={e => setShopSales(e.target.value ? Number(e.target.value) : 0)}
+                     className="w-full bg-background border border-emerald-500/50 rounded-sm pl-6 pr-2 py-1 text-xs text-foreground focus:outline-none focus:border-emerald-500"
+                   />
+                 </div>
               </div>
             </div>
           </div>
+          
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted-foreground block text-emerald-500">
+              Comprobante de Pago
+            </label>
+            <div className="relative w-full h-[38px] bg-background border border-emerald-500/50 rounded-sm overflow-hidden flex items-center justify-center group cursor-pointer hover:bg-emerald-500/10 transition-colors">
+              <input type="file" accept="image/*" onChange={handleFileChange} className="absolute inset-0 opacity-0 cursor-pointer z-10" />
+              <span className="text-xs text-emerald-500 font-semibold flex items-center gap-1.5">
+                📷 {receiptBase64 ? "Ver / Cambiar foto del comprobante" : "Subir foto del comprobante"}
+              </span>
+            </div>
+          </div>
+
           {receiptBase64 && (
-            <div className="w-full h-32 rounded-sm border border-border overflow-hidden bg-muted/20 flex justify-center items-center relative">
-              <img src={receiptBase64} alt="Comprobante" className="max-w-full max-h-full object-contain" />
-              <button onClick={() => setReceiptBase64("")} className="absolute top-1 right-1 bg-black/50 text-white rounded-full p-1 hover:bg-black/70">
-                <X size={12} />
-              </button>
+            <div className="w-full rounded-lg border border-emerald-500/30 overflow-hidden bg-muted/20 p-2 relative flex flex-col items-center">
+              <div className="w-full h-36 relative cursor-pointer group" onClick={() => setShowFullReceipt(true)}>
+                <img src={receiptBase64} alt="Comprobante de pago" className="w-full h-full object-contain rounded-md" />
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-semibold rounded-md">
+                  🔍 Clic para ampliar foto
+                </div>
+              </div>
+              <div className="flex items-center justify-between w-full mt-2 text-xs">
+                <button type="button" onClick={() => setShowFullReceipt(true)} className="text-emerald-500 hover:underline font-medium">
+                  🔍 Ver en tamaño completo
+                </button>
+                <button type="button" onClick={() => setReceiptBase64("")} className="text-red-400 hover:text-red-500 font-medium">
+                  🗑️ Eliminar foto
+                </button>
+              </div>
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted-foreground block mb-1.5 text-primary">Historia Clínica (Paciente)</label>
               <textarea value={clientNotes} onChange={e => setClientNotes(e.target.value)} rows={3} placeholder="Alergias, preferencias, etc. Se guarda en el perfil del cliente."
-                className="w-full bg-primary/5 border border-primary/20 rounded-sm px-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-primary resize-none" />
+                className="w-full bg-primary/5 border border-primary/20 rounded-sm px-3 py-2 text-xs text-foreground focus:outline-none focus:border-primary resize-none" />
             </div>
             <div>
               <label className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted-foreground block mb-1.5">Notas del Turno Actual</label>
               <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} placeholder="Opcional..."
-                className="w-full bg-background border border-border rounded-sm px-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-primary resize-none" />
+                className="w-full bg-background border border-border rounded-sm px-3 py-2 text-xs text-foreground focus:outline-none focus:border-primary resize-none" />
             </div>
           </div>
-          {error && <p className="text-xs text-red-400">{error}</p>}
+          {error && <p className="text-xs text-red-400 font-semibold">{error}</p>}
         </div>
-        <div className="flex items-center justify-between px-5 py-4 border-t border-border">
+
+        {/* Modal footer action bar */}
+        <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-t border-border flex-shrink-0 bg-muted/20">
           <button 
             onClick={handleRemind} 
             disabled={reminding || remindSuccess}
-            className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-sm transition-colors ${
+            className={`flex items-center gap-1.5 text-xs px-3 py-2 rounded-md font-semibold transition-colors ${
               remindSuccess ? "bg-emerald-500/10 text-emerald-500" : "bg-primary/10 text-primary hover:bg-primary/20"
             }`}
           >
-            {reminding ? "Enviando..." : remindSuccess ? "¡Enviado!" : "🔔 Enviar WhatsApp"}
+            {reminding ? "Enviando..." : remindSuccess ? "¡Enviado!" : "🔔 Recordatorio WA"}
           </button>
           
-          <div className="flex items-center gap-3">
-            <button onClick={onClose} className="text-xs text-muted-foreground hover:text-foreground px-4 py-2">Cancelar</button>
+          <div className="flex items-center gap-2">
+            <button onClick={onClose} className="text-xs text-muted-foreground hover:text-foreground px-3 py-2 font-medium">Cancelar</button>
             <button onClick={handleUpdate} disabled={saving}
-              className="bg-primary text-primary-foreground text-xs font-semibold px-5 py-2 rounded-sm hover:bg-primary/90 disabled:opacity-50">
-              {saving ? "Guardando..." : "Guardar"}
+              className="bg-primary text-primary-foreground text-xs font-bold px-4 py-2 rounded-md hover:bg-primary/90 disabled:opacity-50 shadow-sm">
+              {saving ? "Guardando..." : "Guardar Cambios"}
             </button>
           </div>
         </div>
       </motion.div>
+
+      {/* Lightbox / Fullscreen Receipt Image Modal */}
+      {showFullReceipt && (
+        <div className="fixed inset-0 z-[200] bg-black/90 flex flex-col items-center justify-center p-4" onClick={() => setShowFullReceipt(false)}>
+          <div className="relative max-w-3xl max-h-[90vh] flex flex-col items-center" onClick={e => e.stopPropagation()}>
+            <img src={receiptBase64} alt="Comprobante completo" className="max-w-full max-h-[80vh] object-contain rounded-lg shadow-2xl" />
+            <button onClick={() => setShowFullReceipt(false)} className="mt-4 bg-white/20 hover:bg-white/30 text-white text-xs font-bold px-5 py-2 rounded-full backdrop-blur-md">
+              ✕ Cerrar Vista Previa
+            </button>
+          </div>
+        </div>
+      )}
     </motion.div>
   );
 }
@@ -951,7 +980,7 @@ export default function Agenda() {
 
         return (
           <div
-            className="fixed z-[9999] pointer-events-none bg-card border border-border rounded-lg shadow-xl px-4 py-3 min-w-[210px] max-w-[270px]"
+            className="hidden md:block fixed z-[9999] pointer-events-none bg-card border border-border rounded-lg shadow-xl px-4 py-3 min-w-[210px] max-w-[270px]"
             style={{
               top: y + 14,
               left: x + 14,
