@@ -539,6 +539,54 @@ function EditTurnModal({ app, onClose, onUpdated }: { app: Appointment; onClose:
   );
 }
 
+function getStatusCardStyle(status: string) {
+  const st = (status || "agendado").toLowerCase();
+  if (st === "cancelado") {
+    return {
+      style: {
+        backgroundColor: "rgba(239, 68, 68, 0.25)",
+        borderLeft: "4px solid #dc2626",
+        borderTop: "1px solid rgba(220, 38, 38, 0.4)",
+        borderRight: "1px solid rgba(220, 38, 38, 0.3)",
+        borderBottom: "1px solid rgba(220, 38, 38, 0.3)",
+      },
+      textClass: "text-red-700 dark:text-red-300 font-bold",
+      badgeClass: "bg-red-600 text-white font-bold px-2 py-0.5 rounded text-[10px]",
+      badgeText: "CANCELADO",
+      borderColor: "#dc2626",
+    };
+  }
+  if (st === "confirmado" || st === "completado") {
+    return {
+      style: {
+        backgroundColor: "rgba(16, 185, 129, 0.20)",
+        borderLeft: "4px solid #10b981",
+        borderTop: "1px solid rgba(16, 185, 129, 0.4)",
+        borderRight: "1px solid rgba(16, 185, 129, 0.3)",
+        borderBottom: "1px solid rgba(16, 185, 129, 0.3)",
+      },
+      textClass: "text-emerald-700 dark:text-emerald-300 font-bold",
+      badgeClass: "bg-emerald-500 text-white font-bold px-2 py-0.5 rounded text-[10px]",
+      badgeText: st === "completado" ? "COMPLETADO" : "CONFIRMADO ✓",
+      borderColor: "#10b981",
+    };
+  }
+  // agendado / pendiente confirmación
+  return {
+    style: {
+      backgroundColor: "rgba(245, 158, 11, 0.20)",
+      borderLeft: "4px solid #f59e0b",
+      borderTop: "1px solid rgba(245, 158, 11, 0.4)",
+      borderRight: "1px solid rgba(245, 158, 11, 0.3)",
+      borderBottom: "1px solid rgba(245, 158, 11, 0.3)",
+    },
+    textClass: "text-amber-700 dark:text-amber-300 font-bold",
+    badgeClass: "bg-amber-500 text-white font-bold px-2 py-0.5 rounded text-[10px]",
+    badgeText: "PENDIENTE",
+    borderColor: "#f59e0b",
+  };
+}
+
 export default function Agenda() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState("dia");
@@ -657,7 +705,6 @@ export default function Agenda() {
 
   const appsWithPos = calculateOverlaps(dayApps);
 
-
   return (
     <AdminLayout title="Agenda" subtitle="Turnos del día"
       actions={
@@ -745,21 +792,16 @@ export default function Agenda() {
                     </div>
                     <div className="flex flex-col gap-1">
                       {dayApps.map(app => {
-                        const profColor = app.professionalColor || professionals.find(p => p.name === app.professionalName)?.color || "hsl(var(--primary))";
-                        const isAgendado = app.status === "agendado" || !app.status;
+                        const statusInfo = getStatusCardStyle(app.status);
                         return (
                           <div key={app.id} onClick={(e) => { e.stopPropagation(); setEditingApp(app); }}
                             onMouseEnter={(e) => setHoveredApp({ app, x: e.clientX, y: e.clientY })}
                             onMouseMove={(e) => setHoveredApp(prev => prev ? { ...prev, x: e.clientX, y: e.clientY } : null)}
                             onMouseLeave={() => setHoveredApp(null)}
-                            className="text-[9px] px-1.5 py-0.5 rounded-sm truncate cursor-pointer hover:opacity-80 transition-opacity"
-                            style={{
-                              backgroundColor: `${profColor}22`,
-                              borderLeft: `2px solid ${profColor}`,
-                              color: "inherit",
-                            }}>
-                            <span className="font-bold" style={{ color: profColor }}>{app.time}</span>{" "}
-                            <span className="font-medium text-foreground">{app.clientName}</span>
+                            className="text-[9px] px-1.5 py-1 rounded-sm truncate cursor-pointer hover:opacity-90 transition-opacity font-medium shadow-xs"
+                            style={statusInfo.style}>
+                            <span className={statusInfo.textClass}>{app.time}</span>{" "}
+                            <span className="font-semibold text-foreground">{app.clientName}</span>
                           </div>
                         );
                       })}
@@ -800,32 +842,24 @@ export default function Agenda() {
                        {dAppsWithPos.map(app => {
                            const width = 100 / app.totalColumns;
                            const left = app.column * width;
-                           const profColor = app.professionalColor || professionals.find(p => p.name === app.professionalName)?.color || "hsl(var(--primary))";
-                           const isAgendado = app.status === "agendado" || !app.status;
-                           const bgAlpha = isAgendado ? "22" : "";
+                           const statusInfo = getStatusCardStyle(app.status);
                            return (
-                            <div key={app.id}
-                              onClick={(e) => { e.stopPropagation(); setEditingApp(app); }}
-                              onMouseEnter={(e) => setHoveredApp({ app, x: e.clientX, y: e.clientY })}
-                              onMouseMove={(e) => setHoveredApp(prev => prev ? { ...prev, x: e.clientX, y: e.clientY } : null)}
-                              onMouseLeave={() => setHoveredApp(null)}
-                              className={`absolute rounded-sm overflow-hidden shadow-sm transition-all hover:z-20 z-10 cursor-pointer flex flex-col justify-start px-1.5 py-1 ${!isAgendado ? STATUS_COLORS[app.status] || STATUS_COLORS.agendado : ""}`}
-                              style={{ 
-                                top: `${app.top}px`, 
-                                height: `${app.height}px`, 
-                                left: `calc(${left}% + 1px)`, 
-                                width: `calc(${width}% - 2px)`,
-                                ...(isAgendado ? {
-                                  backgroundColor: `${profColor}22`,
-                                  borderLeft: `3px solid ${profColor}`,
-                                  borderTop: `1px solid ${profColor}44`,
-                                  borderRight: `1px solid ${profColor}33`,
-                                  borderBottom: `1px solid ${profColor}33`,
-                                } : {}) 
-                              }}>
-                              <p className="text-[8px] font-bold truncate leading-tight" style={isAgendado ? { color: profColor } : {}}>{app.time}</p>
-                              <p className="text-[9px] font-semibold truncate leading-tight text-foreground">{app.clientName}</p>
-                            </div>
+                             <div key={app.id}
+                               onClick={(e) => { e.stopPropagation(); setEditingApp(app); }}
+                               onMouseEnter={(e) => setHoveredApp({ app, x: e.clientX, y: e.clientY })}
+                               onMouseMove={(e) => setHoveredApp(prev => prev ? { ...prev, x: e.clientX, y: e.clientY } : null)}
+                               onMouseLeave={() => setHoveredApp(null)}
+                               className="absolute rounded-sm overflow-hidden shadow-sm transition-all hover:z-20 z-10 cursor-pointer flex flex-col justify-start px-1.5 py-1"
+                               style={{ 
+                                 top: `${app.top}px`, 
+                                 height: `${app.height}px`, 
+                                 left: `calc(${left}% + 1px)`, 
+                                 width: `calc(${width}% - 2px)`,
+                                 ...statusInfo.style,
+                               }}>
+                               <p className={`text-[8px] font-bold truncate leading-tight ${statusInfo.textClass}`}>{app.time}</p>
+                               <p className="text-[9px] font-semibold truncate leading-tight text-foreground">{app.clientName}</p>
+                             </div>
                            );
                         })}
                     </div>
@@ -867,8 +901,7 @@ export default function Agenda() {
               {appsWithPos.map(app => {
                 const width = 100 / app.totalColumns;
                 const left = app.column * width;
-                const isAgendado = app.status === "agendado" || app.status === "confirmado" || !app.status;
-                const profColor = app.professionalColor || professionals.find(p => p.name === app.professionalName)?.color || "hsl(var(--primary))";
+                const statusInfo = getStatusCardStyle(app.status);
                 
                 return (
                   <div key={app.id}
@@ -876,22 +909,16 @@ export default function Agenda() {
                     onMouseEnter={(e) => setHoveredApp({ app, x: e.clientX, y: e.clientY })}
                     onMouseMove={(e) => setHoveredApp(prev => prev ? { ...prev, x: e.clientX, y: e.clientY } : null)}
                     onMouseLeave={() => setHoveredApp(null)}
-                    className={`absolute rounded-sm overflow-hidden shadow-sm transition-all hover:z-20 z-10 cursor-pointer flex flex-col justify-start px-2 py-1 ${!isAgendado ? STATUS_COLORS[app.status] || STATUS_COLORS.cancelado : ""}`}
+                    className="absolute rounded-sm overflow-hidden shadow-sm transition-all hover:z-20 z-10 cursor-pointer flex flex-col justify-start px-2 py-1"
                     style={{
                       top: `${app.top}px`,
                       height: `${app.height}px`,
                       left: `calc(${left}% + 4px)`,
                       width: `calc(${width}% - 8px)`,
-                      ...(isAgendado ? {
-                        backgroundColor: `${profColor}20`,
-                        borderLeft: `3px solid ${profColor}`,
-                        borderTop: `1px solid ${profColor}44`,
-                        borderRight: `1px solid ${profColor}33`,
-                        borderBottom: `1px solid ${profColor}33`,
-                      } : {})
+                      ...statusInfo.style,
                     }}
                   >
-                    <p className="text-[9px] font-bold truncate leading-tight" style={isAgendado ? { color: profColor } : {}}>{app.time} · {app.professionalName}</p>
+                    <p className={`text-[9px] font-bold truncate leading-tight ${statusInfo.textClass}`}>{app.time} · {app.professionalName}</p>
                     <p className="text-[10px] font-semibold truncate leading-tight text-foreground">{app.clientName}</p>
                     <p className="text-[9px] truncate leading-tight text-muted-foreground">{app.serviceName}</p>
                   </div>
@@ -920,35 +947,36 @@ export default function Agenda() {
       {/* Hover Tooltip */}
       {hoveredApp && (() => {
         const { app, x, y } = hoveredApp;
-        const profColor = app.professionalColor || professionals.find(p => p.name === app.professionalName)?.color || "hsl(var(--primary))";
-        const statusLabel: Record<string, string> = { agendado: "Agendado", confirmado: "Confirmado ✓", completado: "Completado", cancelado: "Cancelado" };
-        const statusColor: Record<string, string> = { agendado: "text-primary", confirmado: "text-teal-500", completado: "text-emerald-500", cancelado: "text-red-500" };
+        const statusInfo = getStatusCardStyle(app.status);
+
         return (
           <div
-            className="fixed z-[9999] pointer-events-none bg-card border border-border rounded-lg shadow-xl px-4 py-3 min-w-[200px] max-w-[260px]"
+            className="fixed z-[9999] pointer-events-none bg-card border border-border rounded-lg shadow-xl px-4 py-3 min-w-[210px] max-w-[270px]"
             style={{
               top: y + 14,
               left: x + 14,
-              borderLeft: `4px solid ${profColor}`,
+              borderLeft: `4px solid ${statusInfo.borderColor}`,
               transform: x > window.innerWidth - 280 ? "translateX(-110%)" : undefined,
             }}
           >
-            <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: profColor }}>
-              {app.professionalName}
-            </p>
+            <div className="flex items-center justify-between gap-2 mb-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                {app.professionalName}
+              </span>
+              <span className={statusInfo.badgeClass}>
+                {statusInfo.badgeText}
+              </span>
+            </div>
             <p className="text-sm font-semibold text-foreground leading-tight">{app.clientName}</p>
             <p className="text-xs text-muted-foreground mt-0.5">{app.serviceName}</p>
             <div className="flex items-center gap-3 mt-2 pt-2 border-t border-border/40">
               <span className="text-xs font-medium text-foreground">📅 {app.date.split("-").reverse().join("/")}</span>
               <span className="text-xs font-medium text-foreground">⏰ {app.time}hs</span>
             </div>
-            <div className="flex items-center justify-between mt-1.5">
-              <span className={`text-[10px] font-semibold uppercase tracking-wide ${statusColor[app.status] || "text-muted-foreground"}`}>
-                {statusLabel[app.status] || app.status}
-              </span>
+            <div className="flex items-center justify-between mt-2 pt-1">
               <span className="text-xs font-semibold text-foreground">${app.price?.toLocaleString("es-AR")}</span>
+              <span className="text-[10px] text-muted-foreground/60 italic">Clic para editar</span>
             </div>
-            <p className="text-[10px] text-muted-foreground/60 mt-2 italic">Clic para editar</p>
           </div>
         );
       })()}
