@@ -440,10 +440,50 @@ export default function BookingWizard({ onClose, initialServiceId, publicInfo: p
             </motion.p>
             <motion.p
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}
-              className="text-muted-foreground text-center mb-8 max-w-sm text-xs"
+              className="text-muted-foreground text-center mb-6 max-w-sm text-xs"
             >
-              Recibirás un WhatsApp con los detalles.
+              Tu reserva ya está registrada en la agenda del estudio.
             </motion.p>
+
+            {/* Direct WhatsApp Confirmation Button */}
+            {(() => {
+              const rawPhone = (publicInfo?.settings?.business_phone || "5493510000000").replace(/\D/g, "");
+              const servicesList = selectedServices.map(s => s.name).join(", ");
+              const waText = encodeURIComponent(
+                `¡Hola Estudio Joha Molinero! 🌸\nMi nombre es ${clientData.name}.\nAcabo de reservar un turno:\n💅 *${servicesList}*\n🗓️ *Fecha:* ${selectedDate}\n⏰ *Hora:* ${selectedTime} hs\n👤 *Profesional:* ${selectedProfessional?.name || "Estudio"}\n\n¡Confirmado!`
+              );
+              const waLink = `https://wa.me/${rawPhone.startsWith("54") ? rawPhone : "54" + rawPhone}?text=${waText}`;
+
+              return (
+                <motion.a
+                  href={waLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.35 }}
+                  className="w-full max-w-sm flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm py-3.5 px-4 rounded-xl shadow-lg shadow-emerald-500/20 transition-all hover:scale-[1.02] active:scale-[0.98] mb-6"
+                >
+                  <MessageCircle size={18} />
+                  <span>Enviar Confirmación por WhatsApp</span>
+                </motion.a>
+              );
+            })()}
+
+            {/* Salon Policy Card */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.4 }}
+              className="w-full max-w-sm bg-muted/30 border border-border/50 rounded-xl p-4 mb-6 text-left text-xs text-muted-foreground space-y-1.5"
+            >
+              <div className="flex items-center gap-1.5 font-semibold text-foreground mb-1">
+                <AlertCircle size={14} className="text-primary" />
+                <span>Política del Estudio</span>
+              </div>
+              <p>• Tolerancia de puntualidad: <strong>10 minutos</strong>.</p>
+              <p>• Reprogramación o cancelación con <strong>24 hs de anticipación</strong>.</p>
+            </motion.div>
 
             {/* Confirmación de segundo turno agregado */}
             <AnimatePresence>
