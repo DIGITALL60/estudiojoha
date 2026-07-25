@@ -37,6 +37,7 @@ interface Session {
   category?: string;      // chosen category
   // For rescheduling flow
   appointmentIdToReschedule?: string;
+  lastUpcomingDates?: { dateStr: string; displayDate: string; dayName: string }[];
 }
 
 const sessions = new Map<string, Session>();
@@ -46,7 +47,7 @@ function getSession(from: string): Session {
   return sessions.get(from)!;
 }
 
-// ─── Time helpers ───────────────────────────────────────────────────────────
+// ─── Time & Date helpers ───────────────────────────────────────────────────
 function parseTime(t: string) {
   const [h, m] = t.split(":").map(Number);
   return h * 60 + m;
@@ -55,22 +56,45 @@ function formatTime(mins: number) {
   return `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`;
 }
 
+function getDayOfWeek(dateStr: string): number {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dateObj = new Date(Date.UTC(y, m - 1, d));
+  return dateObj.getUTCDay();
+}
+
+const DAY_NAMES_ES = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+
 async function getAvailableTimes(professionalId: string, date: string, duration: number): Promise<string[]> {
-  const dateObj = new Date(date);
-  const dayOfWeek = dateObj.getUTCDay();
+  const dayOfWeek = getDayOfWeek(date);
+  if (dayOfWeek === 0) return []; // Sunday closed
 
   const schedules = await db.select().from(professional_schedules).where(eq(professional_schedules.professionalId, professionalId));
-  const daySchedules = schedules.filter((s) => s.dayOfWeek === dayOfWeek);
+  let daySchedules = schedules.filter((s) => s.dayOfWeek === dayOfWeek);
+
+  // Fallback to default schedule (Tue-Sat 09:00-20:00) if no custom schedule rows in DB
+  if (schedules.length === 0) {
+    if (dayOfWeek >= 2 && dayOfWeek <= 6) {
+      daySchedules = [{ id: "def", professionalId, dayOfWeek, startTime: "09:00", endTime: "20:00" }];
+    }
+  }
   if (!daySchedules.length) return [];
 
   const allApps = await db.select().from(appointments).where(eq(appointments.professionalId, professionalId));
   const dayApps = allApps.filter((a) => a.date === date && a.status !== "cancelado");
+
+  const nowArgDate = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+  const nowArgTime = new Date().toLocaleTimeString("en-GB", { timeZone: "America/Argentina/Buenos_Aires", hour: "2-digit", minute: "2-digit" });
+  const [nowH, nowM] = nowArgTime.split(":").map(Number);
+  const nowMinutes = nowH * 60 + nowM;
 
   const blocks: number[] = [];
   for (const sched of daySchedules) {
     const start = parseTime(sched.startTime);
     const end = parseTime(sched.endTime);
     for (let t = start; t + duration <= end; t += 30) {
+      if (date === nowArgDate && t <= nowMinutes + 15) {
+        continue;
+      }
       const overlap = dayApps.some((a) => {
         const as = parseTime(a.time);
         const ae = as + a.duration;
@@ -80,6 +104,29 @@ async function getAvailableTimes(professionalId: string, date: string, duration:
     }
   }
   return [...new Set(blocks)].sort((a, b) => a - b).map(formatTime);
+}
+
+async function getUpcomingAvailableDates(professionalId: string, duration: number, limit = 4) {
+  const result: { dateStr: string; displayDate: string; dayName: string }[] = [];
+  const now = new Date();
+  for (let i = 0; i < 30; i++) {
+    const d = new Date(now.getTime() + i * 86400000);
+    const dateStr = d.toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+    const dayOfWeek = getDayOfWeek(dateStr);
+    if (dayOfWeek === 0) continue;
+
+    const times = await getAvailableTimes(professionalId, dateStr, duration);
+    if (times.length > 0) {
+      const [y, m, day] = dateStr.split("-");
+      result.push({
+        dateStr,
+        displayDate: `${day}/${m}/${y}`,
+        dayName: DAY_NAMES_ES[dayOfWeek],
+      });
+      if (result.length >= limit) break;
+    }
+  }
+  return result;
 }
 
 // ─── Main handler ────────────────────────────────────────────────────────────
@@ -183,19 +230,29 @@ export async function handleBotMessage(from: string, text: string, interactiveId
           session.step = "rescheduling_choosing_date";
           session.appointmentIdToReschedule = app.id;
           session.serviceId = app.serviceId;
-          session.serviceDuration = (await db.select().from(services).where(eq(services.id, app.serviceId)).limit(1))[0]?.duration;
+          session.serviceDuration = (await db.select().from(services).where(eq(services.id, app.serviceId)).limit(1))[0]?.duration || 30;
           session.professionalId = app.professionalId;
-          session.professionalName = (await db.select().from(professionals).where(eq(professionals.id, app.professionalId)).limit(1))[0]?.name;
-          session.serviceName = (await db.select().from(services).where(eq(services.id, app.serviceId)).limit(1))[0]?.name;
-          sessions.set(from, session);
-          
+          session.professionalName = (await db.select().from(professionals).where(eq(professionals.id, app.professionalId)).limit(1))[0]?.name || "la profesional";
+          session.serviceName = (await db.select().from(services).where(eq(services.id, app.serviceId)).limit(1))[0]?.name || "tu servicio";
+
           await db.update(appointments).set({ status: "cancelado" }).where(eq(appointments.id, app.id));
-          
+
+          const upcoming = await getUpcomingAvailableDates(session.professionalId, session.serviceDuration);
+          session.lastUpcomingDates = upcoming;
+          sessions.set(from, session);
+
+          let upcomingMsg = "";
+          if (upcoming.length > 0) {
+            upcomingMsg = `\n\n📅 *Próximas fechas con disponibilidad de ${session.professionalName}:*\n` +
+              upcoming.map((u, idx) => `${idx + 1}️⃣ *${u.displayDate}* (${u.dayName})`).join("\n") +
+              `\n\nEscribí la fecha (Ej: *${upcoming[0].displayDate}*) o respondé con el número (*1, 2, 3 o 4*) 👇`;
+          } else {
+            upcomingMsg = `\n\nEscribila en formato: *DD/MM/AAAA*\nEj: *28/07/2026*`;
+          }
+
           await cloudSendText(from,
             `😕 ¡Lamentamos que no puedas asistir!\n\n` +
-            `Tu turno anterior fue cancelado, pero vamos a *reprogramarlo* para otra fecha que te quede cómoda 📅\n\n` +
-            `¿Para qué fecha te gustaría reprogramar?\n` +
-            `Escribila en formato: *DD/MM/AAAA*\nEj: *28/07/2026*`
+            `Tu turno anterior fue cancelado, pero vamos a *reprogramarlo* para otra fecha que te quede cómoda 📅${upcomingMsg}`
           );
           return;
         }
@@ -211,22 +268,41 @@ export async function handleBotMessage(from: string, text: string, interactiveId
 
   // ── RESCHEDULING FLOW ─────────────────────────────────────────────────────
   if (session.step === "rescheduling_choosing_date") {
-    // Parse date
     let dateStr = "";
-    const matchDDMM = input.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-    const matchISO = input.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (matchDDMM) {
-      dateStr = `${matchDDMM[3]}-${matchDDMM[2].padStart(2, "0")}-${matchDDMM[1].padStart(2, "0")}`;
-    } else if (matchISO) {
-      dateStr = input;
+    const numIdx = parseInt(input.trim());
+    if (session.lastUpcomingDates && numIdx >= 1 && numIdx <= session.lastUpcomingDates.length) {
+      dateStr = session.lastUpcomingDates[numIdx - 1].dateStr;
     } else {
-      await cloudSendText(from, "No entendí la fecha 😅 Escribila así: *DD/MM/AAAA*\nEj: *28/07/2025*");
+      const matchDDMM = input.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      const matchISO = input.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (matchDDMM) {
+        dateStr = `${matchDDMM[3]}-${matchDDMM[2].padStart(2, "0")}-${matchDDMM[1].padStart(2, "0")}`;
+      } else if (matchISO) {
+        dateStr = input;
+      }
+    }
+
+    if (!dateStr) {
+      await cloudSendText(from, "No entendí la fecha 😅 Escribila así: *DD/MM/AAAA* (Ej: *28/07/2026*) o con el número de la opción 👇");
       return;
     }
 
     const availableTimes = await getAvailableTimes(session.professionalId!, dateStr, session.serviceDuration!);
     if (!availableTimes.length) {
-      await cloudSendText(from, `No hay horarios disponibles para esa fecha con ${session.professionalName}. Probá con otro día 📅`);
+      const upcoming = await getUpcomingAvailableDates(session.professionalId!, session.serviceDuration || 30);
+      session.lastUpcomingDates = upcoming;
+      sessions.set(from, session);
+
+      let upcomingMsg = "";
+      if (upcoming.length > 0) {
+        upcomingMsg = `\n\n📅 *Próximas fechas disponibles con ${session.professionalName}:*\n` +
+          upcoming.map((u, idx) => `${idx + 1}️⃣ *${u.displayDate}* (${u.dayName})`).join("\n") +
+          `\n\nEscribí la fecha que prefieras o respondé con el número (1, 2, 3 o 4) 👇`;
+      }
+
+      await cloudSendText(from,
+        `⚠️ No hay horarios disponibles para esa fecha con *${session.professionalName}* (el estudio atiende de Martes a Sábados).${upcomingMsg}`
+      );
       return;
     }
 
@@ -234,7 +310,7 @@ export async function handleBotMessage(from: string, text: string, interactiveId
     session.step = "rescheduling_choosing_time";
     sessions.set(from, session);
 
-    const [d, m, y] = dateStr.split("-");
+    const [y, m, d] = dateStr.split("-");
     const timeRows = availableTimes.slice(0, 10).map((t) => ({ id: `retime_${t}`, title: t, description: "Disponible" }));
     await cloudSendList(from, `Horarios para ${d}/${m}/${y}`,
       `Estos son los horarios disponibles con *${session.professionalName}*:`,
@@ -355,10 +431,23 @@ export async function handleBotMessage(from: string, text: string, interactiveId
       session.professionalId = prof.id;
       session.professionalName = prof.name;
       session.step = "choosing_date";
+
+      const upcoming = await getUpcomingAvailableDates(prof.id, session.serviceDuration || 30);
+      session.lastUpcomingDates = upcoming;
       sessions.set(from, session);
+
+      let upcomingMsg = "";
+      if (upcoming.length > 0) {
+        upcomingMsg = `\n\n📅 *Próximas fechas con disponibilidad de ${prof.name}:*\n` +
+          upcoming.map((u, idx) => `${idx + 1}️⃣ *${u.displayDate}* (${u.dayName})`).join("\n") +
+          `\n\nEscribí la fecha (Ej: *${upcoming[0].displayDate}*) o respondé con el número (1, 2, 3 o 4) 👇`;
+      } else {
+        upcomingMsg = `\n\nEscribí la fecha en formato: *DD/MM/AAAA*\nEj: *28/07/2026*\n\n📅 Atendemos Martes a Sábado, 09:00 a 20:00 hs`;
+      }
+
       await cloudSendText(
         from,
-        `Genial! Elegiste a *${prof.name}* para *${session.serviceName}* 💜\n\n¿Qué fecha preferís?\n\nEscribila en formato: *DD/MM/AAAA*\nEj: *25/07/2025*\n\n📅 Atendemos Martes a Sábado, 10:00 a 20:00 hs`
+        `¡Genial! Elegiste a *${prof.name}* para *${session.serviceName}* 💜${upcomingMsg}`
       );
       return;
     }
@@ -366,27 +455,38 @@ export async function handleBotMessage(from: string, text: string, interactiveId
     // ── CHOOSING DATE ────────────────────────────────────────────────────────
     if (session.step === "choosing_date") {
       let dateStr = "";
-      const matchDDMM = input.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-      const matchISO = input.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-      if (matchDDMM) {
-        dateStr = `${matchDDMM[3]}-${matchDDMM[2].padStart(2, "0")}-${matchDDMM[1].padStart(2, "0")}`;
-      } else if (matchISO) {
-        dateStr = input;
+      const numIdx = parseInt(input.trim());
+      if (session.lastUpcomingDates && numIdx >= 1 && numIdx <= session.lastUpcomingDates.length) {
+        dateStr = session.lastUpcomingDates[numIdx - 1].dateStr;
       } else {
-        await cloudSendText(from, "No entendí la fecha 😅 Escribila así: *DD/MM/AAAA*\nEj: *25/07/2025*");
-        return;
+        const matchDDMM = input.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+        const matchISO = input.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (matchDDMM) {
+          dateStr = `${matchDDMM[3]}-${matchDDMM[2].padStart(2, "0")}-${matchDDMM[1].padStart(2, "0")}`;
+        } else if (matchISO) {
+          dateStr = input;
+        }
       }
 
-      const dateObj = new Date(dateStr);
-      const dayOfWeek = dateObj.getUTCDay();
-      if (dayOfWeek === 0) {
-        await cloudSendText(from, "Los domingos estamos cerradas 🙏 Elegí otro día (Martes a Sábado).");
+      if (!dateStr) {
+        await cloudSendText(from, "No entendí la fecha 😅 Escribila así: *DD/MM/AAAA* (Ej: *28/07/2026*) o el número de opción (1, 2, 3 o 4) 👇");
         return;
       }
 
       const availableTimes = await getAvailableTimes(session.professionalId!, dateStr, session.serviceDuration!);
       if (!availableTimes.length) {
-        await cloudSendText(from, `No hay horarios disponibles para el ${input} con ${session.professionalName}. Probá con otro día 📅`);
+        const upcoming = await getUpcomingAvailableDates(session.professionalId!, session.serviceDuration || 30);
+        session.lastUpcomingDates = upcoming;
+        sessions.set(from, session);
+
+        let upcomingMsg = "";
+        if (upcoming.length > 0) {
+          upcomingMsg = `\n\n📅 *Próximas fechas disponibles con ${session.professionalName}:*\n` +
+            upcoming.map((u, idx) => `${idx + 1}️⃣ *${u.displayDate}* (${u.dayName})`).join("\n") +
+            `\n\nEscribí la fecha que prefieras o respondé con el número (1, 2, 3 o 4) 👇`;
+        }
+
+        await cloudSendText(from, `⚠️ No hay horarios disponibles para esa fecha con *${session.professionalName}* (el estudio atiende de Martes a Sábados).${upcomingMsg}`);
         return;
       }
 
@@ -394,10 +494,12 @@ export async function handleBotMessage(from: string, text: string, interactiveId
       session.step = "choosing_time";
       sessions.set(from, session);
 
+      const [y, m, d] = dateStr.split("-");
+      const dateDisplay = `${d}/${m}/${y}`;
       const timeRows = availableTimes.slice(0, 10).map((t) => ({ id: `time_${t}`, title: t, description: "Disponible" }));
       await cloudSendList(
         from,
-        `Horarios para ${input}`,
+        `Horarios para ${dateDisplay}`,
         `Estos son los horarios disponibles con *${session.professionalName}*:`,
         "Ver Horarios",
         [{ title: "Horarios disponibles", rows: timeRows }]
