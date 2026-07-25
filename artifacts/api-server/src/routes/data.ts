@@ -248,19 +248,44 @@ router.get("/professionals", async (req, res) => {
 
 router.post("/professionals", requireAuth, async (req, res) => {
   try {
-    const { name, role, username, email, phone, password, color, initial, commissionRate, baseSalary, salesTarget } = req.body;
+    const { name, role, username, email, phone, password, color, initial, commissionRate, baseSalary, salesTarget, photo } = req.body;
     if (!name) return res.status(400).json({ error: "Name is required" });
+    
+    let photoUrl = null;
+    if (photo && photo.startsWith("data:image")) {
+      try {
+        const url = await uploadToCloudinary(photo, "estudiojoha/staff");
+        photoUrl = url;
+      } catch (err) {
+        logger.error({ err }, "Error uploading professional photo to Cloudinary");
+      }
+    }
+
     const id = randomUUID();
     await db.insert(professionals).values({
       id, name, role: role || "Staff", username, email, phone, password,
       color: color || "#7c3aed", initial,
+      photo: photoUrl,
       commissionRate: commissionRate !== undefined ? Number(commissionRate) : 0,
       baseSalary: baseSalary !== undefined ? Number(baseSalary) : 0,
       salesTarget: salesTarget !== undefined ? Number(salesTarget) : 0
     });
     const [created] = await db.select().from(professionals).where(eq(professionals.id, id)).limit(1);
+    
+    // Notify admin about new staff
+    try {
+      const allStaff = await db.select().from(professionals);
+      const totalStaff = allStaff.length;
+      const targetPhone = "5493472629600";
+      const message = `🔔 *Nuevo Profesional Agregado*\n\nLa administradora acaba de agregar a *${name}* al sistema.\n\n📊 *Total de staff actual:* ${totalStaff} profesionales.\n\n(Notificación automática de suscripción)`;
+      await cloudSendText(targetPhone, message);
+    } catch (notifErr) {
+      logger.error({ notifErr }, "Error sending new staff notification");
+    }
+
     return res.status(201).json(created);
   } catch (err) {
+    logger.error({ err }, "Failed to create professional");
     return res.status(500).json({ error: "Failed to create professional" });
   }
 });
@@ -268,8 +293,41 @@ router.post("/professionals", requireAuth, async (req, res) => {
 router.patch("/professionals/:id", requireAuth, async (req, res) => {
   try {
     const { id } = req.params as { id: string };
-    const { name, role, username, email, phone, password, color, initial, commissionRate, baseSalary, salesTarget } = req.body;
+    const { name, role, username, email, phone, password, color, initial, commissionRate, baseSalary, salesTarget, photo } = req.body;
     const updateData: any = { name, role, username, email, phone, color, initial };
+    
+    // Handle photo updates
+    if (photo !== undefined) {
+      const [existingProf] = await db.select().from(professionals).where(eq(professionals.id, id)).limit(1);
+      
+      if (photo === null || photo === "") {
+        // User removed photo
+        if (existingProf?.photo && existingProf.photo.includes("cloudinary.com")) {
+          try {
+            await deleteFromCloudinary(existingProf.photo);
+          } catch (err) {
+            logger.error({ err }, "Error deleting old photo from Cloudinary");
+          }
+        }
+        updateData.photo = null;
+      } else if (photo.startsWith("data:image")) {
+        // User uploaded new photo
+        try {
+          const newUrl = await uploadToCloudinary(photo, "estudiojoha/staff");
+          if (existingProf?.photo && existingProf.photo.includes("cloudinary.com")) {
+            try {
+              await deleteFromCloudinary(existingProf.photo);
+            } catch (err) {
+              logger.error({ err }, "Error deleting old photo from Cloudinary");
+            }
+          }
+          updateData.photo = newUrl;
+        } catch (err) {
+          logger.error({ err }, "Error uploading new photo to Cloudinary");
+        }
+      }
+    }
+
     if (password !== undefined && password !== "") {
       updateData.password = password;
     }

@@ -9,6 +9,7 @@
   },
   "scripts": {
     "push": "drizzle-kit push --config ./drizzle.config.ts",
+    "prepush-force": "node -e \"const Database = require('better-sqlite3'); const db = new Database(process.env.DATABASE_URL || 'sqlite.db'); try { db.exec('DROP INDEX IF EXISTS vouchers_code_unique'); } catch (e) {}\"",
     "push-force": "drizzle-kit push --force --config ./drizzle.config.ts"
   },
   "dependencies": {

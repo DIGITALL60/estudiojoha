@@ -744,10 +744,14 @@ export default function BookingWizard({ onClose, initialServiceId, publicInfo: p
                           className={`flex flex-col items-center min-w-[72px] gap-2 transition-all ${isSelected ? "opacity-100 scale-105" : "opacity-70 hover:opacity-100"}`}
                         >
                           <div
-                            className={`w-16 h-16 rounded-full flex items-center justify-center font-bold text-lg ${isSelected ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""}`}
+                            className={`w-16 h-16 rounded-full flex items-center justify-center font-bold text-lg overflow-hidden ${isSelected ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""}`}
                             style={{ backgroundColor: p.color + "22", border: `1px solid ${p.color}44`, color: p.color }}
                           >
-                            {p.initial}
+                            {p.photo ? (
+                              <img src={p.photo} alt={p.name} className="w-full h-full object-cover" />
+                            ) : (
+                              p.initial
+                            )}
                           </div>
                           <span className={`text-xs font-medium text-center ${isSelected ? "text-primary" : "text-foreground"}`}>{p.name}</span>
                         </button>

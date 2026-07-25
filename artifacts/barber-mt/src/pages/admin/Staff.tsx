@@ -15,6 +15,7 @@ interface Professional {
   commissionRate?: number;
   baseSalary?: number;
   salesTarget?: number;
+  photo?: string | null;
 }
 
 const COLOR_OPTIONS = [
@@ -42,11 +43,13 @@ function EditModal({
     ...member, 
     commissionRate: member.commissionRate ?? 0,
     baseSalary: member.baseSalary ?? 0,
-    salesTarget: member.salesTarget ?? 0
+    salesTarget: member.salesTarget ?? 0,
+    photo: member.photo ?? null
   });
   const [assignedServiceIds, setAssignedServiceIds] = useState<string[]>(initialAssigned);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSave = async () => {
     if (!form.name.trim()) { setError("El nombre es obligatorio"); return; }
@@ -71,6 +74,7 @@ function EditModal({
         commissionRate: Number(form.commissionRate) || 0,
         baseSalary: Number(form.baseSalary) || 0,
         salesTarget: Number(form.salesTarget) || 0,
+        photo: form.photo,
       };
 
       if (form.password?.trim()) {
@@ -107,6 +111,20 @@ function EditModal({
     }
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      alert("La imagen no debe superar los 5MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setForm(f => ({ ...f, photo: reader.result as string }));
+    };
+    reader.readAsDataURL(file);
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -129,13 +147,46 @@ function EditModal({
         <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto scrollbar-thin">
           {/* Avatar preview */}
 
-          <div className="flex justify-center mb-2">
+          <div className="flex flex-col items-center justify-center mb-2 gap-3">
             <div
-              className="w-14 h-14 rounded-full flex items-center justify-center text-lg font-bold"
+              className="w-16 h-16 rounded-full flex items-center justify-center text-xl font-bold overflow-hidden relative group"
               style={{ backgroundColor: form.color + "22", border: `2px solid ${form.color}55`, color: form.color }}
             >
-              {form.name.trim() ? form.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase() : "?"}
+              {form.photo ? (
+                <img src={form.photo} alt="Avatar" className="w-full h-full object-cover" />
+              ) : (
+                form.name.trim() ? form.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase() : "?"
+              )}
+              <div 
+                className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Plus size={16} className="text-white" />
+              </div>
             </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="text-[10px] uppercase font-bold tracking-wider text-primary hover:text-primary/80 transition-colors"
+              >
+                Cambiar foto
+              </button>
+              {form.photo && (
+                <button
+                  onClick={() => setForm(f => ({ ...f, photo: "" }))}
+                  className="text-[10px] uppercase font-bold tracking-wider text-red-500 hover:text-red-400 transition-colors"
+                >
+                  Quitar
+                </button>
+              )}
+            </div>
+            <input
+              type="file"
+              accept="image/*"
+              ref={fileInputRef}
+              className="hidden"
+              onChange={handleFileChange}
+            />
           </div>
 
           {/* Color picker */}
@@ -445,10 +496,14 @@ export default function Staff() {
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center gap-3">
                   <div
-                    className="w-11 h-11 rounded-full flex items-center justify-center text-sm font-bold"
+                    className="w-11 h-11 rounded-full flex items-center justify-center text-sm font-bold overflow-hidden"
                     style={{ backgroundColor: member.color + "22", border: `2px solid ${member.color}44` }}
                   >
-                    <span style={{ color: member.color }}>{member.initial}</span>
+                    {member.photo ? (
+                      <img src={member.photo} alt={member.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <span style={{ color: member.color }}>{member.initial}</span>
+                    )}
                   </div>
                   <div>
                     <p className="text-sm font-semibold text-foreground leading-tight">{member.name}</p>
@@ -458,7 +513,7 @@ export default function Staff() {
                     </div>
                   </div>
                 </div>
-                <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-all">
+                <div className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 flex items-center gap-1 transition-all">
                   <button
                     onClick={() => setEditing(member)}
                     className="w-7 h-7 flex items-center justify-center rounded-sm text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all"

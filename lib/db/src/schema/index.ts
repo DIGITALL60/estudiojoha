@@ -29,6 +29,7 @@ export const professionals = sqliteTable("professionals", {
   password: text("password"),
   color: text("color").notNull().default("#7c3aed"),
   initial: text("initial").notNull(),
+  photo: text("photo"),
   commissionRate: integer("commission_rate").default(0),
   baseSalary: integer("base_salary").default(0),
   salesTarget: integer("sales_target").default(0),
