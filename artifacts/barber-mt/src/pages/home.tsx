@@ -80,6 +80,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [hidePromoWidget, setHidePromoWidget] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -295,23 +296,42 @@ export default function Home() {
         </motion.div>
 
         {/* Floating Promo Widget */}
-        {settings?.carousel_images && settings.carousel_images.length > 0 && (
+        {settings?.carousel_images && settings.carousel_images.length > 0 && !hidePromoWidget && (
           <motion.div 
             initial={{ opacity: 0, scale: 0.9, y: 30 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             transition={{ delay: 0.5, duration: 0.8, ease: "easeOut" }}
-            className="absolute z-40 bottom-4 right-4 md:bottom-8 md:right-8 lg:bottom-12 lg:right-12"
+            className="fixed z-40 bottom-3 right-3 sm:bottom-6 sm:right-6 md:bottom-8 md:right-8"
           >
             <motion.div
-              animate={{ y: [0, -12, 0] }}
+              animate={{ y: [0, -8, 0] }}
               transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-              onClick={() => setSelectedServiceImage(settings.carousel_images![activeImageIndex].url)}
-              className="rounded-xl overflow-hidden shadow-2xl border border-white/20 bg-background/95 backdrop-blur-sm cursor-pointer hover:scale-[1.02] transition-transform flex flex-col"
+              className="relative rounded-xl overflow-hidden shadow-2xl border border-white/20 bg-background/95 backdrop-blur-sm cursor-pointer hover:scale-[1.02] transition-transform flex flex-col max-w-[260px] sm:max-w-[320px]"
             >
-              <div className="bg-primary text-primary-foreground text-[9px] md:text-[11px] text-center py-1.5 uppercase tracking-widest font-bold w-full">
+              {/* Close Button X */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setHidePromoWidget(true);
+                }}
+                className="absolute top-1.5 right-1.5 z-50 bg-black/70 hover:bg-black text-white p-1 rounded-full backdrop-blur-md transition-colors shadow-md"
+                title="Cerrar promoción"
+              >
+                <X size={14} />
+              </button>
+
+              <div 
+                onClick={() => setSelectedServiceImage(settings.carousel_images![activeImageIndex].url)}
+                className="bg-primary text-primary-foreground text-[9px] md:text-[11px] text-center py-1.5 uppercase tracking-widest font-bold w-full pr-7"
+              >
                 Promociones
               </div>
-              <div className="relative flex justify-center bg-muted/10 overflow-hidden">
+              
+              <div 
+                onClick={() => setSelectedServiceImage(settings.carousel_images![activeImageIndex].url)}
+                className="relative flex justify-center bg-muted/10 overflow-hidden"
+              >
                 <AnimatePresence mode="wait">
                   <motion.img
                     key={activeImageIndex}
@@ -321,18 +341,18 @@ export default function Home() {
                     animate={{ opacity: 1, x: 0, scale: 1 }}
                     exit={{ opacity: 0, x: -30, scale: 0.95 }}
                     transition={{ duration: 0.5, ease: "easeInOut" }}
-                    className="w-auto h-auto max-w-[80vw] max-h-[55vh] md:max-w-[400px] md:max-h-[65vh] object-contain"
+                    className="w-auto h-auto max-w-[65vw] max-h-[35vh] md:max-w-[340px] md:max-h-[48vh] object-contain"
                   />
                 </AnimatePresence>
                 
                 {settings.carousel_images.length > 1 && (
-                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-20 bg-background/70 backdrop-blur-md px-3 py-1.5 rounded-full shadow-sm">
+                  <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-20 bg-background/80 backdrop-blur-md px-2.5 py-1 rounded-full shadow-sm">
                     {settings.carousel_images.map((_, i) => (
                       <div
                         key={i}
                         className={`transition-all duration-300 rounded-full ${
                           i === activeImageIndex 
-                            ? "w-5 h-1.5 bg-primary" 
+                            ? "w-4 h-1.5 bg-primary" 
                             : "w-1.5 h-1.5 bg-primary/40"
                         }`}
                       />

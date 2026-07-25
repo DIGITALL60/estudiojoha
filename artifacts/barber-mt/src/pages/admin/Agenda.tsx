@@ -573,13 +573,14 @@ function getStatusCardStyle(status: string) {
   if (st === "cancelado") {
     return {
       style: {
-        backgroundColor: "rgba(239, 68, 68, 0.25)",
+        backgroundColor: "#fee2e2",
         borderLeft: "4px solid #dc2626",
-        borderTop: "1px solid rgba(220, 38, 38, 0.4)",
-        borderRight: "1px solid rgba(220, 38, 38, 0.3)",
-        borderBottom: "1px solid rgba(220, 38, 38, 0.3)",
+        borderTop: "1px solid #fca5a5",
+        borderRight: "1px solid #fca5a5",
+        borderBottom: "1px solid #fca5a5",
+        color: "#991b1b",
       },
-      textClass: "text-red-700 dark:text-red-300 font-bold",
+      textClass: "text-red-950 font-bold",
       badgeClass: "bg-red-600 text-white font-bold px-2 py-0.5 rounded text-[10px]",
       badgeText: "CANCELADO",
       borderColor: "#dc2626",
@@ -588,14 +589,15 @@ function getStatusCardStyle(status: string) {
   if (st === "confirmado" || st === "completado") {
     return {
       style: {
-        backgroundColor: "rgba(16, 185, 129, 0.20)",
+        backgroundColor: "#d1fae5",
         borderLeft: "4px solid #10b981",
-        borderTop: "1px solid rgba(16, 185, 129, 0.4)",
-        borderRight: "1px solid rgba(16, 185, 129, 0.3)",
-        borderBottom: "1px solid rgba(16, 185, 129, 0.3)",
+        borderTop: "1px solid #6ee7b7",
+        borderRight: "1px solid #6ee7b7",
+        borderBottom: "1px solid #6ee7b7",
+        color: "#065f46",
       },
-      textClass: "text-emerald-700 dark:text-emerald-300 font-bold",
-      badgeClass: "bg-emerald-500 text-white font-bold px-2 py-0.5 rounded text-[10px]",
+      textClass: "text-emerald-950 font-bold",
+      badgeClass: "bg-emerald-600 text-white font-bold px-2 py-0.5 rounded text-[10px]",
       badgeText: st === "completado" ? "COMPLETADO" : "CONFIRMADO ✓",
       borderColor: "#10b981",
     };
@@ -603,13 +605,14 @@ function getStatusCardStyle(status: string) {
   // agendado / pendiente confirmación
   return {
     style: {
-      backgroundColor: "rgba(245, 158, 11, 0.20)",
+      backgroundColor: "#fef3c7",
       borderLeft: "4px solid #f59e0b",
-      borderTop: "1px solid rgba(245, 158, 11, 0.4)",
-      borderRight: "1px solid rgba(245, 158, 11, 0.3)",
-      borderBottom: "1px solid rgba(245, 158, 11, 0.3)",
+      borderTop: "1px solid #fcd34d",
+      borderRight: "1px solid #fcd34d",
+      borderBottom: "1px solid #fcd34d",
+      color: "#78350f",
     },
-    textClass: "text-amber-700 dark:text-amber-300 font-bold",
+    textClass: "text-amber-950 font-bold",
     badgeClass: "bg-amber-500 text-white font-bold px-2 py-0.5 rounded text-[10px]",
     badgeText: "PENDIENTE",
     borderColor: "#f59e0b",
@@ -830,7 +833,7 @@ export default function Agenda() {
                             className="text-[9px] px-1.5 py-1 rounded-sm truncate cursor-pointer hover:opacity-90 transition-opacity font-medium shadow-xs"
                             style={statusInfo.style}>
                             <span className={statusInfo.textClass}>{app.time}</span>{" "}
-                            <span className="font-semibold text-foreground">{app.clientName}</span>
+                            <span className="font-bold">{app.clientName}</span>
                           </div>
                         );
                       })}
