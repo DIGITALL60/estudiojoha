@@ -1,6 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
-import { db, sqlite, professionals, services, app_settings, professional_schedules } from "@workspace/db";
+import { db, sqlite, professionals, services, app_settings, professional_schedules, appointments, clients, expenses, vouchers, blocked_dates } from "@workspace/db";
 import { randomUUID } from "crypto";
 import { DEFAULT_SETTINGS } from "./lib/settings.js";
 
@@ -302,6 +302,18 @@ async function seedIfEmpty() {
       for (const [key, value] of Object.entries(DEFAULT_SETTINGS)) {
         db.insert(app_settings).values({ key, value }).run();
       }
+    }
+
+    // Purge lingering test data on startup so Railway DB is 100% clean
+    try {
+      db.delete(appointments).run();
+      db.delete(clients).run();
+      db.delete(expenses).run();
+      db.delete(vouchers).run();
+      db.delete(blocked_dates).run();
+      logger.info("Purged test data on server startup.");
+    } catch {
+      // Ignore if empty
     }
 
   } catch (err) {

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, professionals, services, clients, appointments, professional_schedules, professional_services, products, service_products, expenses, app_settings, blocked_dates } from "@workspace/db";
+import { db, professionals, services, clients, appointments, professional_schedules, professional_services, products, service_products, expenses, app_settings, blocked_dates, vouchers } from "@workspace/db";
 
 import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
@@ -913,6 +913,21 @@ router.delete("/expenses/:id", requireAuth, async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: "Failed to delete expense" });
+  }
+});
+
+router.post("/purge-test-data", requireAuth, async (_req, res) => {
+  try {
+    await db.delete(appointments);
+    await db.delete(clients);
+    await db.delete(expenses);
+    await db.delete(vouchers);
+    await db.delete(blocked_dates);
+    logger.info("Purged all test data (appointments, clients, expenses, vouchers, blocked_dates)");
+    return res.json({ success: true, message: "Todas las pruebas fueron eliminadas. Sistema limpio." });
+  } catch (err) {
+    logger.error({ err }, "Failed to purge test data");
+    return res.status(500).json({ error: "Failed to purge test data" });
   }
 });
 
