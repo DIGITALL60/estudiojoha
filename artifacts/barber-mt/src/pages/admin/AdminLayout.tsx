@@ -164,9 +164,12 @@ interface AdminLayoutProps {
 
 export default function AdminLayout({ children, title, subtitle, actions }: AdminLayoutProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [showQR, setShowQR] = useState(false);
   const [, navigate] = useLocation();
+
+  const isEffectiveCollapsed = collapsed && !isHovered;
 
   const [user, setUser] = useState<{name: string, role: string, initial: string} | null>(null);
   const [badges, setBadges] = useState<{ agenda: number; stockLow: number }>({ agenda: 0, stockLow: 0 });
@@ -174,6 +177,13 @@ export default function AdminLayout({ children, title, subtitle, actions }: Admi
   const handleLogout = () => {
     localStorage.removeItem("user");
     window.location.href = "/login";
+  };
+
+  const getInitials = (name?: string) => {
+    if (!name) return "EJ";
+    const parts = name.trim().split(" ");
+    if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    return name.slice(0, 2).toUpperCase();
   };
 
   useEffect(() => {
@@ -218,7 +228,9 @@ export default function AdminLayout({ children, title, subtitle, actions }: Admi
 
       {/* Sidebar */}
       <motion.aside
-        animate={{ width: collapsed ? 64 : 220 }}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        animate={{ width: isEffectiveCollapsed ? 64 : 220 }}
         transition={{ duration: 0.25, ease: "easeInOut" }}
         className={`
           fixed md:relative inset-y-0 left-0 z-50
@@ -226,10 +238,10 @@ export default function AdminLayout({ children, title, subtitle, actions }: Admi
           ${mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}
           transition-transform md:transition-none
         `}
-        style={{ minWidth: collapsed ? 64 : 220 }}
+        style={{ minWidth: isEffectiveCollapsed ? 64 : 220 }}
       >
         {/* Logo header */}
-        <div className={`flex items-center gap-3 px-3 py-4 border-b border-sidebar-border ${collapsed ? "justify-center" : ""}`}>
+        <div className={`flex items-center gap-3 px-3 py-4 border-b border-sidebar-border ${isEffectiveCollapsed ? "justify-center" : ""}`}>
           <button
             onClick={() => navigate("/")}
             className="flex-shrink-0 hover:opacity-80 transition-opacity"
@@ -238,7 +250,7 @@ export default function AdminLayout({ children, title, subtitle, actions }: Admi
             <LogoIcon size={36} />
           </button>
           <AnimatePresence>
-            {!collapsed && (
+            {!isEffectiveCollapsed && (
               <motion.div
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
@@ -277,15 +289,15 @@ export default function AdminLayout({ children, title, subtitle, actions }: Admi
 
             return (
               <div key={section.id} className="mb-2">
-                {section.title && !collapsed && (
+                {section.title && !isEffectiveCollapsed && (
                   <p className="text-[9px] font-semibold tracking-[0.2em] text-sidebar-foreground/30 uppercase px-3 py-2">
                     {section.title}
                   </p>
                 )}
-                {section.title && collapsed && <div className="h-px bg-sidebar-border/50 mx-2 my-2" />}
+                {section.title && isEffectiveCollapsed && <div className="h-px bg-sidebar-border/50 mx-2 my-2" />}
                 <div className="space-y-0.5">
                   {visibleItems.map((item) => (
-                    <NavItem key={item.id} item={{ ...item, badge: getItemBadge(item.id) }} collapsed={collapsed} />
+                    <NavItem key={item.id} item={{ ...item, badge: getItemBadge(item.id) }} collapsed={isEffectiveCollapsed} />
                   ))}
                 </div>
               </div>
@@ -304,7 +316,7 @@ export default function AdminLayout({ children, title, subtitle, actions }: Admi
                 >
                   <span className="flex-shrink-0">{iconMap[item.icon]}</span>
                   <AnimatePresence>
-                    {!collapsed && (
+                    {!isEffectiveCollapsed && (
                       <motion.span
                         initial={{ opacity: 0, width: 0 }}
                         animate={{ opacity: 1, width: "auto" }}
@@ -324,7 +336,7 @@ export default function AdminLayout({ children, title, subtitle, actions }: Admi
                 >
                   <span className="flex-shrink-0">{iconMap[item.icon]}</span>
                   <AnimatePresence>
-                    {!collapsed && (
+                    {!isEffectiveCollapsed && (
                       <motion.span
                         initial={{ opacity: 0, width: 0 }}
                         animate={{ opacity: 1, width: "auto" }}
@@ -338,14 +350,14 @@ export default function AdminLayout({ children, title, subtitle, actions }: Admi
                   </AnimatePresence>
                 </button>
               ) : (
-                <NavItem item={item as any} collapsed={collapsed} />
+                <NavItem item={item as any} collapsed={isEffectiveCollapsed} />
               )}
             </div>
           ))}
 
           {/* User info */}
           <AnimatePresence>
-            {!collapsed && (
+            {!isEffectiveCollapsed && (
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -353,7 +365,9 @@ export default function AdminLayout({ children, title, subtitle, actions }: Admi
                 className="mt-2 px-3 py-2.5 border border-sidebar-border rounded-sm flex items-center gap-3"
               >
                 <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
-                  <span className="text-[10px] font-bold text-primary">EJ</span>
+                  <span className="text-[10px] font-bold text-primary">
+                    {user?.initial || getInitials(user?.name)}
+                  </span>
                 </div>
                 <div className="overflow-hidden">
                   <p className="text-[10px] font-semibold text-sidebar-foreground truncate">{user ? user.name : "Estudio Joha"}</p>
