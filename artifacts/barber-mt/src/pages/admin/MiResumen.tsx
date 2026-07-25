@@ -362,15 +362,23 @@ export default function MiResumen() {
                           </div>
                         </div>
 
-                        {app.clientPhone && (
-                          <a
-                            href={whatsappUrl(app.clientPhone, `Hola ${app.clientName}! Te escribo desde Estudio Joha Molinero para coordinar tu turno de ${app.serviceName} el día ${app.date.split("-").reverse().join("/")} a las ${app.time}hs. ✨`)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors self-end sm:self-center"
-                          >
-                            <MessageCircle size={14} /> Recordatorio
-                          </a>
+                        {!isConfirmed && app.clientPhone && (
+                          <div className="flex items-center gap-2 self-end sm:self-center">
+                            <button
+                              onClick={async () => {
+                                try {
+                                  await fetchAPI(`/api/data/appointments/${app.id}/remind`, { method: "POST" });
+                                  alert("¡Recordatorio automático enviado por WhatsApp!");
+                                  loadData();
+                                } catch {
+                                  window.open(whatsappUrl(app.clientPhone!, `¡Hola ${app.clientName}! 👋 Te escribimos desde Estudio Joha Molinero para recordarte tu turno de ${app.serviceName} el día ${app.date.split("-").reverse().join("/")} a las ${app.time}hs. Por favor, ¿nos confirmás si vas a asistir? Muchas gracias! 💖`), "_blank");
+                                }
+                              }}
+                              className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"
+                            >
+                              <MessageCircle size={14} /> Solicitar Confirmación
+                            </button>
+                          </div>
                         )}
                       </div>
                     );

@@ -533,15 +533,17 @@ function EditTurnModal({ app, onClose, onUpdated }: { app: Appointment; onClose:
 
         {/* Modal footer action bar */}
         <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-t border-border flex-shrink-0 bg-muted/20">
-          <button 
-            onClick={handleRemind} 
-            disabled={reminding || remindSuccess}
-            className={`flex items-center gap-1.5 text-xs px-3 py-2 rounded-md font-semibold transition-colors ${
-              remindSuccess ? "bg-emerald-500/10 text-emerald-500" : "bg-primary/10 text-primary hover:bg-primary/20"
-            }`}
-          >
-            {reminding ? "Enviando..." : remindSuccess ? "¡Enviado!" : "🔔 Recordatorio WA"}
-          </button>
+          {status === "agendado" || !status ? (
+            <button 
+              onClick={handleRemind} 
+              disabled={reminding || remindSuccess}
+              className={`flex items-center gap-1.5 text-xs px-3 py-2 rounded-md font-bold transition-colors ${
+                remindSuccess ? "bg-emerald-500/10 text-emerald-500" : "bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20"
+              }`}
+            >
+              {reminding ? "Enviando..." : remindSuccess ? "¡Enviado!" : "🔔 Solicitar Confirmación WA"}
+            </button>
+          ) : <div />}
           
           <div className="flex items-center gap-2">
             <button onClick={onClose} className="text-xs text-muted-foreground hover:text-foreground px-3 py-2 font-medium">Cancelar</button>
