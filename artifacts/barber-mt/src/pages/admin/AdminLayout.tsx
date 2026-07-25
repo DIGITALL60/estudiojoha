@@ -45,6 +45,7 @@ const navConfig = {
         { id: "dashboard", label: "Inicio", icon: "home", path: "/admin/dashboard" },
         { id: "agenda", label: "Agenda", icon: "calendar", path: "/admin/agenda" },
         { id: "horarios", label: "Mis Horarios", icon: "clock", path: "/admin/horarios" },
+        { id: "mi-resumen", label: "Mi Resumen", icon: "chart-line", path: "/admin/mi-resumen" },
         { id: "clientes", label: "Clientes", icon: "users", path: "/admin/clientes" },
         { id: "servicios", label: "Servicios", icon: "briefcase", path: "/admin/servicios" },
         { id: "stock", label: "Stock", icon: "package", path: "/admin/stock" },
@@ -282,8 +283,8 @@ export default function AdminLayout({ children, title, subtitle, actions }: Admi
           {navConfig.sections.map((section) => {
             const visibleItems = section.items.filter(item => {
               if (isAdmin) return true;
-              // Staff can see: agenda, horarios, historias
-              return item.id === "agenda" || item.id === "horarios" || item.id === "historias";
+              // Staff can see: agenda, horarios, mi-resumen, historias
+              return item.id === "agenda" || item.id === "horarios" || item.id === "mi-resumen" || item.id === "historias";
             });
             if (visibleItems.length === 0) return null;
 

@@ -12,6 +12,7 @@ import Login from "@/pages/Login";
 import Dashboard from "@/pages/admin/Dashboard";
 import Agenda from "@/pages/admin/Agenda";
 import Horarios from "@/pages/admin/Horarios";
+import MiResumen from "@/pages/admin/MiResumen";
 import Clientes from "@/pages/admin/Clientes";
 import Servicios from "@/pages/admin/Servicios";
 import Stock from "@/pages/admin/Stock";
@@ -78,6 +79,7 @@ function Router() {
       <Route path="/admin/dashboard">{(params) => <AuthRoute component={Dashboard} adminOnly />}</Route>
       <Route path="/admin/agenda">{(params) => <AuthRoute component={Agenda} />}</Route>
       <Route path="/admin/horarios">{(params) => <AuthRoute component={Horarios} />}</Route>
+      <Route path="/admin/mi-resumen">{(params) => <AuthRoute component={MiResumen} />}</Route>
       <Route path="/admin/clientes">{(params) => <AuthRoute component={Clientes} adminOnly />}</Route>
       <Route path="/admin/servicios">{(params) => <AuthRoute component={Servicios} adminOnly />}</Route>
       <Route path="/admin/stock">{(params) => <AuthRoute component={Stock} adminOnly />}</Route>
