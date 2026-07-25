@@ -13,6 +13,22 @@ export async function isTimeSlotAvailable(
   time: string,
   excludeAppointmentId?: string
 ): Promise<{ available: boolean; reason?: string }> {
+  const nowArgDate = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+  const nowArgTime = new Date().toLocaleTimeString("en-GB", { timeZone: "America/Argentina/Buenos_Aires", hour: "2-digit", minute: "2-digit" });
+  const [nowH, nowM] = nowArgTime.split(":").map(Number);
+  const nowMinutes = nowH * 60 + nowM;
+
+  if (date < nowArgDate) {
+    return { available: false, reason: "No se pueden reservar turnos para fechas pasadas" };
+  }
+
+  if (date === nowArgDate) {
+    const slotStartMins = parseTime(time);
+    if (slotStartMins <= nowMinutes + 15) {
+      return { available: false, reason: "El horario seleccionado ya ha transcurrido" };
+    }
+  }
+
   const [yyyy, mm, dd] = date.split("-").map(Number);
   const dateObj = new Date(Date.UTC(yyyy, mm - 1, dd));
   if (isNaN(dateObj.getTime())) {

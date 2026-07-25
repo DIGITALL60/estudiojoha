@@ -136,7 +136,22 @@ export default function BookingWizard({ onClose, initialServiceId, publicInfo: p
       fetchAPI(`/api/bookings/availability?date=${selectedDate}&professionalId=${selectedProfessional.id}&serviceDuration=${totalDuration}`)
         .then(r => r.json())
         .then(data => {
-          setAvailableTimes(data.availableTimes || []);
+          const times: string[] = data.availableTimes || [];
+          const nowArgDate = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+          const nowArgTime = new Date().toLocaleTimeString("en-GB", { timeZone: "America/Argentina/Buenos_Aires", hour: "2-digit", minute: "2-digit" });
+          const [nowH, nowM] = nowArgTime.split(":").map(Number);
+          const nowMinutes = nowH * 60 + nowM;
+
+          const filtered = times.filter(t => {
+            if (selectedDate === nowArgDate) {
+              const [h, m] = t.split(":").map(Number);
+              const slotMins = h * 60 + m;
+              return slotMins > nowMinutes + 15;
+            }
+            return true;
+          });
+
+          setAvailableTimes(filtered);
           setSelectedTime("");
         })
         .catch(console.error)

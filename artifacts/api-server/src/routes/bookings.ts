@@ -312,6 +312,11 @@ router.get("/availability", async (req, res) => {
       return `${h}:${m}`;
     };
 
+    const nowArgDate = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
+    const nowArgTime = new Date().toLocaleTimeString("en-GB", { timeZone: "America/Argentina/Buenos_Aires", hour: "2-digit", minute: "2-digit" });
+    const [nowH, nowM] = nowArgTime.split(":").map(Number);
+    const nowMinutes = nowH * 60 + nowM;
+
     let availableBlocks: number[] = [];
     const INTERVAL = 30; // Check every 30 minutes
 
@@ -320,12 +325,15 @@ router.get("/availability", async (req, res) => {
       const endMins = parseTime(schedule.endTime);
 
       for (let time = startMins; time + duration <= endMins; time += INTERVAL) {
+        // If requested date is TODAY, filter out past time slots (with 15 min buffer)
+        if (requestedDate === nowArgDate && time <= nowMinutes + 15) {
+          continue;
+        }
+
         // Check if [time, time + duration] overlaps with any existing appointment
         const hasOverlap = dayAppointments.some(app => {
           const appStart = parseTime(app.time);
           const appEnd = appStart + app.duration;
-          // Overlap condition:
-          // A overlaps B if A.start < B.end AND A.end > B.start
           return time < appEnd && (time + duration) > appStart;
         });
 
