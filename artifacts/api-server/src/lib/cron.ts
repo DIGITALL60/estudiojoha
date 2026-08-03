@@ -2,7 +2,7 @@ import cron from "node-cron";
 import { db, appointments, clients, services, professionals, vouchers } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
-import { cloudSendText, cloudSendButtons } from "./whatsapp-cloud.js";
+import { cloudSendText, cloudSendButtons, cloudSendTemplate } from "./whatsapp-cloud.js";
 import { logger } from "./logger.js";
 import { getBoolSetting, getSetting } from "./settings.js";
 
@@ -91,7 +91,7 @@ export function initCronJobs() {
 
             // Send reminder with confirm/reschedule buttons
             try {
-              await cloudSendButtons(
+              const sent = await cloudSendButtons(
                 client.phone,
                 `¡Hola ${client.name}! 👋\n\nTe recordamos que mañana tenés turno en *Estudio Joha Molinero* 💅\n\n📅 ${dateDisplay} a las *${app.time}hs*\n💅 Servicio: ${service.name}\n👩‍🎨 Profesional: ${prof.name}\n\n¿Podés confirmar tu asistencia?`,
                 [
@@ -99,6 +99,17 @@ export function initCronJobs() {
                   { id: "reminder_cancel", title: "❌ No asistiré" },
                 ]
               );
+              
+              if (!sent) {
+                logger.info(`Fallback a template de recordatorio para ${client.phone}`);
+                await cloudSendTemplate(client.phone, "recordatorio_turno", "es_AR", [
+                  client.name,
+                  dateDisplay,
+                  app.time,
+                  service.name,
+                  prof.name
+                ]);
+              }
             } catch {
               // Fallback to plain text if buttons fail
               await cloudSendText(

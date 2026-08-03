@@ -3,7 +3,7 @@ import { db, professionals, services, clients, appointments, professional_schedu
 
 import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
-import { cloudSendText } from "../lib/whatsapp-cloud.js";
+import { cloudSendText, cloudSendTemplate } from "../lib/whatsapp-cloud.js";
 import { logger } from "../lib/logger.js";
 import { requireAuth } from "../middlewares/auth.js";
 import { getAllSettings, upsertSettings, getBoolSetting, getSetting } from "../lib/settings.js";
@@ -469,6 +469,7 @@ router.post("/appointments", requireAuth, async (req, res) => {
 
     // Fetch details for WhatsApp notification
     try {
+      const { cloudSendText, cloudSendTemplate } = await import("../lib/whatsapp-cloud.js");
       const [client] = await db.select().from(clients).where(eq(clients.id, clientId)).limit(1);
       const [prof] = await db.select().from(professionals).where(eq(professionals.id, professionalId)).limit(1);
       const [srv] = await db.select().from(services).where(eq(services.id, serviceId)).limit(1);
@@ -488,7 +489,20 @@ router.post("/appointments", requireAuth, async (req, res) => {
           `👩‍🎨 Profesional: ${prof.name}\n\n` +
           `📍 ${businessAddress}\n\n` +
           `Si necesitás cancelar o reprogramar, avisanos con anticipación.\n¡Gracias por elegirnos! 💜`;
-        await cloudSendText(client.phone, clientMsg);
+        
+        await cloudSendText(client.phone, clientMsg).then(async (sent) => {
+          if (!sent) {
+            logger.info(`Fallback a template para ${client.phone} (turno manual)`);
+            return await cloudSendTemplate(client.phone, "confirmacion_turno", "es_AR", [
+              client.name,
+              date,
+              time,
+              srv.name,
+              prof.name
+            ]);
+          }
+          return true;
+        });
 
         if (prof.phone && prof.phone !== admin?.phone) {
           const profMsg =

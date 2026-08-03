@@ -54,8 +54,8 @@ export async function cloudSendList(
   bodyText: string,
   buttonLabel: string,
   sections: { title: string; rows: { id: string; title: string; description?: string }[] }[]
-): Promise<void> {
-  await post({
+): Promise<boolean> {
+  return post({
     messaging_product: "whatsapp",
     to,
     type: "interactive",
@@ -72,8 +72,8 @@ export async function cloudSendButtons(
   to: string,
   bodyText: string,
   buttons: { id: string; title: string }[]
-): Promise<void> {
-  await post({
+): Promise<boolean> {
+  return post({
     messaging_product: "whatsapp",
     to,
     type: "interactive",
@@ -87,5 +87,45 @@ export async function cloudSendButtons(
         })),
       },
     },
+  });
+}
+
+/**
+ * Enviar Plantilla de WhatsApp (Template)
+ * @param to Número de teléfono de destino
+ * @param templateName Nombre de la plantilla aprobada en Meta (ej: "turno_confirmado")
+ * @param languageCode Código de idioma de la plantilla (ej: "es_AR" o "es")
+ * @param parameters Lista de parámetros dinámicos (variables {{1}}, {{2}}, etc) para el BODY.
+ */
+export async function cloudSendTemplate(
+  to: string,
+  templateName: string,
+  languageCode: string = "es_AR",
+  parameters: string[] = []
+): Promise<boolean> {
+  const cleanPhone = to.replace(/\D/g, "").replace(/@s\.whatsapp\.net$/, "");
+  const formattedPhone = cleanPhone.startsWith("54") && !cleanPhone.startsWith("549")
+    ? `549${cleanPhone.slice(2)}`
+    : cleanPhone;
+
+  return post({
+    messaging_product: "whatsapp",
+    to: formattedPhone,
+    type: "template",
+    template: {
+      name: templateName,
+      language: {
+        code: languageCode
+      },
+      components: parameters.length > 0 ? [
+        {
+          type: "body",
+          parameters: parameters.map(p => ({
+            type: "text",
+            text: p
+          }))
+        }
+      ] : []
+    }
   });
 }

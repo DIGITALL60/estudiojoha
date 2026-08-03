@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db, clients, appointments, professionals, services, professional_schedules, vouchers } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { cloudSendText } from "../lib/whatsapp-cloud.js";
+import { cloudSendText, cloudSendTemplate } from "../lib/whatsapp-cloud.js";
 import { logger } from "../lib/logger.js";
 import { randomUUID } from "crypto";
 import { validate } from "../middlewares/validate.js";
@@ -178,11 +178,23 @@ router.post("/", validate(createBookingSchema), async (req, res) => {
 
     if (whatsappEnabled) {
       Promise.all([
-      cloudSendText(client.phone, clientMsg),
-      prof?.phone && prof.phone !== admin?.phone ? cloudSendText(prof.phone, profMsg) : Promise.resolve(),
-      admin?.phone ? cloudSendText(admin.phone, adminMsg) : Promise.resolve()
-    ]).catch(err => {
-      logger.error({ err }, "Error sending WhatsApp notifications");
+        cloudSendText(client.phone, clientMsg).then((sent) => {
+          if (!sent) {
+            logger.info(`Fallback a template para ${client.phone}`);
+            return cloudSendTemplate(client.phone, "confirmacion_turno", "es_AR", [
+              client.name,
+              appointment.date,
+              appointment.time,
+              servicesListString,
+              professionalName
+            ]);
+          }
+          return true;
+        }),
+        prof?.phone && prof.phone !== admin?.phone ? cloudSendText(prof.phone, profMsg) : Promise.resolve(),
+        admin?.phone ? cloudSendText(admin.phone, adminMsg) : Promise.resolve()
+      ]).catch(err => {
+        logger.error({ err }, "Error sending WhatsApp notifications");
       });
     }
 
