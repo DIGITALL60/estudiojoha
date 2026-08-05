@@ -12,7 +12,7 @@ import {
 } from "@/lib/publicInfo";
 
 interface Service { id: string; name: string; category: string; duration: number; price: number; }
-interface Professional { id: string; name: string; role: string; color: string; initial: string; }
+interface Professional { id: string; name: string; role: string; color: string; initial: string; photo?: string; }
 
 interface BookingWizardProps {
   onClose: () => void;

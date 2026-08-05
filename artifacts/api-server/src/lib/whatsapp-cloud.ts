@@ -32,12 +32,22 @@ async function post(body: object): Promise<boolean> {
   }
 }
 
+export function formatWhatsAppPhone(phone: string): string {
+  let cleanPhone = phone.replace(/\D/g, "").replace(/@s\.whatsapp\.net$/, "");
+  if (cleanPhone.startsWith("0")) {
+    cleanPhone = cleanPhone.slice(1);
+  }
+  if (cleanPhone.startsWith("54")) {
+    if (!cleanPhone.startsWith("549")) {
+      return `549${cleanPhone.slice(2)}`;
+    }
+    return cleanPhone;
+  }
+  return `549${cleanPhone}`;
+}
+
 export async function cloudSendText(to: string, text: string): Promise<boolean> {
-  const cleanPhone = to.replace(/\D/g, "").replace(/@s\.whatsapp\.net$/, "");
-  // Ensure Argentina mobile format has '9'
-  const formattedPhone = cleanPhone.startsWith("54") && !cleanPhone.startsWith("549")
-    ? `549${cleanPhone.slice(2)}`
-    : cleanPhone;
+  const formattedPhone = formatWhatsAppPhone(to);
 
   return post({
     messaging_product: "whatsapp",
@@ -55,9 +65,10 @@ export async function cloudSendList(
   buttonLabel: string,
   sections: { title: string; rows: { id: string; title: string; description?: string }[] }[]
 ): Promise<boolean> {
+  const formattedPhone = formatWhatsAppPhone(to);
   return post({
     messaging_product: "whatsapp",
-    to,
+    to: formattedPhone,
     type: "interactive",
     interactive: {
       type: "list",
@@ -73,9 +84,10 @@ export async function cloudSendButtons(
   bodyText: string,
   buttons: { id: string; title: string }[]
 ): Promise<boolean> {
+  const formattedPhone = formatWhatsAppPhone(to);
   return post({
     messaging_product: "whatsapp",
-    to,
+    to: formattedPhone,
     type: "interactive",
     interactive: {
       type: "button",
@@ -103,10 +115,7 @@ export async function cloudSendTemplate(
   languageCode: string = "es_AR",
   parameters: string[] = []
 ): Promise<boolean> {
-  const cleanPhone = to.replace(/\D/g, "").replace(/@s\.whatsapp\.net$/, "");
-  const formattedPhone = cleanPhone.startsWith("54") && !cleanPhone.startsWith("549")
-    ? `549${cleanPhone.slice(2)}`
-    : cleanPhone;
+  const formattedPhone = formatWhatsAppPhone(to);
 
   return post({
     messaging_product: "whatsapp",
