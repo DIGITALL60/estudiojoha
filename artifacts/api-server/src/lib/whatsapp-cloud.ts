@@ -37,12 +37,24 @@ export function formatWhatsAppPhone(phone: string): string {
   if (cleanPhone.startsWith("0")) {
     cleanPhone = cleanPhone.slice(1);
   }
+  
   if (cleanPhone.startsWith("54")) {
-    if (!cleanPhone.startsWith("549")) {
-      return `549${cleanPhone.slice(2)}`;
-    }
-    return cleanPhone;
+    cleanPhone = cleanPhone.startsWith("549") ? cleanPhone.slice(3) : cleanPhone.slice(2);
   }
+
+  // En Argentina los números válidos para WhatsApp tienen 10 dígitos (sin el 549).
+  // Si tiene 12 dígitos, es casi seguro que el usuario incluyó el "15" del celular.
+  // Ej: 11 15 12345678, 351 15 1234567, 3472 15 123456.
+  if (cleanPhone.length === 12) {
+    if (cleanPhone.substring(2, 4) === "15") {
+      cleanPhone = cleanPhone.substring(0, 2) + cleanPhone.substring(4);
+    } else if (cleanPhone.substring(3, 5) === "15") {
+      cleanPhone = cleanPhone.substring(0, 3) + cleanPhone.substring(5);
+    } else if (cleanPhone.substring(4, 6) === "15") {
+      cleanPhone = cleanPhone.substring(0, 4) + cleanPhone.substring(6);
+    }
+  }
+
   return `549${cleanPhone}`;
 }
 
