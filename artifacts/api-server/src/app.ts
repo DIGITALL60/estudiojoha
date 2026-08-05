@@ -74,7 +74,7 @@ app.get("/api/test-wa", async (req, res) => {
         type: "template",
         template: {
           name: "confirmacion_turno",
-          language: { code: "es_AR" },
+          language: { code: req.query.lang || "es_AR" },
           components: [
             {
               type: "body",
