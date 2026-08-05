@@ -58,4 +58,44 @@ app.use("/api/auth", authRouter);
 app.use("/api/vouchers", vouchersRouter);
 app.use("/api/webhook", webhookRouter); // WhatsApp Cloud API bot
 
+app.get("/api/test-wa", async (req, res) => {
+  const { cloudSendTemplate } = await import("./lib/whatsapp-cloud.js");
+  const phone = (req.query.phone as string) || "3472629600";
+  try {
+    const fetchRes = await fetch(`https://graph.facebook.com/v19.0/${process.env.WA_CLOUD_PHONE_ID || "1215897258279390"}/messages`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.WA_CLOUD_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        to: `549${phone}`,
+        type: "template",
+        template: {
+          name: "confirmacion_turno",
+          language: { code: "es_AR" },
+          components: [
+            {
+              type: "body",
+              parameters: [
+                { type: "text", text: "Test Name" },
+                { type: "text", text: "10/10/2026" },
+                { type: "text", text: "10:00" },
+                { type: "text", text: "Test Service" },
+                { type: "text", text: "Test Prof" }
+              ]
+            }
+          ]
+        }
+      })
+    });
+    
+    const data = await fetchRes.json();
+    res.json({ status: fetchRes.status, ok: fetchRes.ok, response: data });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default app;
