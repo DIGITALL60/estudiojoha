@@ -178,16 +178,18 @@ router.post("/", validate(createBookingSchema), async (req, res) => {
 
     if (whatsappEnabled) {
       Promise.all([
-        cloudSendText(client.phone, clientMsg).then((sent) => {
+        // Siempre usamos la plantilla primero para el cliente: funciona aunque
+        // nunca haya chateado con el negocio (ventana de 24hs no aplica a templates).
+        cloudSendTemplate(client.phone, "confirmacion_turno", "es_AR", [
+          client.name,
+          appointment.date,
+          appointment.time,
+          servicesListString,
+          professionalName
+        ]).then((sent) => {
           if (!sent) {
-            logger.info(`Fallback a template para ${client.phone}`);
-            return cloudSendTemplate(client.phone, "confirmacion_turno", "es_AR", [
-              client.name,
-              appointment.date,
-              appointment.time,
-              servicesListString,
-              professionalName
-            ]);
+            logger.info(`Template falló, fallback a texto libre para ${client.phone}`);
+            return cloudSendText(client.phone, clientMsg);
           }
           return true;
         }),
