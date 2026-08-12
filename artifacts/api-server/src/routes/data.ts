@@ -629,26 +629,31 @@ router.post("/appointments/:id/remind", requireAuth, async (req, res) => {
     const [d, m, y] = app.date.split("-");
     const dateDisplay = `${d}/${m}/${y}`;
 
-    // Try to send with interactive buttons first
+    // Try to send with official template to avoid 24h window blocking
     try {
-      const { cloudSendButtons } = await import("../lib/whatsapp-cloud.js");
-      await cloudSendButtons(
-        client.phone,
-        `¡Hola ${client.name}! 👋\n\nTe recordamos tu turno en *Estudio Joha Molinero* 💅\n\n📅 ${dateDisplay} a las *${app.time}hs*\n💅 Servicio: ${serviceName}\n👩‍🎨 Profesional: ${professionalName}\n\n¿Podés confirmar tu asistencia?`,
-        [
-          { id: "reminder_confirm", title: "✅ Confirmo" },
-          { id: "reminder_cancel", title: "❌ No asistiré" },
-        ]
-      );
+      const { cloudSendTemplate } = await import("../lib/whatsapp-cloud.js");
+      const sent = await cloudSendTemplate(client.phone, "recordatorio_turno", "es_AR", [
+        client.name,
+        dateDisplay,
+        app.time,
+        serviceName,
+        professionalName
+      ]);
+
+      if (!sent) {
+        throw new Error("Template failed");
+      }
     } catch {
-      // Fallback to plain text
+      // Fallback to plain text only if template fails entirely (and if there's an open 24h window)
+      const { cloudSendText } = await import("../lib/whatsapp-cloud.js");
       const msg =
         `¡Hola ${client.name}! 👋\n\n` +
         `Te recordamos tu turno en *Estudio Joha Molinero* 💅\n\n` +
         `📅 ${dateDisplay} a las *${app.time}hs*\n` +
         `💅 Servicio: ${serviceName}\n` +
         `👩‍🎨 Profesional: ${professionalName}\n\n` +
-        `Respondé *SI* para confirmar o *NO ASISTIRÉ* para reprogramar tu turno.\n¡Te esperamos! 💜`;
+        `¿Podés confirmar tu asistencia o avisarnos si necesitás reprogramar?`;
+        
       await cloudSendText(client.phone, msg);
     }
     
