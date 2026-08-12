@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Bell, Globe, Check, Loader2 } from "lucide-react";
+import { Bell, Globe, Check, Loader2, AlertCircle } from "lucide-react";
 import AdminLayout from "./AdminLayout";
 import { fetchAPI } from "@/lib/api";
 
@@ -208,6 +208,42 @@ export default function Configuracion() {
                   />
                 </div>
               ))}
+            </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
+            className="bg-card border border-red-500/20 rounded-sm overflow-hidden"
+          >
+            <div className="px-5 py-4 border-b border-red-500/20 bg-red-500/5 flex items-center gap-2">
+              <AlertCircle size={13} className="text-red-500" />
+              <h3 className="text-sm font-semibold text-red-500">Zona de Peligro</h3>
+            </div>
+            <div className="p-4 space-y-4">
+              <div className="flex flex-col gap-2">
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Esta acción eliminará <b>todos los turnos</b> del sistema. Usar solo para limpiar los datos de prueba antes del lanzamiento oficial.
+                </p>
+                <button
+                  onClick={async () => {
+                    if (confirm("¿Estás 100% segura de que querés borrar TODOS los turnos? Esta acción no se puede deshacer.")) {
+                      try {
+                        const res = await fetchAPI("/api/data/appointments/all", { method: "DELETE" });
+                        if (res.ok) {
+                          alert("Todos los turnos han sido eliminados.");
+                        } else {
+                          alert("Ocurrió un error al intentar eliminar los turnos.");
+                        }
+                      } catch {
+                        alert("Ocurrió un error de conexión.");
+                      }
+                    }
+                  }}
+                  className="bg-red-500/10 text-red-500 hover:bg-red-500/20 border border-red-500/20 px-4 py-2 rounded-sm text-xs font-semibold transition-colors mt-2"
+                >
+                  Eliminar todos los turnos
+                </button>
+              </div>
             </div>
           </motion.div>
         </div>

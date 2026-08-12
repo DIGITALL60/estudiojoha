@@ -535,6 +535,15 @@ router.post("/appointments", requireAuth, async (req, res) => {
   }
 });
 
+router.delete("/appointments/all", requireAuth, async (req, res) => {
+  try {
+    await db.delete(appointments).run();
+    return res.status(200).json({ success: true, message: "Todos los turnos han sido eliminados" });
+  } catch (err) {
+    return res.status(500).json({ error: "Failed to delete appointments" });
+  }
+});
+
 router.patch("/appointments/:id", requireAuth, async (req, res) => {
   try {
     const { id } = req.params as { id: string };
