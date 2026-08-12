@@ -174,6 +174,7 @@ export default function AdminLayout({ children, title, subtitle, actions }: Admi
 
   const [user, setUser] = useState<{name: string, role: string, initial: string} | null>(null);
   const [badges, setBadges] = useState<{ agenda: number; stockLow: number }>({ agenda: 0, stockLow: 0 });
+  const [businessName, setBusinessName] = useState("Estudio Joha Molinero");
   
   const handleLogout = () => {
     localStorage.removeItem("user");
@@ -197,10 +198,12 @@ export default function AdminLayout({ children, title, subtitle, actions }: Admi
     Promise.all([
       fetchAPI("/api/data/appointments").then(r => r.json()).catch(() => []),
       fetchAPI("/api/data/products").then(r => r.json()).catch(() => []),
-    ]).then(([apps, products]) => {
+      fetchAPI("/api/data/settings").then(r => r.json()).catch(() => ({})),
+    ]).then(([apps, products, settings]) => {
       const agendaCount = apps.filter((a: any) => a.date === today && a.status === "agendado").length;
       const stockLow = products.filter((p: any) => p.stock <= p.minStock).length;
       setBadges({ agenda: agendaCount, stockLow });
+      if (settings?.business_name) setBusinessName(settings.business_name);
     });
   }, []);
 
@@ -260,7 +263,7 @@ export default function AdminLayout({ children, title, subtitle, actions }: Admi
                 className="flex flex-col leading-none overflow-hidden"
               >
                 <span className="text-[11px] font-semibold tracking-wider text-sidebar-foreground truncate">
-                  Estudio Joha Molinero
+                  {businessName}
                 </span>
                 <span className="text-[9px] tracking-[0.3em] text-primary uppercase font-medium mt-0.5">
                   STUDIO

@@ -13,7 +13,7 @@ const voucherTypes = [
     bg: "bg-pink-400/10",
     border: "border-pink-400/30",
     description: "Enviado a clientes que cumplen años este mes.",
-    defaultTemplate: `🎂 ¡Feliz cumpleaños, {nombre}! 🎂\n\nEn Estudio Joha Molinero te regalamos un *15% de descuento* en tu próxima visita 💜\n\nUsá el código: *CUMPLE-{nombre}-15*\n\n📅 Válido durante todo tu mes de cumpleaños\n📲 Reservar: https://wa.link/pga9u0\n\n¡Te esperamos para celebrarlo! 🥂`,
+    defaultTemplate: `🎂 ¡Feliz cumpleaños, {nombre}! 🎂\n\nEn Estudio Joha Molinero te regalamos un *15% de descuento* en tu próxima visita 💜\n\nUsá el código: *CUMPLE-{nombre}-15*\n\n📅 Válido durante todo tu mes de cumpleaños\n📲 Reservar: https://JohaMolinero.com\n\n¡Te esperamos para celebrarlo! 🥂`,
   },
   {
     id: "voucher",
@@ -23,7 +23,7 @@ const voucherTypes = [
     bg: "bg-violet-400/10",
     border: "border-violet-400/30",
     description: "Voucher de monto fijo para clientes especiales.",
-    defaultTemplate: `🎁 ¡Tenés un voucher de regalo de Estudio Joha Molinero!\n\n*Valor: 10% OFF*\nCódigo: *REGALO-{nombre}*\n\n📲 Para usarlo, reservá tu turno: https://wa.link/pga9u0\n\n¡Disfrutalo! 💜`,
+    defaultTemplate: `🎁 ¡Tenés un voucher de regalo de Estudio Joha Molinero!\n\n*Valor: 10% OFF*\nCódigo: *REGALO-{nombre}*\n\n📲 Para usarlo, reservá tu turno: https://JohaMolinero.com\n\n¡Disfrutalo! 💜`,
   },
 ];
 

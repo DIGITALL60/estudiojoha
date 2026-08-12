@@ -12,7 +12,7 @@ Hace un tiempo que no te vemos en Estudio Joha Molinero y te extrañamos 💜
 
 ✨ *{codigo}* ✨
 
-📲 Reservar: https://wa.link/pga9u0
+📲 Reservar: https://JohaMolinero.com
 
 ¡Te esperamos!`;
 
