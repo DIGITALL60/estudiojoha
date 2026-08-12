@@ -27,6 +27,7 @@ interface Professional {
   name: string;
   specialty?: string;
   color?: string;
+  salesTarget?: number;
 }
 
 export default function MiResumen() {
@@ -36,7 +37,7 @@ export default function MiResumen() {
   const [activeProfessionalId, setActiveProfessionalId] = useState<string>("all");
   const [currentMonthDate, setCurrentMonthDate] = useState(new Date());
   const [loading, setLoading] = useState(true);
-  const [shopGoal] = useState<number>(50000);
+  const [shopGoal, setShopGoal] = useState<number>(0);
   const [feedTab, setFeedTab] = useState<"proximos" | "cancelados">("proximos");
 
   useEffect(() => {
@@ -69,8 +70,12 @@ export default function MiResumen() {
         const u = JSON.parse(userStr);
         if (u.role.toLowerCase() !== "admin") {
           setActiveProfessionalId(u.id);
+          // Set shopGoal from this professional's salesTarget
+          const myProf = profsData.find((p: Professional) => p.id === u.id);
+          if (myProf?.salesTarget) setShopGoal(myProf.salesTarget);
         } else if (profsData.length > 0 && activeProfessionalId === "all") {
           setActiveProfessionalId(profsData[0].id);
+          if (profsData[0].salesTarget) setShopGoal(profsData[0].salesTarget);
         }
       }
     } catch (err) {
@@ -177,7 +182,12 @@ export default function MiResumen() {
             <span className="text-xs text-muted-foreground font-medium">Ver profesional:</span>
             <select
               value={activeProfessionalId}
-              onChange={e => setActiveProfessionalId(e.target.value)}
+              onChange={e => {
+                const profId = e.target.value;
+                setActiveProfessionalId(profId);
+                const prof = professionals.find(p => p.id === profId);
+                setShopGoal(prof?.salesTarget ?? 0);
+              }}
               className="bg-card border border-border rounded-lg px-3 py-1.5 text-xs text-foreground font-semibold focus:outline-none focus:border-primary"
             >
               {professionals.map(p => (
