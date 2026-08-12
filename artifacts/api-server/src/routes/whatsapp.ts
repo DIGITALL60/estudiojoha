@@ -28,11 +28,14 @@ router.post("/send-bulk", requireAuth, async (req, res) => {
     message: "Envíos masivos encolados con modo anti-baneo (batches + simulación humana) activo." 
   });
 
-  // Procesamiento en segundo plano
+    // Import cloudSendTemplate dynamically to avoid issues
+    const { cloudSendText, cloudSendTemplate } = await import("../lib/whatsapp-cloud.js");
+
+    // Procesamiento en segundo plano
   (async () => {
     let sent = 0;
     let failed = 0;
-    const validMessages = messages.filter((m) => m.phone && m.message);
+    const validMessages = messages.filter((m) => m.phone && (m.message || m.templateName));
 
     const BATCH_SIZE = 5;
     const BATCH_PAUSE_MIN = 15_000; // 15s min between batches
@@ -43,7 +46,13 @@ router.post("/send-bulk", requireAuth, async (req, res) => {
       
       logger.info(`[BULK] Procesando mensaje ${i + 1} de ${validMessages.length} para ${msg.phone}...`);
       
-      const success = await cloudSendText(msg.phone, msg.message);
+      let success = false;
+      if (msg.templateName && msg.variables) {
+        success = await cloudSendTemplate(msg.phone, msg.templateName, "es_AR", msg.variables);
+      } else if (msg.message) {
+        success = await cloudSendText(msg.phone, msg.message);
+      }
+
       if (success) {
         sent++;
       } else {

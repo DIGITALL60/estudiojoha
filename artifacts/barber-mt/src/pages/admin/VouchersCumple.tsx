@@ -86,16 +86,17 @@ export default function VouchersCumple() {
     
     const finalClients = targetClients.filter(c => selectedClientIds.has(c.id));
 
-    const messages = finalClients.map(c => ({
-      phone: c.phone,
-      message: generateMessageText(c.name)
-    }));
-
     // Extract codes based on active type for registration in DB
     const codesToCreate = finalClients.map(c => {
       const firstName = c.name.split(" ")[0] || c.name;
       return activeType === "cumple" ? `CUMPLE-${firstName}-15`.toUpperCase() : `REGALO-${firstName}`.toUpperCase();
     });
+
+    const messages = finalClients.map((c, index) => ({
+      phone: c.phone,
+      templateName: activeType === "cumple" ? "voucher_cumple" : "voucher_regalo",
+      variables: [c.name.split(" ")[0] || c.name, codesToCreate[index]]
+    }));
 
     try {
       // 1. Create vouchers in backend

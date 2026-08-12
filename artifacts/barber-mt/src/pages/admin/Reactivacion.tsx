@@ -140,12 +140,13 @@ export default function Reactivacion() {
     
     const finalClients = currentSegmentClients.filter(c => selectedClientIds.has(c.id));
 
+    const codeToCreate = `VOLVISTE-${discount}OFF`;
+
     const messages = finalClients.map(c => ({
       phone: c.phone,
-      message: generateMessageText(c.name)
+      templateName: "reactivacion",
+      variables: [c.name, codeToCreate]
     }));
-
-    const codeToCreate = `VOLVISTE-${discount}OFF`;
 
     try {
       // 1. Create voucher in backend
