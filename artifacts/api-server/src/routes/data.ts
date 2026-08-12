@@ -449,9 +449,11 @@ router.post("/appointments", requireAuth, async (req, res) => {
     const { clientId, professionalId, serviceId, date, time, duration, price, status, notes } = req.body;
     const dur = Number(duration);
 
-    const availability = await isTimeSlotAvailable(date, professionalId, dur, time);
-    if (!availability.available) {
-      return res.status(409).json({ error: availability.reason || "Horario no disponible" });
+    if (status !== "completado") {
+      const availability = await isTimeSlotAvailable(date, professionalId, dur, time);
+      if (!availability.available) {
+        return res.status(409).json({ error: availability.reason || "Horario no disponible" });
+      }
     }
 
     const id = randomUUID();
