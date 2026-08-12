@@ -469,6 +469,32 @@ router.post("/appointments", requireAuth, async (req, res) => {
     });
     const [created] = await db.select().from(appointments).where(eq(appointments.id, id)).limit(1);
 
+    // If created as completado (manual sale), deduct stock immediately
+    if (status === "completado") {
+      const recipes = await db.select().from(service_products).where(eq(service_products.serviceId, serviceId));
+      for (const recipe of recipes) {
+        const [product] = await db.select().from(products).where(eq(products.id, recipe.productId));
+        if (product) {
+          await db.update(products).set({ stock: product.stock - recipe.amount }).where(eq(products.id, product.id));
+        }
+      }
+
+      if (notes) {
+        const match = notes.match(/\[SHOP_SALES\](.*?)\[\/SHOP_SALES\]/);
+        if (match) {
+          try {
+            const shopItems = JSON.parse(match[1]);
+            for (const item of shopItems) {
+              const [product] = await db.select().from(products).where(eq(products.id, item.id));
+              if (product) {
+                await db.update(products).set({ stock: product.stock - item.qty }).where(eq(products.id, product.id));
+              }
+            }
+          } catch(e) {}
+        }
+      }
+    }
+
     // Fetch details for WhatsApp notification
     try {
       const { cloudSendText, cloudSendTemplate } = await import("../lib/whatsapp-cloud.js");
