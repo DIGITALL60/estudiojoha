@@ -70,11 +70,19 @@ export function initCronJobs() {
               isActive: true,
               createdAt: new Date(),
             });
-            const waLink = await getSetting("whatsapp_link");
+          // Send birthday voucher via official template to bypass 24h window
+          const waLink = await getSetting("whatsapp_link");
+          const sent = await cloudSendTemplate(client.phone, "voucher_cumple", "es_AR", [
+            client.name.split(" ")[0],
+            code
+          ]);
+          if (!sent) {
+            // Fallback to text only if template fails
             await cloudSendText(
               client.phone,
               `🎂 ¡Feliz cumpleaños, ${client.name}! 🎂\n\nEn Estudio Joha Molinero te regalamos un *15% de descuento* en tu próxima visita 💜\n\nUsá el código: *${code}*\n\n📲 Reservar: ${waLink}\n\n¡Te esperamos para celebrarlo! 🥂`
             );
+          }
           }
         }
       }
@@ -89,29 +97,21 @@ export function initCronJobs() {
             const [d, m, y] = app.date.split("-");
             const dateDisplay = `${d}/${m}/${y}`;
 
-            // Send reminder with confirm/reschedule buttons
+            // Send reminder with official template (required for outbound messages)
             try {
-              const sent = await cloudSendButtons(
-                client.phone,
-                `¡Hola ${client.name}! 👋\n\nTe recordamos que mañana tenés turno en *Estudio Joha Molinero* 💅\n\n📅 ${dateDisplay} a las *${app.time}hs*\n💅 Servicio: ${service.name}\n👩‍🎨 Profesional: ${prof.name}\n\n¿Podés confirmar tu asistencia?`,
-                [
-                  { id: "reminder_confirm", title: "✅ Confirmo" },
-                  { id: "reminder_cancel", title: "❌ No asistiré" },
-                ]
-              );
-              
+              const sent = await cloudSendTemplate(client.phone, "recordatorio_turno", "es_AR", [
+                client.name,
+                dateDisplay,
+                app.time,
+                service.name,
+                prof.name
+              ]);
+
               if (!sent) {
-                logger.info(`Fallback a template de recordatorio para ${client.phone}`);
-                await cloudSendTemplate(client.phone, "recordatorio_turno", "es_AR", [
-                  client.name,
-                  dateDisplay,
-                  app.time,
-                  service.name,
-                  prof.name
-                ]);
+                throw new Error("Template failed");
               }
             } catch {
-              // Fallback to plain text if buttons fail
+              // Fallback to plain text if template fails
               await cloudSendText(
                 client.phone,
                 `¡Hola ${client.name}! 👋\n\nTe recordamos que mañana tenés turno en *Estudio Joha Molinero* 💅\n\n📅 ${dateDisplay} a las *${app.time}hs*\n💅 Servicio: ${service.name}\n👩‍🎨 Profesional: ${prof.name}\n\nRespondé *SI* para confirmar o *NO ASISTIRÉ* para reprogramar tu turno.\n¡Te esperamos! 💜`
