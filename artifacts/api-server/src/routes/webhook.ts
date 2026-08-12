@@ -58,6 +58,10 @@ router.post("/", async (req, res) => {
               message.interactive?.button_reply?.id ||
               "";
             text = interactiveId;
+          } else if (message.type === "button") {
+            // Quick Reply button from an official template — payload is the button text
+            interactiveId = message.button?.payload || message.button?.text || "";
+            text = interactiveId;
           }
 
           if (text || interactiveId) {
