@@ -2,7 +2,7 @@
   "version": 2,
   "buildCommand": "npm install -g pnpm && pnpm install && pnpm --filter @workspace/barber-mt run build",
   "outputDirectory": "artifacts/barber-mt/dist/public",
-  "installCommand": "npm install -g pnpm && pnpm install",
+  "installCommand": "npm install -g pnpm && pnpm install --no-frozen-lockfile",
   "framework": null,
   "rewrites": [
     {
