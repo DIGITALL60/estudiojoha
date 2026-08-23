@@ -3,7 +3,7 @@
  * Maneja el estado de la conversación y crea turnos reales en la base de datos.
  */
 
-import { db, services, professionals, clients, appointments, professional_schedules, professional_services } from "@workspace/db";
+import { db, services, professionals, clients, appointments, professional_schedules, professional_services, blocked_dates } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { cloudSendText, cloudSendList, cloudSendButtons } from "./whatsapp-cloud.js";
@@ -29,6 +29,7 @@ interface Session {
   serviceId?: string;
   serviceName?: string;
   serviceDuration?: number;
+  servicePrice?: number;
   professionalId?: string;
   professionalName?: string;
   date?: string;          // YYYY-MM-DD
@@ -79,6 +80,10 @@ const DAY_NAMES_ES = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Vie
 async function getAvailableTimes(professionalId: string, date: string, duration: number): Promise<string[]> {
   const dayOfWeek = getDayOfWeek(date);
   if (dayOfWeek === 0) return []; // Sunday closed
+
+  // Check if date is blocked for this professional (vacations, holidays)
+  const [blocked] = await db.select().from(blocked_dates).where(and(eq(blocked_dates.professionalId, professionalId), eq(blocked_dates.date, date))).limit(1);
+  if (blocked) return [];
 
   const schedules = await db.select().from(professional_schedules).where(eq(professional_schedules.professionalId, professionalId));
   let daySchedules = schedules.filter((s) => s.dayOfWeek === dayOfWeek);
@@ -335,12 +340,21 @@ export async function handleBotMessage(from: string, text: string, interactiveId
     sessions.set(from, session);
 
     const [y, m, d] = dateStr.split("-");
-    const timeRows = availableTimes.slice(0, 10).map((t) => ({ id: `retime_${t}`, title: t, description: "Disponible" }));
-    await cloudSendList(from, `Horarios para ${d}/${m}/${y}`,
-      `Estos son los horarios disponibles con *${session.professionalName}*:`,
-      "Ver Horarios",
-      [{ title: "Horarios disponibles", rows: timeRows }]
-    );
+    const dateDisplay = `${d}/${m}/${y}`;
+    
+    let msg = `Estos son los horarios disponibles con *${session.professionalName}* para el ${dateDisplay}:\n\n`;
+    const morning = availableTimes.filter(t => parseInt(t.split(":")[0]) < 14);
+    const afternoon = availableTimes.filter(t => parseInt(t.split(":")[0]) >= 14);
+    
+    if (morning.length > 0) {
+      msg += `🌞 *Mañana:*\n` + morning.join(" | ") + "\n\n";
+    }
+    if (afternoon.length > 0) {
+      msg += `🌙 *Tarde:*\n` + afternoon.join(" | ") + "\n\n";
+    }
+    msg += `Por favor, respondé escribiendo el horario que preferís (Ej: *${availableTimes[0]}*).`;
+
+    await cloudSendText(from, msg);
     return;
   }
 
@@ -437,6 +451,7 @@ export async function handleBotMessage(from: string, text: string, interactiveId
       session.serviceId = svc.id;
       session.serviceName = svc.name;
       session.serviceDuration = svc.duration;
+      session.servicePrice = svc.price;
       session.step = "choosing_professional";
       sessions.set(from, session);
       await showProfessionals(from, svc.id);
@@ -525,14 +540,20 @@ export async function handleBotMessage(from: string, text: string, interactiveId
 
       const [y, m, d] = dateStr.split("-");
       const dateDisplay = `${d}/${m}/${y}`;
-      const timeRows = availableTimes.slice(0, 10).map((t) => ({ id: `time_${t}`, title: t, description: "Disponible" }));
-      await cloudSendList(
-        from,
-        `Horarios para ${dateDisplay}`,
-        `Estos son los horarios disponibles con *${session.professionalName}*:`,
-        "Ver Horarios",
-        [{ title: "Horarios disponibles", rows: timeRows }]
-      );
+      
+      let msg = `Estos son los horarios disponibles con *${session.professionalName}* para el ${dateDisplay}:\n\n`;
+      const morning = availableTimes.filter(t => parseInt(t.split(":")[0]) < 14);
+      const afternoon = availableTimes.filter(t => parseInt(t.split(":")[0]) >= 14);
+      
+      if (morning.length > 0) {
+        msg += `🌞 *Mañana:*\n` + morning.join(" | ") + "\n\n";
+      }
+      if (afternoon.length > 0) {
+        msg += `🌙 *Tarde:*\n` + afternoon.join(" | ") + "\n\n";
+      }
+      msg += `Por favor, respondé escribiendo el horario que preferís (Ej: *${availableTimes[0]}*).`;
+
+      await cloudSendText(from, msg);
       return;
     }
 
@@ -561,7 +582,7 @@ export async function handleBotMessage(from: string, text: string, interactiveId
 
       await cloudSendButtons(
         from,
-        `Confirmá tu turno 📋\n\n👤 *${session.clientName}*\n💅 ${session.serviceName}\n👩‍🎨 ${session.professionalName}\n📅 ${dateDisplay}\n⏰ ${session.time}\n\n¿Confirmamos?`,
+        `Confirmá tu turno 📋\n\n👤 *${session.clientName}*\n💅 ${session.serviceName} ($${session.servicePrice})\n👩‍🎨 ${session.professionalName}\n📅 ${dateDisplay}\n⏰ ${session.time}\n⏳ Duración: ${session.serviceDuration} min\n\n¿Confirmamos?`,
         [
           { id: "confirm_yes", title: "✅ Confirmar" },
           { id: "confirm_no", title: "❌ Cancelar" },
@@ -603,7 +624,7 @@ export async function handleBotMessage(from: string, text: string, interactiveId
           date: session.date!,
           time: session.time!,
           duration: session.serviceDuration!,
-          price: 0,
+          price: session.servicePrice || 0,
           status: "agendado",
           notes: `Reserva via WhatsApp Bot`,
           createdAt: new Date(),
