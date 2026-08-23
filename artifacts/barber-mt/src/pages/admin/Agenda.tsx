@@ -27,7 +27,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 
-function NewTurnModal({ onClose, defaultDate, defaultTime = "10:00", onCreated }: { onClose: () => void; defaultDate: string; defaultTime?: string; onCreated: () => void }) {
+function NewTurnModal({ onClose, defaultDate, defaultTime = "10:00", onCreated, isAdmin }: { onClose: () => void; defaultDate: string; defaultTime?: string; onCreated: () => void; isAdmin: boolean }) {
   const [professionals, setProfessionals] = useState<(Professional & { role?: string })[]>([]);
   const [professionalServices, setProfessionalServices] = useState<{ professionalId: string; serviceId: string }[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -81,15 +81,19 @@ function NewTurnModal({ onClose, defaultDate, defaultTime = "10:00", onCreated }
     let clientId = selectedClient?.id;
 
     if (creatingClient) {
-      if (!newClientName.trim() || !newClientPhone.trim()) {
-        setError("Nombre y teléfono del nuevo cliente son obligatorios");
+      if (!newClientName.trim()) {
+        setError("El nombre del cliente es obligatorio");
+        return;
+      }
+      if (isAdmin && !newClientPhone.trim()) {
+        setError("El teléfono es obligatorio");
         return;
       }
       try {
         const res = await fetchAPI("/api/data/clients", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: newClientName.trim(), phone: newClientPhone.trim() }),
+          body: JSON.stringify({ name: newClientName.trim(), phone: isAdmin ? newClientPhone.trim() : "" }),
         });
         if (!res.ok) throw new Error();
         const created = await res.json();
@@ -153,16 +157,20 @@ function NewTurnModal({ onClose, defaultDate, defaultTime = "10:00", onCreated }
                   onChange={e => setNewClientName(e.target.value)}
                   className="w-full bg-background border border-border rounded-sm px-3 py-2.5 text-xs"
                 />
-                <input
-                  placeholder="Teléfono WhatsApp"
-                  value={newClientPhone}
-                  onChange={e => setNewClientPhone(e.target.value)}
-                  className="w-full bg-background border border-border rounded-sm px-3 py-2.5 text-xs"
-                />
+                {isAdmin && (
+                  <input
+                    placeholder="Teléfono WhatsApp"
+                    value={newClientPhone}
+                    onChange={e => setNewClientPhone(e.target.value)}
+                    className="w-full bg-background border border-border rounded-sm px-3 py-2.5 text-xs"
+                  />
+                )}
               </div>
             ) : selectedClient ? (
               <div className="flex items-center justify-between p-2.5 bg-primary/10 border border-primary/30 rounded-sm">
-                <span className="text-xs text-foreground font-medium">{selectedClient.name} — {selectedClient.phone}</span>
+                <span className="text-xs text-foreground font-medium">
+                  {selectedClient.name}{isAdmin && selectedClient.phone ? ` — ${selectedClient.phone}` : ""}
+                </span>
                 <button onClick={() => { setSelectedClient(null); setClientSearch(""); }} className="text-muted-foreground hover:text-primary"><X size={12} /></button>
               </div>
             ) : (
@@ -178,7 +186,7 @@ function NewTurnModal({ onClose, defaultDate, defaultTime = "10:00", onCreated }
                       <button key={c.id} onClick={() => { setSelectedClient(c); setClientSearch(""); }}
                         className="w-full text-left px-3 py-2 text-xs hover:bg-accent/10 flex justify-between">
                         <span className="font-medium">{c.name}</span>
-                        <span className="text-muted-foreground">{c.phone}</span>
+                        {isAdmin && <span className="text-muted-foreground">{c.phone}</span>}
                       </button>
                     ))}
                   </div>
@@ -250,7 +258,7 @@ function NewTurnModal({ onClose, defaultDate, defaultTime = "10:00", onCreated }
   );
 }
 
-function EditTurnModal({ app, onClose, onUpdated }: { app: Appointment; onClose: () => void; onUpdated: () => void }) {
+function EditTurnModal({ app, onClose, onUpdated, isAdmin }: { app: Appointment; onClose: () => void; onUpdated: () => void; isAdmin: boolean }) {
   const [status, setStatus] = useState(app.status || "agendado");
   const [notes, setNotes] = useState(app.notes || "");
   const [clientNotes, setClientNotes] = useState(app.clientNotes || "");
@@ -383,6 +391,9 @@ function EditTurnModal({ app, onClose, onUpdated }: { app: Appointment; onClose:
           <div>
             <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted-foreground mb-1">Cliente</p>
             <p className="text-sm text-foreground font-semibold">{app.clientName}</p>
+            {isAdmin && (app as any).clientPhone && (
+              <p className="text-xs text-muted-foreground mt-0.5">📱 {(app as any).clientPhone}</p>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -974,8 +985,8 @@ export default function Agenda() {
       </div>
 
       <AnimatePresence>
-        {showModal && <NewTurnModal onClose={() => setShowModal(false)} defaultDate={selectedSlotDate || todayStr} defaultTime={selectedSlotTime || "10:00"} onCreated={fetchAll} />}
-        {editingApp && <EditTurnModal app={editingApp} onClose={() => setEditingApp(null)} onUpdated={fetchAll} />}
+        {showModal && <NewTurnModal onClose={() => setShowModal(false)} defaultDate={selectedSlotDate || todayStr} defaultTime={selectedSlotTime || "10:00"} onCreated={fetchAll} isAdmin={isAdmin} />}
+        {editingApp && <EditTurnModal app={editingApp} onClose={() => setEditingApp(null)} onUpdated={fetchAll} isAdmin={isAdmin} />}
       </AnimatePresence>
 
       {/* Hover Tooltip */}
