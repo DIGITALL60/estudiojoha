@@ -1,5 +1,4 @@
 import { Router } from "express";
-import { currentQR, isConnected } from "../lib/whatsapp.js";
 import { cloudSendText } from "../lib/whatsapp-cloud.js";
 import { requireAuth } from "../middlewares/auth.js";
 import { logger } from "../lib/logger.js";

@@ -3,7 +3,6 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import { pinoHttp } from "pino-http";
 import { logger } from "./lib/logger.js";
-import { initWhatsApp } from "./lib/whatsapp.js";
 import { initCronJobs } from "./lib/cron.js";
 
 // Routes
@@ -41,11 +40,6 @@ app.use(cookieParser());
 
 // Health check for Railway
 app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
-
-// Initialize WhatsApp Baileys
-initWhatsApp().catch(err => {
-  logger.error({ err }, "Failed to initialize WhatsApp");
-});
 
 // Initialize Cron Jobs
 initCronJobs();

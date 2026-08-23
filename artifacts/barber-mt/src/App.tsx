@@ -7,6 +7,7 @@ import { useTheme } from "@/hooks/use-theme";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
 import Login from "@/pages/Login";
+import Privacidad from "@/pages/privacidad";
 
 // Admin pages
 import Dashboard from "@/pages/admin/Dashboard";
@@ -73,6 +74,7 @@ function Router() {
       {/* Landing page */}
       <Route path="/" component={Home} />
       <Route path="/login" component={Login} />
+      <Route path="/privacidad" component={Privacidad} />
 
       {/* Admin panel (Protected) */}
       <Route path="/admin">{(params) => <AuthRoute component={Dashboard} adminOnly />}</Route>
