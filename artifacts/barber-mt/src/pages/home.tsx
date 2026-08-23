@@ -626,10 +626,19 @@ export default function Home() {
               href={waLink}
               target="_blank"
               rel="noopener noreferrer"
-              data-testid="button-footer-whatsapp"
+              data-testid="button-footer-whatsapp-bot"
               className="font-sans text-xs tracking-[0.2em] uppercase text-muted-foreground hover:text-primary transition-colors flex items-center gap-1.5"
             >
-              <MessageCircle size={12} /> WhatsApp
+              <MessageCircle size={12} /> Asistente de Turnos
+            </a>
+            <a
+              href="https://wa.me/5493572532685"
+              target="_blank"
+              rel="noopener noreferrer"
+              data-testid="button-footer-whatsapp-human"
+              className="font-sans text-xs tracking-[0.2em] uppercase text-muted-foreground hover:text-primary transition-colors flex items-center gap-1.5"
+            >
+              <MessageCircle size={12} /> Hablar con Asesora
             </a>
           </div>
 
