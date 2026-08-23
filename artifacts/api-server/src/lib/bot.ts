@@ -3,7 +3,7 @@
  * Maneja el estado de la conversación y crea turnos reales en la base de datos.
  */
 
-import { db, services, professionals, clients, appointments, professional_schedules } from "@workspace/db";
+import { db, services, professionals, clients, appointments, professional_schedules, professional_services } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { cloudSendText, cloudSendList, cloudSendButtons } from "./whatsapp-cloud.js";
@@ -422,9 +422,14 @@ export async function handleBotMessage(from: string, text: string, interactiveId
     // ── CHOOSING PROFESSIONAL ────────────────────────────────────────────────
     if (session.step === "choosing_professional") {
       const allProfs = await db.select().from(professionals);
-      const prof = allProfs.find((p) => p.id === input || p.name.toLowerCase().includes(normalized));
+      const profServices = await db.select().from(professional_services).where(eq(professional_services.serviceId, session.serviceId!));
+      const validProfIds = new Set(profServices.map(ps => ps.professionalId));
+      
+      const availableProfs = allProfs.filter(p => validProfIds.has(p.id) && (p.role?.toLowerCase() !== "admin" || allProfs.length === 1));
+      
+      const prof = availableProfs.find((p) => p.id === input || p.name.toLowerCase().includes(normalized));
       if (!prof) {
-        await cloudSendText(from, "No encontré esa profesional. Elegí una opción 👇");
+        await cloudSendText(from, "No encontré esa profesional o no realiza este servicio. Elegí una opción 👇");
         await showProfessionals(from, session.serviceId!);
         return;
       }
@@ -544,6 +549,14 @@ export async function handleBotMessage(from: string, text: string, interactiveId
     // ── CONFIRMING ────────────────────────────────────────────────────────────
     if (session.step === "confirming") {
       if (input === "confirm_yes" || normalized.includes("sí") || normalized === "si" || normalized === "confirmar") {
+        // Re-validate that the time slot is still available!
+        const availableTimes = await getAvailableTimes(session.professionalId!, session.date!, session.serviceDuration!);
+        if (!availableTimes.includes(session.time!)) {
+           sessions.delete(from);
+           await cloudSendText(from, "¡Uy! 😥 Lamentablemente alguien acaba de reservar ese horario mientras conversábamos.\n\nEscribinos 'Hola' para volver a empezar y elegir otro horario.");
+           return;
+        }
+
         const appointmentId = randomUUID();
 
         const existingClients = db.select().from(clients).where(eq(clients.phone, from)).all();
@@ -635,7 +648,15 @@ async function showServices(to: string, category: string): Promise<void> {
 
 async function showProfessionals(to: string, serviceId: string): Promise<void> {
   const allProfs = await db.select().from(professionals);
-  const activeProfs = allProfs.filter((p) => p.role?.toLowerCase() !== "admin" || allProfs.length === 1);
+  const profServices = await db.select().from(professional_services).where(eq(professional_services.serviceId, serviceId));
+  const validProfIds = new Set(profServices.map(ps => ps.professionalId));
+  
+  const activeProfs = allProfs.filter((p) => validProfIds.has(p.id) && (p.role?.toLowerCase() !== "admin" || allProfs.length === 1));
+
+  if (activeProfs.length === 0) {
+    await cloudSendText(to, "Por el momento no hay profesionales asignadas para este servicio. 😔 Por favor escribinos un mensaje para que te ayudemos.");
+    return;
+  }
 
   if (activeProfs.length === 1) {
     const prof = activeProfs[0];
