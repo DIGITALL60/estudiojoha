@@ -158,6 +158,20 @@ export default function Caja() {
     loadData();
   };
 
+  const handleCancelAppointment = async (id: string) => {
+    if (!confirm("¿Estás seguro de anular/cancelar este cobro? Desaparecerá de la caja.")) return;
+    try {
+      await fetchAPI(`/api/data/appointments/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "cancelado" })
+      });
+      loadData();
+    } catch {
+      alert("Error al anular el cobro");
+    }
+  };
+
   const dateObj = new Date(selectedDate + "T12:00:00");
   const displayDate = dateObj.toLocaleDateString("es-AR", { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const displayMonth = dateObj.toLocaleDateString("es-AR", { month: 'long', year: 'numeric' });
@@ -387,8 +401,11 @@ export default function Caja() {
                             <span className="text-[10px] px-2 py-1 bg-emerald-500/10 text-emerald-500 rounded-sm uppercase tracking-wider">{a.paymentMethod || "Efectivo"}</span>
                           </td>
                           <td className="px-5 py-4 text-right">
-                            <div className="flex flex-col items-end">
-                              <span className="text-xs font-bold text-foreground">$ {a.price.toLocaleString("es-AR")}</span>
+                            <div className="flex flex-col items-end gap-1">
+                              <div className="flex items-center gap-3">
+                                <span className="text-xs font-bold text-foreground">$ {a.price.toLocaleString("es-AR")}</span>
+                                <button onClick={() => handleCancelAppointment(a.id)} className="text-muted-foreground hover:text-red-400 transition-colors" title="Anular cobro"><Trash2 size={12} /></button>
+                              </div>
                               {(a.shopSales || 0) > 0 && (
                                 <span className="text-[10px] text-emerald-400">+ $ {a.shopSales!.toLocaleString("es-AR")} shop</span>
                               )}
