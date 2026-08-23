@@ -38,13 +38,25 @@ interface Session {
   // For rescheduling flow
   appointmentIdToReschedule?: string;
   lastUpcomingDates?: { dateStr: string; displayDate: string; dayName: string }[];
+  lastActivity: number;
 }
 
 const sessions = new Map<string, Session>();
 
 function getSession(from: string): Session {
-  if (!sessions.has(from)) sessions.set(from, { step: "idle" });
-  return sessions.get(from)!;
+  const now = Date.now();
+  if (sessions.has(from)) {
+    const s = sessions.get(from)!;
+    // Session timeout: 30 minutes
+    if (now - s.lastActivity > 30 * 60 * 1000) {
+      sessions.delete(from);
+    } else {
+      return s;
+    }
+  }
+  const newSession: Session = { step: "idle", lastActivity: now };
+  sessions.set(from, newSession);
+  return newSession;
 }
 
 // ─── Time & Date helpers ───────────────────────────────────────────────────
@@ -138,9 +150,14 @@ export async function handleBotMessage(from: string, text: string, interactiveId
   }
 
   const session = getSession(from);
+  session.lastActivity = Date.now(); // update on every interaction
+
   const normalized = text.trim().toLowerCase();
   const input = interactiveId || text.trim();
 
+  // Escape hatch / Human routing
+  const isHumanEscalation = ["salir", "humano", "persona", "asesor", "hablar con alguien"].some(w => normalized === w || normalized.includes(w));
+  
   const isGreeting = ["hola", "buenas", "buenos", "turno", "reservar", "quiero", "necesito", "hi", "hello", "saludos"].some(
     (w) => normalized.includes(w)
   );
@@ -185,6 +202,13 @@ export async function handleBotMessage(from: string, text: string, interactiveId
 
   if (input === "reminder_confirm" || input === "reminder_cancel") {
     // Explicit button clicks are always processed as a reminder response
+  }
+
+  // Handle Human Escalation immediately if it's not a button click for cancellation
+  if (isHumanEscalation && input !== "reminder_cancel") {
+    sessions.delete(from);
+    await cloudSendText(from, "Te entiendo 💜. Para hablar directamente con nosotras o resolver cualquier duda que tengas, por favor escribinos tocando este link:\n\n👉 https://wa.me/5493572532685\n\n¡Joha te va a responder enseguida!");
+    return;
   }
 
   if (input === "reminder_confirm" || input === "reminder_cancel" || ((session.step === "idle" || session.step === "done") && (isConfirmation || isCancellation))) {
