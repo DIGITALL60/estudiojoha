@@ -93,7 +93,7 @@ export function initCronJobs() {
             const dateDisplay = `${d}/${m}/${y}`;
 
             try {
-              const sent = await cloudSendTemplate(client.phone, "recordatorio_turno", "es_AR", [
+              const sent = await cloudSendTemplate(client.phone, "recordatorio_turno", "en", [
                 client.name,
                 dateDisplay,
                 app.time,

@@ -669,7 +669,7 @@ router.post("/appointments/:id/remind", requireAuth, async (req, res) => {
     // Try to send with official template to avoid 24h window blocking
     try {
       const { cloudSendTemplate } = await import("../lib/whatsapp-cloud.js");
-      const sent = await cloudSendTemplate(client.phone, "recordatorio_turno", "es_AR", [
+      const sent = await cloudSendTemplate(client.phone, "recordatorio_turno", "en", [
         client.name,
         dateDisplay,
         app.time,
