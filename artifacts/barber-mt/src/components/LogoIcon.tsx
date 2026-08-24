@@ -5,7 +5,7 @@ export default function LogoIcon({ size = 52 }: { size?: number }) {
       alt="Joha Molinero Beauty Studio"
       width={size}
       height={size}
-      className="object-contain"
+      className="object-contain dark:invert dark:opacity-90"
     />
   );
 }
