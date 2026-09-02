@@ -1,4 +1,4 @@
-﻿import cron from "node-cron";
+import cron from "node-cron";
 import { db, appointments, clients, services, professionals, vouchers } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
@@ -76,7 +76,7 @@ export function initCronJobs() {
           });
 
           // Plantilla: {{1}} nombre, {{2}} porcentaje, {{3}} código
-          const sent = await cloudSendTemplate(client.phone, "voucher_cumple", "es", [
+          const sent = await cloudSendTemplate(client.phone, "voucher_cumple", "es_AR", [
             client.name.split(" ")[0],
             "15",
             code,
@@ -165,8 +165,7 @@ export function initCronJobs() {
           const [prof] = await db.select().from(professionals).where(eq(professionals.id, app.professionalId)).limit(1);
 
           if (client && client.phone && service && prof) {
-            // Plantilla: {{1}} nombre, {{2}} hora, {{3}} servicio, {{4}} profesional
-            const sent = await cloudSendTemplate(client.phone, "recordatorio_2h", "es", [
+            const sent = await cloudSendTemplate(client.phone, "recordatorio_2h", "es_AR", [
               client.name.split(" ")[0],
               app.time,
               service.name,
