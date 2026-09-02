@@ -3,7 +3,7 @@
  * Maneja el estado de la conversación y crea turnos reales en la base de datos.
  */
 
-import { db, services, professionals, clients, appointments, professional_schedules, professional_services, blocked_dates } from "@workspace/db";
+import { db, services, professionals, clients, appointments, professional_schedules, professional_services, blocked_dates, vouchers } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { cloudSendText, cloudSendList, cloudSendButtons } from "./whatsapp-cloud.js";
@@ -19,6 +19,7 @@ type Step =
   | "choosing_date"
   | "choosing_time"
   | "asking_name"
+  | "asking_voucher"
   | "confirming"
   | "rescheduling_choosing_date"
   | "rescheduling_choosing_time"
@@ -36,6 +37,9 @@ interface Session {
   time?: string;          // HH:mm
   clientName?: string;
   category?: string;      // chosen category
+  // Voucher aplicado
+  voucherCode?: string;
+  voucherDiscount?: number; // precio final tras descuento
   // For rescheduling flow
   appointmentIdToReschedule?: string;
   lastUpcomingDates?: { dateStr: string; displayDate: string; dayName: string }[];
@@ -578,15 +582,78 @@ export async function handleBotMessage(from: string, text: string, interactiveId
     // ── ASKING NAME ──────────────────────────────────────────────────────────
     if (session.step === "asking_name") {
       session.clientName = text.trim();
-      session.step = "confirming";
+      session.step = "asking_voucher";
       sessions.set(from, session);
+      await cloudSendText(
+        from,
+        `¿Tenés un código de descuento? 🎁\n\nIngresalo ahora o escribí *NO* para continuar sin descuento.`
+      );
+      return;
+    }
 
+    // ── ASKING VOUCHER ───────────────────────────────────────────────────────
+    if (session.step === "asking_voucher") {
+      const voucherInput = text.trim().toUpperCase();
+
+      if (voucherInput === "NO" || voucherInput === "") {
+        // Sin voucher — ir a confirmación con precio original
+        session.step = "confirming";
+        sessions.set(from, session);
+      } else {
+        // Validar voucher
+        const [voucher] = await db.select().from(vouchers).where(eq(vouchers.code, voucherInput)).limit(1);
+        const now = new Date();
+
+        if (!voucher || !voucher.isActive) {
+          await cloudSendText(from, `❌ El código *${voucherInput}* no es válido o ya fue usado.\n\nIngresá otro código o escribí *NO* para continuar sin descuento.`);
+          return;
+        }
+        if (voucher.expiresAt && new Date(voucher.expiresAt) < now) {
+          await cloudSendText(from, `⏳ El código *${voucherInput}* venció el ${new Date(voucher.expiresAt).toLocaleDateString("es-AR")}.\n\nIngresá otro código o escribí *NO* para continuar sin descuento.`);
+          return;
+        }
+        // Verificar que el voucher pertenece a este cliente (por teléfono)
+        if (voucher.clientId) {
+          const [voucherOwner] = await db.select().from(clients).where(eq(clients.id, voucher.clientId)).limit(1);
+          if (voucherOwner && !phonesMatch(voucherOwner.phone || "", from)) {
+            await cloudSendText(from, `❌ Ese código de descuento no está disponible para este número.\n\nIngresá otro código o escribí *NO* para continuar sin descuento.`);
+            return;
+          }
+        }
+
+        // Calcular precio con descuento
+        const originalPrice = session.servicePrice || 0;
+        let finalPrice = originalPrice;
+        if (voucher.discountType === "percent") {
+          finalPrice = Math.round(originalPrice * (1 - voucher.discountValue / 100));
+        } else if (voucher.discountType === "fixed") {
+          finalPrice = Math.max(0, originalPrice - voucher.discountValue);
+        }
+
+        session.voucherCode = voucher.code;
+        session.voucherDiscount = finalPrice;
+        session.step = "confirming";
+        sessions.set(from, session);
+
+        await cloudSendText(
+          from,
+          `✅ Código *${voucher.code}* aplicado!\n` +
+          `Descuento: ${voucher.discountType === "percent" ? `${voucher.discountValue}%` : `$${voucher.discountValue}`}\n` +
+          `Precio original: $${originalPrice} → *Precio final: $${finalPrice}* 🎉`
+        );
+      }
+
+      // Mostrar pantalla de confirmación
       const [d, m, y] = (session.date || "").split("-");
       const dateDisplay = `${d}/${m}/${y}`;
+      const displayPrice = session.voucherDiscount ?? session.servicePrice;
+      const priceLabel = session.voucherCode
+        ? `~~$${session.servicePrice}~~ *$${displayPrice}* (con ${session.voucherCode})`
+        : `$${displayPrice}`;
 
       await cloudSendButtons(
         from,
-        `Confirmá tu turno 📋\n\n👤 *${session.clientName}*\n💅 ${session.serviceName} ($${session.servicePrice})\n👩‍🎨 ${session.professionalName}\n📅 ${dateDisplay}\n⏰ ${session.time}\n⏳ Duración: ${session.serviceDuration} min\n\n¿Confirmamos?`,
+        `Confirmá tu turno 📋\n\n👤 *${session.clientName}*\n💅 ${session.serviceName} ${priceLabel}\n👩‍🎨 ${session.professionalName}\n📅 ${dateDisplay}\n⏰ ${session.time}\n⏳ Duración: ${session.serviceDuration} min\n\n¿Confirmamos?`,
         [
           { id: "confirm_yes", title: "✅ Confirmar" },
           { id: "confirm_no", title: "❌ Cancelar" },
@@ -620,6 +687,12 @@ export async function handleBotMessage(from: string, text: string, interactiveId
           }).run();
         }
 
+        // Precio final (con o sin voucher)
+        const finalPrice = session.voucherDiscount ?? session.servicePrice ?? 0;
+        const bookingNotes = session.voucherCode
+          ? `Reserva via WhatsApp Bot | Voucher: ${session.voucherCode}`
+          : `Reserva via WhatsApp Bot`;
+
         db.insert(appointments).values({
           id: appointmentId,
           clientId,
@@ -628,11 +701,18 @@ export async function handleBotMessage(from: string, text: string, interactiveId
           date: session.date!,
           time: session.time!,
           duration: session.serviceDuration!,
-          price: session.servicePrice || 0,
+          price: finalPrice,
           status: "agendado",
-          notes: `Reserva via WhatsApp Bot`,
+          notes: bookingNotes,
           createdAt: new Date(),
         }).run();
+
+        // Marcar voucher como usado (uso único)
+        if (session.voucherCode) {
+          await db.update(vouchers)
+            .set({ isActive: false, usedAt: new Date() } as any)
+            .where(eq(vouchers.code, session.voucherCode));
+        }
 
         sessions.delete(from);
 

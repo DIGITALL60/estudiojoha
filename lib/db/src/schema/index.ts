@@ -96,6 +96,7 @@ export const appointments = sqliteTable("appointments", {
   notes: text("notes"),
   shopSales: integer("shop_sales").default(0), // Ventas generadas en el local
   reminderSent: integer("reminder_sent", { mode: "boolean" }).notNull().default(false),
+  reminder2hSent: integer("reminder_2h_sent", { mode: "boolean" }).notNull().default(false),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(new Date()),
 });
 
@@ -163,6 +164,12 @@ export const vouchers = sqliteTable("vouchers", {
   discountType: text("discount_type").notNull(), // 'percent' or 'fixed'
   discountValue: integer("discount_value").notNull(),
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  // Owner: if set, only this client can redeem the voucher
+  clientId: text("client_id").references(() => clients.id, { onDelete: "set null" }),
+  // Expiry: null means never expires
+  expiresAt: integer("expires_at", { mode: "timestamp" }),
+  // Usage tracking
+  usedAt: integer("used_at", { mode: "timestamp" }),
   createdAt: integer("created_at", { mode: 'timestamp' }).notNull().default(new Date()),
 });
 

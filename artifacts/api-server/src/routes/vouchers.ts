@@ -25,6 +25,10 @@ router.post("/validate", async (req, res) => {
       return res.status(200).json({ valid: false, error: "El cupón ya fue usado o expiró." });
     }
 
+    if (voucher.expiresAt && new Date(voucher.expiresAt) < new Date()) {
+      return res.status(200).json({ valid: false, error: "El cupón venció." });
+    }
+
     return res.status(200).json({
       valid: true,
       discountType: voucher.discountType,
