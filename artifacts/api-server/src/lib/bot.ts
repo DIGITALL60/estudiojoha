@@ -184,12 +184,14 @@ export async function handleBotMessage(from: string, text: string, interactiveId
   }
 
   // ── Check if client is confirming/canceling from a reminder ──────────────
-  // These are standalone messages outside of a booking session and should bypass any current step
+  // These are standalone messages outside of a booking session and should bypass any current step.
+  // Covers: explicit button payloads (reminder_confirm / reminder_cancel),
+  // template button text ("Confirmo" / "Cancelar") and common natural language replies.
   const isConfirmation =
     input === "reminder_confirm" ||
+    normalized === "confirmo" ||
     normalized === "si" ||
     normalized === "sí" ||
-    normalized.includes("confirmo") ||
     normalized.includes("confirmar") ||
     normalized.includes("asistire") ||
     normalized.includes("asistiré") ||
@@ -197,101 +199,103 @@ export async function handleBotMessage(from: string, text: string, interactiveId
 
   const isCancellation =
     input === "reminder_cancel" ||
-    normalized === "no" ||
     normalized === "cancelar" ||
-    normalized.includes("cancelo") ||
+    normalized === "cancelo" ||
+    normalized === "no" ||
     normalized.includes("no asist") ||
     normalized.includes("no puedo") ||
     normalized.includes("no voy") ||
     normalized.includes("reprogram");
 
-  if (input === "reminder_confirm" || input === "reminder_cancel") {
-    // Explicit button clicks are always processed as a reminder response
-  }
-
-  // Handle Human Escalation immediately if it's not a button click for cancellation
-  if (isHumanEscalation && input !== "reminder_cancel") {
+  // Handle Human Escalation immediately if it's not a cancellation button click
+  if (isHumanEscalation && !isCancellation) {
     sessions.delete(from);
     await cloudSendText(from, "Te entiendo 💜. Para hablar directamente con nosotras o resolver cualquier duda que tengas, por favor escribinos tocando este link:\n\n👉 https://wa.me/5493572532685\n\n¡Joha te va a responder enseguida!");
     return;
   }
 
-  if (input === "reminder_confirm" || input === "reminder_cancel" || ((session.step === "idle" || session.step === "done") && (isConfirmation || isCancellation))) {
-    if (isConfirmation || isCancellation) {
-      // Look for upcoming appointment for this phone number by normalizing
-      const allClients = await db.select().from(clients);
-      const client = allClients.find(c => phonesMatch(c.phone || "", from));
-      const clientId = client?.id;
-      let app = null;
+  // ── Reminder confirm/cancel: fire whenever the session is idle/done OR it's an explicit button payload.
+  // This must run BEFORE the isGreeting check to avoid "Confirmo" being routed to the category picker.
+  const isReminderTrigger =
+    input === "reminder_confirm" ||
+    input === "reminder_cancel" ||
+    ((session.step === "idle" || session.step === "done") && (isConfirmation || isCancellation));
 
-      if (clientId) {
-        const today = new Date().toISOString().split("T")[0];
+  if (isReminderTrigger) {
+    // Look for upcoming appointment for this phone number
+    const allClients = await db.select().from(clients);
+    const client = allClients.find(c => phonesMatch(c.phone || "", from));
+    const clientId = client?.id;
+    let app = null;
 
-        const upcomingApps = await db.select().from(appointments).where(
-          and(eq(appointments.clientId, clientId), eq(appointments.status, "agendado"))
+    if (clientId) {
+      const today = new Date().toISOString().split("T")[0];
+
+      const upcomingApps = await db.select().from(appointments).where(
+        and(eq(appointments.clientId, clientId), eq(appointments.status, "agendado"))
+      );
+
+      // Find the closest upcoming appointment
+      const relevant = upcomingApps
+        .filter(a => a.date >= today)
+        .sort((a, b) => a.date.localeCompare(b.date));
+      app = relevant[0];
+    }
+
+    if (app) {
+      if (isConfirmation) {
+        await db.update(appointments).set({ status: "confirmado" } as any).where(eq(appointments.id, app.id));
+        const [srv] = await db.select().from(services).where(eq(services.id, app.serviceId)).limit(1);
+        const [prof] = await db.select().from(professionals).where(eq(professionals.id, app.professionalId)).limit(1);
+        const [d, m, y] = app.date.split("-");
+        await cloudSendText(from,
+          `✅ *¡Turno confirmado!*\n\n` +
+          `Nos alegra que puedas venir 💜\n\n` +
+          `📅 ${d}/${m}/${y} a las ${app.time}hs\n` +
+          `💅 ${srv?.name || "tu servicio"}\n` +
+          `👩‍🎨 ${prof?.name || "tu profesional"}\n\n` +
+          `¡Te esperamos! 🌸`
         );
+        logger.info({ from, appointmentId: app.id }, "[Bot] Turno confirmado por cliente");
+        return;
+      } else if (isCancellation) {
+        // Offer to reschedule instead of just cancelling
+        session.step = "rescheduling_choosing_date";
+        session.appointmentIdToReschedule = app.id;
+        session.serviceId = app.serviceId;
+        session.serviceDuration = (await db.select().from(services).where(eq(services.id, app.serviceId)).limit(1))[0]?.duration || 30;
+        session.professionalId = app.professionalId;
+        session.professionalName = (await db.select().from(professionals).where(eq(professionals.id, app.professionalId)).limit(1))[0]?.name || "la profesional";
+        session.serviceName = (await db.select().from(services).where(eq(services.id, app.serviceId)).limit(1))[0]?.name || "tu servicio";
 
-        // Find the closest upcoming appointment
-        const relevant = upcomingApps
-          .filter(a => a.date >= today)
-          .sort((a, b) => a.date.localeCompare(b.date));
-        app = relevant[0];
-      }
+        await db.update(appointments).set({ status: "cancelado" }).where(eq(appointments.id, app.id));
 
-      if (app) {
-        if (isConfirmation) {
-          await db.update(appointments).set({ status: "confirmado" } as any).where(eq(appointments.id, app.id));
-          const [srv] = await db.select().from(services).where(eq(services.id, app.serviceId)).limit(1);
-          const [prof] = await db.select().from(professionals).where(eq(professionals.id, app.professionalId)).limit(1);
-          const [d, m, y] = app.date.split("-");
-          await cloudSendText(from,
-            `✅ *¡Turno confirmado!*\n\n` +
-            `Nos alegra que puedas venir 💜\n\n` +
-            `📅 ${d}/${m}/${y} a las ${app.time}hs\n` +
-            `💅 ${srv?.name || "tu servicio"}\n` +
-            `👩‍🎨 ${prof?.name || "tu profesional"}\n\n` +
-            `¡Te esperamos! 🌸`
-          );
-          logger.info({ from, appointmentId: app.id }, "[Bot] Turno confirmado por cliente");
-          return;
-        } else if (isCancellation) {
-          // Offer ONLY to reschedule instead of direct cancellation without alternative
-          session.step = "rescheduling_choosing_date";
-          session.appointmentIdToReschedule = app.id;
-          session.serviceId = app.serviceId;
-          session.serviceDuration = (await db.select().from(services).where(eq(services.id, app.serviceId)).limit(1))[0]?.duration || 30;
-          session.professionalId = app.professionalId;
-          session.professionalName = (await db.select().from(professionals).where(eq(professionals.id, app.professionalId)).limit(1))[0]?.name || "la profesional";
-          session.serviceName = (await db.select().from(services).where(eq(services.id, app.serviceId)).limit(1))[0]?.name || "tu servicio";
+        const upcoming = await getUpcomingAvailableDates(session.professionalId, session.serviceDuration);
+        session.lastUpcomingDates = upcoming;
+        sessions.set(from, session);
 
-          await db.update(appointments).set({ status: "cancelado" }).where(eq(appointments.id, app.id));
-
-          const upcoming = await getUpcomingAvailableDates(session.professionalId, session.serviceDuration);
-          session.lastUpcomingDates = upcoming;
-          sessions.set(from, session);
-
-          let upcomingMsg = "";
-          if (upcoming.length > 0) {
-            upcomingMsg = `\n\n📅 *Próximas fechas con disponibilidad de ${session.professionalName}:*\n` +
-              upcoming.map((u, idx) => `${idx + 1}️⃣ *${u.displayDate}* (${u.dayName})`).join("\n") +
-              `\n\nEscribí la fecha (Ej: *${upcoming[0].displayDate}*) o respondé con el número (*1, 2, 3 o 4*) 👇`;
-          } else {
-            upcomingMsg = `\n\nEscribila en formato: *DD/MM/AAAA*\nEj: *28/07/2026*`;
-          }
-
-          await cloudSendText(from,
-            `😕 ¡Lamentamos que no puedas asistir!\n\n` +
-            `Tu turno anterior fue cancelado, pero vamos a *reprogramarlo* para otra fecha que te quede cómoda 📅${upcomingMsg}`
-          );
-          return;
+        let upcomingMsg = "";
+        if (upcoming.length > 0) {
+          upcomingMsg = `\n\n📅 *Próximas fechas con disponibilidad de ${session.professionalName}:*\n` +
+            upcoming.map((u, idx) => `${idx + 1}️⃣ *${u.displayDate}* (${u.dayName})`).join("\n") +
+            `\n\nEscribí la fecha (Ej: *${upcoming[0].displayDate}*) o respondé con el número (*1, 2, 3 o 4*) 👇`;
+        } else {
+          upcomingMsg = `\n\nEscribila en formato: *DD/MM/AAAA*\nEj: *28/07/2026*`;
         }
-      } else {
-        // No appointments found to confirm/cancel
-        if (input === "reminder_confirm" || input === "reminder_cancel") {
-           await cloudSendText(from, "No encontré turnos pendientes para confirmar o cancelar.");
-           return;
-        }
+
+        await cloudSendText(from,
+          `😕 ¡Lamentamos que no puedas asistir!\n\n` +
+          `Tu turno anterior fue cancelado, pero vamos a *reprogramarlo* para otra fecha que te quede cómoda 📅${upcomingMsg}`
+        );
+        return;
       }
+    } else {
+      // No appointments found — only reply if it was an explicit button payload to avoid spam
+      if (input === "reminder_confirm" || input === "reminder_cancel") {
+        await cloudSendText(from, "No encontré turnos pendientes para confirmar o cancelar.");
+        return;
+      }
+      // For text-based confirmations with no appointment, fall through to normal greeting flow
     }
   }
 
