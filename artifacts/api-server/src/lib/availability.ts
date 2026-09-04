@@ -82,7 +82,13 @@ export async function isTimeSlotAvailable(
   }
 
   const existingAppointments = await db
-    .select()
+    .select({
+      id: appointments.id,
+      date: appointments.date,
+      time: appointments.time,
+      duration: appointments.duration,
+      status: appointments.status,
+    })
     .from(appointments)
     .where(eq(appointments.professionalId, professionalId));
 

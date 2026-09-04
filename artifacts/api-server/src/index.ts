@@ -53,7 +53,8 @@ function initSchema() {
         \`payment_method\` text,
         \`notes\` text,
         \`shop_sales\` integer DEFAULT 0,
-        \`reminder_sent\` integer DEFAULT false NOT NULL,
+        \`reminder_sent\` integer DEFAULT 0 NOT NULL,
+        \`reminder_2h_sent\` integer DEFAULT 0 NOT NULL,
         \`created_at\` integer NOT NULL,
         FOREIGN KEY (\`client_id\`) REFERENCES \`clients\`(\`id\`),
         FOREIGN KEY (\`professional_id\`) REFERENCES \`professionals\`(\`id\`),
@@ -101,13 +102,24 @@ function initSchema() {
         FOREIGN KEY (\`service_id\`) REFERENCES \`services\`(\`id\`) ON DELETE cascade,
         FOREIGN KEY (\`product_id\`) REFERENCES \`products\`(\`id\`) ON DELETE cascade
       );
+      CREATE TABLE IF NOT EXISTS \`blocked_dates\` (
+        \`id\` text PRIMARY KEY NOT NULL,
+        \`professional_id\` text NOT NULL,
+        \`date\` text NOT NULL,
+        \`reason\` text,
+        FOREIGN KEY (\`professional_id\`) REFERENCES \`professionals\`(\`id\`) ON DELETE cascade
+      );
       CREATE TABLE IF NOT EXISTS \`vouchers\` (
         \`id\` text PRIMARY KEY NOT NULL,
         \`code\` text NOT NULL,
         \`discount_type\` text NOT NULL,
         \`discount_value\` integer NOT NULL,
-        \`is_active\` integer DEFAULT true NOT NULL,
-        \`created_at\` integer NOT NULL
+        \`is_active\` integer DEFAULT 1 NOT NULL,
+        \`client_id\` text,
+        \`expires_at\` integer,
+        \`used_at\` integer,
+        \`created_at\` integer NOT NULL,
+        FOREIGN KEY (\`client_id\`) REFERENCES \`clients\`(\`id\`) ON DELETE SET NULL
       );
       CREATE UNIQUE INDEX IF NOT EXISTS \`vouchers_code_unique\` ON \`vouchers\` (\`code\`);
       CREATE TABLE IF NOT EXISTS \`app_settings\` (
@@ -123,10 +135,15 @@ function initSchema() {
     // Migrations for new columns (ignores error if already exists)
     try { sqlite.exec("ALTER TABLE appointments ADD COLUMN payment_method text"); } catch (e) {}
     try { sqlite.exec("ALTER TABLE appointments ADD COLUMN shop_sales integer DEFAULT 0"); } catch (e) {}
+    try { sqlite.exec("ALTER TABLE appointments ADD COLUMN reminder_sent integer DEFAULT 0 NOT NULL"); } catch (e) {}
+    try { sqlite.exec("ALTER TABLE appointments ADD COLUMN reminder_2h_sent integer DEFAULT 0 NOT NULL"); } catch (e) {}
     try { sqlite.exec("ALTER TABLE professionals ADD COLUMN base_salary integer DEFAULT 0"); } catch (e) {}
     try { sqlite.exec("ALTER TABLE professionals ADD COLUMN sales_target integer DEFAULT 0"); } catch (e) {}
     try { sqlite.exec("ALTER TABLE professionals ADD COLUMN photo text"); } catch (e) {}
     try { sqlite.exec("ALTER TABLE services ADD COLUMN image_url text"); } catch (e) {}
+    try { sqlite.exec("ALTER TABLE vouchers ADD COLUMN client_id text"); } catch (e) {}
+    try { sqlite.exec("ALTER TABLE vouchers ADD COLUMN expires_at integer"); } catch (e) {}
+    try { sqlite.exec("ALTER TABLE vouchers ADD COLUMN used_at integer"); } catch (e) {}
 
 
     logger.info("Database schema initialized successfully");
@@ -305,17 +322,7 @@ async function seedIfEmpty() {
       }
     }
 
-    // Purge lingering test data on startup so Railway DB is 100% clean
-    try {
-      db.delete(appointments).run();
-      db.delete(clients).run();
-      db.delete(expenses).run();
-      db.delete(vouchers).run();
-      db.delete(blocked_dates).run();
-      logger.info("Purged test data on server startup.");
-    } catch {
-      // Ignore if empty
-    }
+    // App settings check completed
 
   } catch (err) {
     logger.error({ err }, "Auto-seed failed");

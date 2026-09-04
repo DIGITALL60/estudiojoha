@@ -131,9 +131,16 @@ router.get("/reports/services-30d", async (req, res) => {
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     const dateString = thirtyDaysAgo.toISOString().split("T")[0]; // YYYY-MM-DD
 
-    // Fetch all completed appointments from the last 30 days
-    // Note: Drizzle ORM string comparison works correctly for YYYY-MM-DD dates
-    const apps = await db.select().from(appointments).where(eq(appointments.status, "completado"));
+    const apps = await db
+      .select({
+        id: appointments.id,
+        date: appointments.date,
+        price: appointments.price,
+        serviceId: appointments.serviceId,
+        status: appointments.status,
+      })
+      .from(appointments)
+      .where(eq(appointments.status, "completado"));
     
     // Filter in memory to ensure date correctness (simple approach)
     const recentApps = apps.filter(a => a.date >= dateString);

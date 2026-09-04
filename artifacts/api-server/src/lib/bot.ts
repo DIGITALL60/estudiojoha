@@ -100,7 +100,15 @@ async function getAvailableTimes(professionalId: string, date: string, duration:
   }
   if (!daySchedules.length) return [];
 
-  const allApps = await db.select().from(appointments).where(eq(appointments.professionalId, professionalId));
+  const allApps = await db
+    .select({
+      date: appointments.date,
+      time: appointments.time,
+      duration: appointments.duration,
+      status: appointments.status,
+    })
+    .from(appointments)
+    .where(eq(appointments.professionalId, professionalId));
   const dayApps = allApps.filter((a) => a.date === date && a.status !== "cancelado");
 
   const nowArgDate = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });

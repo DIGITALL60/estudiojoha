@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { db, clients, appointments, professionals, services, professional_schedules, vouchers } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { db, clients, appointments, professionals, services, professional_schedules, vouchers, blocked_dates } from "@workspace/db";
+import { eq, and } from "drizzle-orm";
 import { cloudSendText, cloudSendTemplate } from "../lib/whatsapp-cloud.js";
 import { logger } from "../lib/logger.js";
 import { randomUUID } from "crypto";
@@ -294,6 +294,16 @@ router.get("/availability", async (req, res) => {
       return res.json({ availableTimes: [] });
     }
 
+    // Check if date is blocked for this professional (vacations, holidays)
+    const [blocked] = await db
+      .select()
+      .from(blocked_dates)
+      .where(and(eq(blocked_dates.professionalId, String(professionalId)), eq(blocked_dates.date, requestedDate)))
+      .limit(1);
+    if (blocked) {
+      return res.json({ availableTimes: [] });
+    }
+
     // 1. Fetch professional schedules for that day
     const schedules = await db.select().from(professional_schedules).where(
       eq(professional_schedules.professionalId, String(professionalId))
@@ -309,9 +319,15 @@ router.get("/availability", async (req, res) => {
     }
 
     // 2. Fetch existing appointments for that professional on that date
-    const existingAppointments = await db.select().from(appointments).where(
-      eq(appointments.professionalId, String(professionalId))
-    );
+    const existingAppointments = await db
+      .select({
+        date: appointments.date,
+        time: appointments.time,
+        duration: appointments.duration,
+        status: appointments.status,
+      })
+      .from(appointments)
+      .where(eq(appointments.professionalId, String(professionalId)));
     
     const dayAppointments = existingAppointments.filter(a => a.date === requestedDate && a.status !== "cancelado");
 
