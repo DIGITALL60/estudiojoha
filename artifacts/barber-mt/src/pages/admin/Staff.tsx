@@ -46,17 +46,39 @@ function EditModal({
     salesTarget: member.salesTarget ?? 0,
     photo: member.photo ?? null
   });
+  const [isAdmin, setIsAdmin] = useState(member.role?.toLowerCase() === "admin");
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(() => {
+    if (!member.role || member.role.toLowerCase() === "admin") return [];
+    return member.role.split(",").map(c => c.trim()).filter(Boolean);
+  });
+
   const [assignedServiceIds, setAssignedServiceIds] = useState<string[]>(initialAssigned);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const toggleCategory = (cat: string) => {
+    setSelectedCategories(prev => {
+      const exists = prev.includes(cat);
+      return exists ? prev.filter(c => c !== cat) : [...prev, cat];
+    });
+  };
+
   const handleSave = async () => {
     if (!form.name.trim()) { setError("El nombre es obligatorio"); return; }
     
     const isNew = !member.id;
-    if (isNew && !form.role?.trim()) { setError("El rol es obligatorio para el inicio de sesión"); return; }
+    if (isNew && !isAdmin && selectedCategories.length === 0) {
+      setError("Debés seleccionar al menos una categoría o marcar como Administradora");
+      return;
+    }
     if (isNew && !form.password?.trim()) { setError("La contraseña es obligatoria para un nuevo usuario"); return; }
+
+    const finalRole = isAdmin ? "Admin" : selectedCategories.join(", ");
+    if (!finalRole.trim()) {
+      setError("Debés seleccionar al menos una categoría o marcar como Administradora");
+      return;
+    }
 
     setSaving(true);
     setError("");
@@ -66,7 +88,7 @@ function EditModal({
 
       const payload: any = {
         name: form.name,
-        role: form.role,
+        role: finalRole,
         username: form.username,
         phone: form.phone,
         color: form.color,
@@ -90,10 +112,10 @@ function EditModal({
       const updated = await res.json();
 
       // Sync service assignments (skip for Admin)
-      if (form.role?.toLowerCase() !== "admin") {
+      if (!isAdmin) {
         let serviceIds = assignedServiceIds;
-        if (serviceIds.length === 0 && form.role) {
-          serviceIds = allServices.filter(s => s.category === form.role).map(s => s.id);
+        if (serviceIds.length === 0 && selectedCategories.length > 0) {
+          serviceIds = allServices.filter(s => selectedCategories.includes(s.category)).map(s => s.id);
         }
         await fetchAPI("/api/data/professional-services/sync", {
           method: "PUT",
@@ -216,23 +238,62 @@ function EditModal({
             />
           </div>
 
-          {/* Role */}
-          <div>
-            <label className="text-[9px] font-bold tracking-widest text-muted-foreground uppercase block mb-1.5">Rol * (Filtrará los servicios que puede atender)</label>
-            <div className="relative">
-              <UserCog size={11} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-              <select
-                value={form.role}
-                onChange={e => setForm(f => ({ ...f, role: e.target.value }))}
-                className="w-full bg-background border border-border rounded-sm pl-8 pr-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-primary appearance-none cursor-pointer"
-              >
-                <option value="" disabled>Seleccioná un rol o sector</option>
-                <option value="Admin">Admin</option>
-                {categories.map(r => (
-                  <option key={r} value={r}>{r}</option>
-                ))}
-              </select>
+          {/* Role / Categories */}
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="text-[9px] font-bold tracking-widest text-muted-foreground uppercase">
+                Categorías / Sectores que atiende *
+              </label>
+              <label className="flex items-center gap-1.5 text-xs cursor-pointer text-muted-foreground hover:text-foreground">
+                <input
+                  type="checkbox"
+                  checked={isAdmin}
+                  onChange={(e) => {
+                    setIsAdmin(e.target.checked);
+                    if (e.target.checked) setSelectedCategories([]);
+                  }}
+                  className="accent-primary"
+                />
+                <span className="text-[11px] font-medium">Es Administradora</span>
+              </label>
             </div>
+
+            {isAdmin ? (
+              <div className="p-3 bg-primary/10 border border-primary/20 rounded-sm flex items-center gap-2 text-xs text-primary">
+                <Star size={13} className="fill-primary" />
+                <span>Acceso administrativo total (no se le asignan turnos ni servicios de belleza).</span>
+              </div>
+            ) : (
+              <div>
+                <p className="text-[10px] text-muted-foreground mb-2">
+                  Podés elegir más de una categoría (ej: Uñas y Pies):
+                </p>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {categories.map(cat => {
+                    const isChecked = selectedCategories.includes(cat);
+                    return (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => toggleCategory(cat)}
+                        className={`flex items-center justify-between px-3 py-2 rounded-sm text-xs font-medium border transition-all text-left ${
+                          isChecked
+                            ? "bg-primary/15 border-primary text-foreground shadow-xs"
+                            : "bg-background border-border text-muted-foreground hover:border-border/80 hover:text-foreground"
+                        }`}
+                      >
+                        <span className="truncate pr-1">{cat}</span>
+                        <div className={`w-4 h-4 rounded-xs flex items-center justify-center border text-[10px] flex-shrink-0 ${
+                          isChecked ? "bg-primary border-primary text-primary-foreground" : "border-muted-foreground/40"
+                        }`}>
+                          {isChecked && <Check size={11} strokeWidth={3} />}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Phone */}
@@ -330,32 +391,58 @@ function EditModal({
           </div>
 
           {/* Service assignments */}
-          {form.role?.toLowerCase() !== "admin" && (
+          {!isAdmin && selectedCategories.length > 0 && (
             <div>
-              <label className="text-[9px] font-bold tracking-widest text-muted-foreground uppercase block mb-2">
-                Servicios que puede realizar
-              </label>
-              <div className="max-h-36 overflow-y-auto border border-border rounded-sm p-2 space-y-1.5">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-[9px] font-bold tracking-widest text-muted-foreground uppercase">
+                  Servicios específicos que realiza
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const catServiceIds = allServices
+                      .filter(s => selectedCategories.includes(s.category))
+                      .map(s => s.id);
+                    const allSelected = catServiceIds.every(id => assignedServiceIds.includes(id));
+                    if (allSelected) {
+                      setAssignedServiceIds(prev => prev.filter(id => !catServiceIds.includes(id)));
+                    } else {
+                      setAssignedServiceIds(prev => [...new Set([...prev, ...catServiceIds])]);
+                    }
+                  }}
+                  className="text-[10px] text-primary hover:underline font-medium"
+                >
+                  {allServices.filter(s => selectedCategories.includes(s.category)).every(s => assignedServiceIds.includes(s.id))
+                    ? "Desmarcar todos"
+                    : "Seleccionar todos"}
+                </button>
+              </div>
+              <div className="max-h-40 overflow-y-auto border border-border rounded-sm p-2 space-y-1.5 scrollbar-thin bg-background/50">
                 {allServices
-                  .filter(s => !form.role || s.category === form.role || assignedServiceIds.includes(s.id))
+                  .filter(s => selectedCategories.includes(s.category) || assignedServiceIds.includes(s.id))
                   .map(s => (
-                    <label key={s.id} className="flex items-center gap-2 text-xs cursor-pointer hover:bg-accent/5 px-1 py-0.5 rounded">
-                      <input
-                        type="checkbox"
-                        checked={assignedServiceIds.includes(s.id)}
-                        onChange={(e) => {
-                          setAssignedServiceIds(prev =>
-                            e.target.checked ? [...prev, s.id] : prev.filter(id => id !== s.id)
-                          );
-                        }}
-                        className="accent-primary"
-                      />
-                      <span className="text-foreground/80">{s.name}</span>
+                    <label key={s.id} className="flex items-center justify-between gap-2 text-xs cursor-pointer hover:bg-accent/5 px-1.5 py-1 rounded">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <input
+                          type="checkbox"
+                          checked={assignedServiceIds.includes(s.id)}
+                          onChange={(e) => {
+                            setAssignedServiceIds(prev =>
+                              e.target.checked ? [...prev, s.id] : prev.filter(id => id !== s.id)
+                            );
+                          }}
+                          className="accent-primary flex-shrink-0"
+                        />
+                        <span className="text-foreground/80 truncate">{s.name}</span>
+                      </div>
+                      <span className="text-[9px] text-muted-foreground bg-muted/40 border border-border/50 px-1.5 py-0.5 rounded-xs flex-shrink-0">
+                        {s.category}
+                      </span>
                     </label>
                   ))}
               </div>
               <p className="text-[9px] text-muted-foreground mt-1">
-                Si no seleccionás ninguno, se asignan automáticamente los de su sector ({form.role}).
+                Si no seleccionás ninguno específico, se asignan automáticamente todos los servicios de sus sectores ({selectedCategories.join(", ")}).
               </p>
             </div>
           )}
@@ -449,7 +536,7 @@ export default function Staff() {
     setEditing({
       id: "",
       name: "",
-      role: "Sector Uñas",
+      role: "",
       username: "",
       phone: "",
       color: COLOR_OPTIONS[0],
@@ -507,9 +594,21 @@ export default function Staff() {
                   </div>
                   <div>
                     <p className="text-sm font-semibold text-foreground leading-tight">{member.name}</p>
-                    <div className="flex items-center gap-1 mt-0.5">
-                      {member.role === "Admin" && <Star size={10} className="text-primary fill-primary" />}
-                      <span className="text-[10px] text-muted-foreground">{member.role}</span>
+                    <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                      {member.role === "Admin" ? (
+                        <span className="flex items-center gap-1 text-[10px] text-primary font-medium bg-primary/10 border border-primary/20 px-1.5 py-0.5 rounded-xs">
+                          <Star size={10} className="fill-primary" /> Admin
+                        </span>
+                      ) : (
+                        (member.role || "Sin categoría").split(",").map((cat, idx) => (
+                          <span
+                            key={idx}
+                            className="text-[10px] text-muted-foreground font-medium bg-muted/40 border border-border/60 px-1.5 py-0.5 rounded-xs"
+                          >
+                            {cat.trim()}
+                          </span>
+                        ))
+                      )}
                     </div>
                   </div>
                 </div>

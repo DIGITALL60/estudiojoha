@@ -1,13 +1,14 @@
 import { fetchAPI } from "@/lib/api";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Search, X, ChevronRight, Edit2, Download, Phone, Cake } from "lucide-react";
+import { Plus, Search, X, ChevronRight, Edit2, Download, Phone, Cake, Trash2, AlertTriangle } from "lucide-react";
 import AdminLayout from "./AdminLayout";
 
 const COLORS = ["#7c3aed","#db2777","#0891b2","#d97706","#16a34a","#dc2626","#ea580c","#0d9488"];
 
 const filters = [
   { id: "todos", label: "Todos" },
+  { id: "duplicados", label: "Duplicados" },
   { id: "cumple", label: "Cumple este mes" },
   { id: "nuevos", label: "Nuevos (30 días)" },
   { id: "inactivos", label: "Inactivos (90+)" },
@@ -19,7 +20,19 @@ interface Client {
   createdAt: string | null;
 }
 
-function ClientModal({ client, appointments, onClose, onSaved }: { client?: Client | null; appointments: {date: string; status: string; serviceName: string; professionalName: string}[]; onClose: () => void; onSaved: (c: Client) => void }) {
+function ClientModal({
+  client,
+  appointments,
+  onClose,
+  onSaved,
+  onDelete,
+}: {
+  client?: Client | null;
+  appointments: {date: string; status: string; serviceName: string; professionalName: string}[];
+  onClose: () => void;
+  onSaved: (c: Client) => void;
+  onDelete?: () => void;
+}) {
   const [form, setForm] = useState({
     name: client?.name ?? "",
     phone: client?.phone ?? "",
@@ -31,8 +44,12 @@ function ClientModal({ client, appointments, onClose, onSaved }: { client?: Clie
   const [error, setError] = useState("");
 
   const handleSave = async () => {
-    if (!form.name.trim() || !form.phone.trim()) { setError("Nombre y teléfono son obligatorios"); return; }
-    setSaving(true); setError("");
+    if (!form.name.trim() || !form.phone.trim()) {
+      setError("Nombre y teléfono son obligatorios");
+      return;
+    }
+    setSaving(true);
+    setError("");
     try {
       const isEdit = !!client;
       const res = await fetchAPI(isEdit ? `/api/data/clients/${client!.id}` : "/api/data/clients", {
@@ -40,13 +57,18 @@ function ClientModal({ client, appointments, onClose, onSaved }: { client?: Clie
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || "Error al guardar los datos del cliente.");
+      }
       const saved = await res.json();
       onSaved(saved);
       onClose();
-    } catch {
-      setError("Error al guardar. Verificá la conexión.");
-    } finally { setSaving(false); }
+    } catch (err: any) {
+      setError(err.message || "Error al guardar. Verificá la conexión.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -114,13 +136,96 @@ function ClientModal({ client, appointments, onClose, onSaved }: { client?: Clie
             </div>
           )}
 
-          {error && <p className="text-xs text-red-400">{error}</p>}
+          {error && (
+            <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-sm flex items-start gap-2 text-xs text-red-400">
+              <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
         </div>
-        <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-border">
-          <button onClick={onClose} className="text-xs text-muted-foreground hover:text-foreground px-4 py-2">Cancelar</button>
-          <button onClick={handleSave} disabled={saving}
-            className="bg-primary text-primary-foreground text-xs font-semibold px-5 py-2 rounded-sm hover:bg-primary/90 disabled:opacity-50">
-            {saving ? "Guardando..." : client ? "Guardar cambios" : "Crear cliente"}
+        <div className="flex items-center justify-between gap-3 px-5 py-4 border-t border-border">
+          {client && onDelete ? (
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                onDelete();
+              }}
+              className="text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-red-500/30 px-3 py-2 rounded-sm transition-colors flex items-center gap-1.5"
+            >
+              <Trash2 size={13} /> Eliminar cliente
+            </button>
+          ) : <div />}
+          <div className="flex items-center gap-3">
+            <button onClick={onClose} className="text-xs text-muted-foreground hover:text-foreground px-4 py-2">Cancelar</button>
+            <button onClick={handleSave} disabled={saving}
+              className="bg-primary text-primary-foreground text-xs font-semibold px-5 py-2 rounded-sm hover:bg-primary/90 disabled:opacity-50">
+              {saving ? "Guardando..." : client ? "Guardar cambios" : "Crear cliente"}
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function DeleteConfirmModal({
+  client,
+  appointmentsCount,
+  deleting,
+  onClose,
+  onConfirm,
+}: {
+  client: Client;
+  appointmentsCount: number;
+  deleting: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+      <motion.div initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95 }}
+        className="bg-card border border-red-500/30 rounded-sm w-full max-w-md p-5 space-y-4 shadow-xl">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-full bg-red-500/15 border border-red-500/30 flex items-center justify-center flex-shrink-0 text-red-400">
+            <AlertTriangle size={20} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="text-sm font-semibold text-foreground">¿Eliminar cliente?</h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              Estás a punto de eliminar permanentemente a <strong className="text-foreground">{client.name}</strong> ({client.phone}).
+            </p>
+          </div>
+        </div>
+
+        {appointmentsCount > 0 ? (
+          <div className="bg-amber-500/10 border border-amber-500/30 p-3 rounded-sm text-xs text-amber-300">
+            ⚠️ <strong>Atención:</strong> Este cliente tiene <strong>{appointmentsCount}</strong> turno{appointmentsCount > 1 ? "s" : ""} registrado{appointmentsCount > 1 ? "s" : ""}. Al eliminarlo, también se eliminarán sus turnos asociados para mantener la base de datos consistente.
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground bg-muted/30 p-3 rounded-sm border border-border/50">
+            Esta acción no se puede deshacer. Los datos del cliente se borrarán permanentemente.
+          </p>
+        )}
+
+        <div className="flex items-center justify-end gap-2.5 pt-2">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={deleting}
+            className="text-xs text-muted-foreground hover:text-foreground px-4 py-2 border border-border rounded-sm transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={deleting}
+            className="bg-red-600 hover:bg-red-700 text-white text-xs font-semibold px-4 py-2 rounded-sm transition-colors flex items-center gap-1.5 disabled:opacity-50"
+          >
+            <Trash2 size={13} />
+            {deleting ? "Eliminando..." : "Sí, eliminar cliente"}
           </button>
         </div>
       </motion.div>
@@ -136,6 +241,8 @@ export default function Clientes() {
   const [activeFilter, setActiveFilter] = useState("todos");
   const [showModal, setShowModal] = useState(false);
   const [editClient, setEditClient] = useState<Client | null>(null);
+  const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchClients = async () => {
     try {
@@ -161,11 +268,60 @@ export default function Clientes() {
     });
   };
 
+  const handleConfirmDelete = async () => {
+    if (!clientToDelete) return;
+    setDeleting(true);
+    try {
+      const res = await fetchAPI(`/api/data/clients/${clientToDelete.id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || "No se pudo eliminar el cliente");
+      }
+      setClients(prev => prev.filter(c => c.id !== clientToDelete.id));
+      setAppointments(prev => prev.filter(a => a.clientId !== clientToDelete.id));
+      setClientToDelete(null);
+    } catch (err: any) {
+      alert(err.message || "Error al eliminar");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  // Helper para normalizar dígitos telefónicos y detectar duplicados
+  const cleanPhoneDigits = (p: string) => {
+    let d = (p || "").replace(/\D/g, "");
+    if (d.startsWith("549")) d = d.slice(3);
+    else if (d.startsWith("54")) d = d.slice(2);
+    if (d.startsWith("0")) d = d.slice(1);
+    if (d.length === 12 && d.slice(4, 6) === "15") d = d.slice(0, 4) + d.slice(6);
+    return d.slice(-8);
+  };
+
+  const duplicateMap = useMemo(() => {
+    const counts = new Map<string, number>();
+    clients.forEach(c => {
+      const key = cleanPhoneDigits(c.phone);
+      if (key) counts.set(key, (counts.get(key) || 0) + 1);
+    });
+    return counts;
+  }, [clients]);
+
+  const duplicateCount = useMemo(() => {
+    return clients.filter(c => (duplicateMap.get(cleanPhoneDigits(c.phone)) || 0) > 1).length;
+  }, [clients, duplicateMap]);
+
   const now = new Date();
   const filtered = clients.filter(c => {
     const q = search.toLowerCase();
     const matchSearch = c.name.toLowerCase().includes(q) || c.phone.includes(q) || (c.email ?? "").includes(q);
     if (!matchSearch) return false;
+
+    if (activeFilter === "duplicados") {
+      const key = cleanPhoneDigits(c.phone);
+      return (duplicateMap.get(key) || 0) > 1;
+    }
     if (activeFilter === "cumple") {
       if (!c.birthday) return false;
       const bMonth = new Date(c.birthday).getUTCMonth();
@@ -177,11 +333,10 @@ export default function Clientes() {
       return diff <= 30;
     }
     if (activeFilter === "inactivos") {
-      // Find last completed appointment for this client
       const clientApps = appointments
         .filter(a => a.clientId === c.id && a.status === "completado")
         .sort((a, b) => b.date.localeCompare(a.date));
-      if (clientApps.length === 0) return true; // never visited = inactivo
+      if (clientApps.length === 0) return true;
       const lastVisit = new Date(clientApps[0].date + "T00:00:00");
       const daysSince = (now.getTime() - lastVisit.getTime()) / 86400000;
       return daysSince >= 90;
@@ -227,6 +382,11 @@ export default function Clientes() {
               activeFilter === f.id ? "bg-primary/15 border-primary/40 text-primary" : "border-border text-muted-foreground hover:border-primary/30"}`}>
             {f.label}
             {f.id === "todos" && <span className="text-[9px] bg-primary/20 text-primary px-1 rounded-full font-bold">{clients.length}</span>}
+            {f.id === "duplicados" && duplicateCount > 0 && (
+              <span className="text-[9px] bg-amber-500/20 text-amber-400 px-1.5 py-0.2 rounded-full font-bold">
+                {duplicateCount}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -237,31 +397,54 @@ export default function Clientes() {
           <div className="py-16 text-center text-sm text-muted-foreground">Cargando clientes...</div>
         ) : filtered.length === 0 ? (
           <div className="py-16 text-center text-sm text-muted-foreground">
-            {search ? "No se encontraron clientes" : "Aún no hay clientes. ¡Creá el primero!"}
+            {activeFilter === "duplicados"
+              ? "¡Excelente! No hay clientes con números telefónicos duplicados."
+              : search
+              ? "No se encontraron clientes"
+              : "Aún no hay clientes. ¡Creá el primero!"}
           </div>
         ) : (
           <motion.div layout>
             {filtered.map((client, i) => {
               const color = getColor(client.id);
+              const isDuplicate = (duplicateMap.get(cleanPhoneDigits(client.phone)) || 0) > 1;
+
               return (
                 <motion.div key={client.id} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.04 }}
-                  className="flex items-center gap-4 px-4 py-3.5 border-b border-border/40 last:border-0 hover:bg-accent/5 group">
+                  className={`flex items-center gap-4 px-4 py-3.5 border-b border-border/40 last:border-0 hover:bg-accent/5 group ${isDuplicate ? 'bg-amber-500/[0.03]' : ''}`}>
                   <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-sm font-semibold"
                     style={{ backgroundColor: color + "22", border: `1px solid ${color}55`, color }}>
                     {getInitial(client.name)}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground">{client.name}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-foreground">{client.name}</p>
+                      {isDuplicate && (
+                        <span className="text-[10px] bg-amber-500/15 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
+                          <AlertTriangle size={10} /> Teléfono duplicado
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-3 mt-0.5">
                       <span className="text-xs text-muted-foreground flex items-center gap-1"><Phone size={10} />{client.phone}</span>
                       {client.birthday && <span className="text-xs text-muted-foreground flex items-center gap-1"><Cake size={10} />{client.birthday}</span>}
                     </div>
                   </div>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button onClick={() => { setEditClient(client); setShowModal(true); }}
-                      className="flex items-center gap-1.5 text-xs text-muted-foreground border border-border/60 px-2.5 py-1.5 rounded-sm hover:text-primary hover:border-primary/50">
+                      className="flex items-center gap-1.5 text-xs text-muted-foreground border border-border/60 px-2.5 py-1.5 rounded-sm hover:text-primary hover:border-primary/50 transition-colors">
                       <Edit2 size={11} /> Editar
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setClientToDelete(client);
+                      }}
+                      className="flex items-center gap-1 text-xs text-red-400 border border-red-500/20 px-2.5 py-1.5 rounded-sm hover:text-red-300 hover:bg-red-500/10 hover:border-red-500/40 transition-colors"
+                      title="Eliminar cliente"
+                    >
+                      <Trash2 size={11} /> Eliminar
                     </button>
                   </div>
                   <ChevronRight size={14} className="text-muted-foreground/30 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -278,7 +461,20 @@ export default function Clientes() {
             client={editClient} 
             appointments={editClient ? appointments.filter(a => a.clientId === editClient.id).sort((a,b) => b.date.localeCompare(a.date)) : []}
             onClose={() => { setShowModal(false); setEditClient(null); }} 
-            onSaved={handleSaved} 
+            onSaved={handleSaved}
+            onDelete={editClient ? () => setClientToDelete(editClient) : undefined}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {clientToDelete && (
+          <DeleteConfirmModal
+            client={clientToDelete}
+            appointmentsCount={appointments.filter(a => a.clientId === clientToDelete.id).length}
+            deleting={deleting}
+            onClose={() => setClientToDelete(null)}
+            onConfirm={handleConfirmDelete}
           />
         )}
       </AnimatePresence>

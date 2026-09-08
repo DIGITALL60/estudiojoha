@@ -176,7 +176,10 @@ export default function BookingWizard({ onClose, initialServiceId, publicInfo: p
       const hasExplicit = professionalServices.some(ps => ps.professionalId === p.id && ps.serviceId === selSvc.id);
       if (hasExplicit) return true;
       const hasAnyMapping = professionalServices.some(ps => ps.professionalId === p.id);
-      if (!hasAnyMapping) return norm(p.role) === norm(selSvc.category);
+      if (!hasAnyMapping) {
+        const cats = (p.role || "").split(",").map(r => norm(r.trim()));
+        return cats.includes(norm(selSvc.category));
+      }
       return false;
     });
   }), [professionals, selectedServices, professionalServices]);

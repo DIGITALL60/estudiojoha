@@ -8,6 +8,7 @@ import { validate } from "../middlewares/validate.js";
 import { createBookingSchema } from "../schemas/bookings.js";
 import { isTimeSlotAvailable } from "../lib/availability.js";
 import { getBoolSetting, getSetting } from "../lib/settings.js";
+import { phonesMatch } from "../lib/phone.js";
 
 const router = Router();
 
@@ -64,9 +65,9 @@ router.post("/", validate(createBookingSchema), async (req, res) => {
       return res.status(409).json({ error: availability.reason || "Horario no disponible" });
     }
 
-    // 1. Find or create client
-    const existingClients = db.select().from(clients).where(eq(clients.phone, client.phone)).all();
-    const existingClient = existingClients[0];
+    // 1. Find or create client (matching by normalized phone)
+    const allExistingClients = db.select().from(clients).all();
+    const existingClient = allExistingClients.find(c => phonesMatch(c.phone, client.phone));
     let clientId = existingClient?.id;
 
     if (!clientId) {
@@ -76,10 +77,19 @@ router.post("/", validate(createBookingSchema), async (req, res) => {
         name: client.name,
         phone: client.phone,
         birthday: client.birthday || null,
+        notes: client.notes || null,
         createdAt: new Date(),
       }).run();
-    } else if (client.birthday && !existingClient.birthday) {
-      db.update(clients).set({ birthday: client.birthday }).where(eq(clients.id, clientId)).run();
+    } else if (existingClient) {
+      // Reutilizar cliente existente y enriquecer datos si faltaban
+      const updates: Record<string, any> = {};
+      if (client.birthday && !existingClient.birthday) updates.birthday = client.birthday;
+      if (client.name && (!existingClient.name || existingClient.name.toLowerCase().includes("whatsapp"))) {
+        updates.name = client.name;
+      }
+      if (Object.keys(updates).length > 0) {
+        db.update(clients).set(updates).where(eq(clients.id, clientId)).run();
+      }
     }
 
     // 2. Create appointments
@@ -392,8 +402,9 @@ router.get("/client/:phone", async (req, res) => {
     const { phone } = req.params as { phone: string };
     if (!phone) return res.status(400).json({ error: "Phone number required" });
 
-    // Find client
-    const [client] = await db.select().from(clients).where(eq(clients.phone, phone)).limit(1);
+    // Find client by normalized phone
+    const allClients = await db.select().from(clients);
+    const client = allClients.find(c => phonesMatch(c.phone, phone));
     if (!client) {
       return res.json([]); // No client found, no appointments
     }

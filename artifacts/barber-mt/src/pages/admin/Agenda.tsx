@@ -62,7 +62,10 @@ function NewTurnModal({ onClose, defaultDate, defaultTime = "10:00", onCreated, 
     const explicit = professionalServices.some(ps => ps.professionalId === p.id && ps.serviceId === serviceId);
     if (explicit) return true;
     const hasAny = professionalServices.some(ps => ps.professionalId === p.id);
-    if (!hasAny && selectedService && p.role === selectedService.category) return true;
+    if (!hasAny && selectedService) {
+      const cats = (p.role || "").split(",").map(r => r.trim().toLowerCase());
+      return cats.includes((selectedService.category ?? "").toLowerCase());
+    }
     return false;
   });
 

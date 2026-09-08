@@ -9,6 +9,7 @@ import { requireAuth } from "../middlewares/auth.js";
 import { getAllSettings, upsertSettings, getBoolSetting, getSetting } from "../lib/settings.js";
 import { isTimeSlotAvailable } from "../lib/availability.js";
 import { uploadToCloudinary, deleteFromCloudinary } from "../lib/cloudinary.js";
+import { phonesMatch } from "../lib/phone.js";
 
 const router = Router();
 
@@ -383,14 +384,24 @@ router.get("/clients", requireAuth, async (req, res) => {
 router.post("/clients", requireAuth, async (req, res) => {
   try {
     const { name, phone, email, birthday, notes } = req.body;
-    if (!name || !phone) return res.status(400).json({ error: "name and phone are required" });
+    if (!name || !phone) return res.status(400).json({ error: "Nombre y teléfono son obligatorios" });
+
+    // Verificar si ya existe un cliente con este teléfono
+    const allClients = await db.select().from(clients);
+    const existing = allClients.find(c => phonesMatch(c.phone, phone));
+    if (existing) {
+      return res.status(409).json({ 
+        error: `Ya existe un cliente con este teléfono: "${existing.name}" (${existing.phone}). Podés editar su ficha en lugar de crear uno nuevo.` 
+      });
+    }
 
     const id = randomUUID();
     await db.insert(clients).values({ id, name, phone, email, birthday, notes, createdAt: new Date() });
     const [created] = await db.select().from(clients).where(eq(clients.id, id)).limit(1);
     return res.status(201).json(created);
   } catch (err) {
-    return res.status(500).json({ error: "Failed to create client" });
+    logger.error({ err }, "Failed to create client");
+    return res.status(500).json({ error: "Error al crear el cliente" });
   }
 });
 
@@ -398,21 +409,50 @@ router.patch("/clients/:id", requireAuth, async (req, res) => {
   try {
     const { id } = req.params as { id: string };
     const { name, phone, email, birthday, notes } = req.body;
+
+    // Si se modifica el teléfono, comprobar que no colisione con el de otro cliente
+    if (phone) {
+      const allClients = await db.select().from(clients);
+      const duplicate = allClients.find(c => c.id !== id && phonesMatch(c.phone, phone));
+      if (duplicate) {
+        return res.status(409).json({ 
+          error: `El teléfono ya pertenece a otro cliente registrado: "${duplicate.name}".` 
+        });
+      }
+    }
+
     await db.update(clients).set({ name, phone, email, birthday, notes }).where(eq(clients.id, id));
     const [updated] = await db.select().from(clients).where(eq(clients.id, id)).limit(1);
-    res.json(updated);
+    return res.json(updated);
   } catch (err) {
-    res.status(500).json({ error: "Failed to update client" });
+    logger.error({ err }, "Failed to update client");
+    return res.status(500).json({ error: "Error al actualizar el cliente" });
   }
 });
 
 router.delete("/clients/:id", requireAuth, async (req, res) => {
   try {
     const { id } = req.params as { id: string };
+
+    const [client] = await db.select().from(clients).where(eq(clients.id, id)).limit(1);
+    if (!client) {
+      return res.status(404).json({ error: "Cliente no encontrado" });
+    }
+
+    // Desvincular vouchers asociados para no violar FK
+    await db.update(vouchers).set({ clientId: null }).where(eq(vouchers.clientId, id));
+
+    // Eliminar turnos vinculados al cliente para mantener la integridad
+    await db.delete(appointments).where(eq(appointments.clientId, id));
+
+    // Eliminar el cliente
     await db.delete(clients).where(eq(clients.id, id));
-    res.json({ success: true });
+
+    logger.info({ clientId: id, name: client.name }, "Cliente y turnos asociados eliminados");
+    return res.json({ success: true, message: `Cliente ${client.name} eliminado correctamente` });
   } catch (err) {
-    res.status(500).json({ error: "Failed to delete client" });
+    logger.error({ err }, "Failed to delete client");
+    return res.status(500).json({ error: "Error al eliminar el cliente" });
   }
 });
 

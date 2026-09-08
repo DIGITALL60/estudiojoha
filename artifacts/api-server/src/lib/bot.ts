@@ -9,6 +9,7 @@ import { randomUUID } from "crypto";
 import { cloudSendText, cloudSendList, cloudSendButtons } from "./whatsapp-cloud.js";
 import { logger } from "./logger.js";
 import { getBoolSetting } from "./settings.js";
+import { phonesMatch } from "./phone.js";
 
 // ─── Session store ─────────────────────────────────────────────────────────
 type Step =
@@ -179,21 +180,7 @@ export async function handleBotMessage(from: string, text: string, interactiveId
     (w) => normalized.includes(w)
   );
 
-  // ── Phone number normalization helper ────────────────────────────────────
-  function cleanPhone(phone: string): string {
-    let digits = (phone || "").replace(/\D/g, "");
-    if (digits.startsWith("549")) digits = digits.slice(3);
-    else if (digits.startsWith("54")) digits = digits.slice(2);
-    if (digits.startsWith("0")) digits = digits.slice(1);
-    return digits;
-  }
 
-  function phonesMatch(p1: string, p2: string): boolean {
-    const c1 = cleanPhone(p1);
-    const c2 = cleanPhone(p2);
-    if (!c1 || !c2) return false;
-    return c1 === c2 || c1.endsWith(c2) || c2.endsWith(c1);
-  }
 
   // ── Check if client is confirming/canceling from a reminder ──────────────
   // These are standalone messages outside of a booking session and should bypass any current step.
@@ -683,8 +670,9 @@ export async function handleBotMessage(from: string, text: string, interactiveId
 
         const appointmentId = randomUUID();
 
-        const existingClients = db.select().from(clients).where(eq(clients.phone, from)).all();
-        let clientId = existingClients[0]?.id;
+        const allClients = db.select().from(clients).all();
+        const existingClient = allClients.find(c => phonesMatch(c.phone || "", from));
+        let clientId = existingClient?.id;
         if (!clientId) {
           clientId = randomUUID();
           db.insert(clients).values({
@@ -693,6 +681,8 @@ export async function handleBotMessage(from: string, text: string, interactiveId
             phone: from,
             createdAt: new Date(),
           }).run();
+        } else if (existingClient && session.clientName && (!existingClient.name || existingClient.name.toLowerCase().includes("whatsapp"))) {
+          db.update(clients).set({ name: session.clientName }).where(eq(clients.id, clientId)).run();
         }
 
         // Precio final (con o sin voucher)
