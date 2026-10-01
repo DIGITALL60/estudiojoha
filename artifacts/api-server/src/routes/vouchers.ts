@@ -41,6 +41,41 @@ router.post("/validate", async (req, res) => {
   }
 });
 
+// Redeem a voucher (mark as used)
+router.post("/redeem", async (req, res) => {
+  try {
+    const { code, clientId } = req.body;
+    if (!code) return res.status(400).json({ success: false, error: "Code is required" });
+
+    const [voucher] = await db
+      .select()
+      .from(vouchers)
+      .where(eq(vouchers.code, code.toUpperCase()));
+
+    if (!voucher) {
+      return res.status(404).json({ success: false, error: "Cupón no encontrado." });
+    }
+
+    if (!voucher.isActive) {
+      return res.status(400).json({ success: false, error: "Este cupón ya fue utilizado." });
+    }
+
+    await db
+      .update(vouchers)
+      .set({
+        isActive: false,
+        usedAt: new Date(),
+        ...(clientId ? { clientId } : {}),
+      })
+      .where(eq(vouchers.id, voucher.id));
+
+    return res.json({ success: true, message: "Cupón canjeado con éxito." });
+  } catch (error: any) {
+    console.error("Error redeeming voucher:", error);
+    return res.status(500).json({ success: false, error: "Error al canjear cupón." });
+  }
+});
+
 // Create multiple vouchers (used by Reactivacion / Cumpleaños)
 router.post("/bulk-create", requireAuth, async (req, res) => {
   try {

@@ -1,8 +1,12 @@
-import { fetchAPI } from "@/lib/api";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, ChevronRight, Download, Wallet, Plus, Trash2, TrendingUp, TrendingDown, BarChart3, Tag } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronDown, Download, Wallet, Plus, Trash2, TrendingUp, TrendingDown, BarChart3, Tag, Check, X, Calendar as CalendarIcon, Package } from "lucide-react";
 import AdminLayout from "./AdminLayout";
+import ClientSearchSelect from "@/components/ClientSearchSelect";
+import ServiceSearchSelect from "@/components/ServiceSearchSelect";
+import ProductSearchSelect, { SelectedProductItem, ProductItem } from "@/components/ProductSearchSelect";
+import CalendarPopover from "@/components/CalendarPopover";
+import { fetchAPI } from "@/lib/api";
 
 interface AppointmentRow {
   id: string; date: string; time: string; price: number; status: string;
@@ -11,7 +15,7 @@ interface AppointmentRow {
 }
 interface Professional { id: string; name: string; }
 interface Client { id: string; name: string; phone: string; }
-interface Service { id: string; name: string; price: number; }
+interface Service { id: string; name: string; price: number; category?: string; duration?: number; }
 
 interface ExpenseRow {
   id: string; concept: string; amount: number; category: string; date: string;
@@ -37,10 +41,60 @@ export default function Caja() {
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [services, setServices] = useState<Service[]>([]);
+  const [products, setProducts] = useState<ProductItem[]>([]);
+  const [selectedProducts, setSelectedProducts] = useState<SelectedProductItem[]>([]);
   const [activeTab, setActiveTab] = useState<"dia" | "mes" | "rapido">("dia");
   const [quickAction, setQuickAction] = useState<"cobro" | "shop" | "egreso">("cobro");
   const [newQuickApp, setNewQuickApp] = useState({ clientId: "", professionalId: "", serviceId: "", amount: "", paymentMethod: "Efectivo", time: "10:00" });
+  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
+  const [bankAccount, setBankAccount] = useState("Banco de Córdoba");
   const [viewReceipt, setViewReceipt] = useState<string | null>(null);
+
+  // Estados de Calendario
+  const [showCalendarPopover, setShowCalendarPopover] = useState(false);
+  const [showQuickCalendar, setShowQuickCalendar] = useState(false);
+
+  // Estados de Voucher y Descuento
+  const [discountInput, setDiscountInput] = useState("");
+  const [appliedDiscount, setAppliedDiscount] = useState<{
+    code?: string;
+    type: "percent" | "fixed";
+    value: number;
+    label: string;
+    amountSaved: number;
+  } | null>(null);
+  const [validatingVoucher, setValidatingVoucher] = useState(false);
+  const [voucherError, setVoucherError] = useState("");
+
+  const chosenServices = useMemo(() => {
+    return services.filter(s => selectedServiceIds.includes(s.id));
+  }, [services, selectedServiceIds]);
+
+  const servicesSubtotal = useMemo(() => {
+    return chosenServices.reduce((acc, s) => acc + (s.price || 0), 0);
+  }, [chosenServices]);
+
+  const productsSubtotal = useMemo(() => {
+    return selectedProducts.reduce((sum, p) => sum + p.price * p.qty, 0);
+  }, [selectedProducts]);
+
+  // Filtrar exclusivamente los productos para Venta Shop (excluye uso interno / insumos)
+  const shopOnlyProducts = useMemo(() => {
+    return products.filter((p) => {
+      const cat = (p.category || "").trim().toLowerCase();
+      if (cat === "insumos" || cat.includes("insumo") || cat.includes("interno") || cat.includes("uso interno")) {
+        return false;
+      }
+      return true;
+    });
+  }, [products]);
+
+  const activeSubtotal = useMemo(() => {
+    if (quickAction === "shop") {
+      return productsSubtotal;
+    }
+    return servicesSubtotal;
+  }, [quickAction, productsSubtotal, servicesSubtotal]);
 
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
 
@@ -52,13 +106,15 @@ export default function Caja() {
       fetchAPI("/api/data/professionals").then(r => r.json()),
       fetchAPI("/api/data/clients").then(r => r.json()),
       fetchAPI("/api/data/services").then(r => r.json()),
+      fetchAPI("/api/data/products").then(r => r.json()).catch(() => []),
     ])
-      .then(([apps, exps, profs, clis, srvs]) => {
+      .then(([apps, exps, profs, clis, srvs, prods]) => {
         setAppointments(apps);
         setExpenses(exps);
         setProfessionals(profs);
         setClients(clis);
         setServices(srvs);
+        setProducts(Array.isArray(prods) ? prods : []);
       })
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -104,6 +160,135 @@ export default function Caja() {
     return acc;
   }, {} as Record<string, number>);
 
+  const applyPercentageDiscount = (pct: number, label: string) => {
+    const baseAmount = activeSubtotal > 0 ? activeSubtotal : Number(newQuickApp.amount) || 0;
+    if (baseAmount <= 0) {
+      setVoucherError("Primero seleccioná un servicio o producto, o ingresá un monto.");
+      return;
+    }
+    const saved = Math.round((baseAmount * pct) / 100);
+    setAppliedDiscount({
+      type: "percent",
+      value: pct,
+      label,
+      amountSaved: saved,
+    });
+    setNewQuickApp(prev => ({ ...prev, amount: String(Math.max(0, baseAmount - saved)) }));
+    setDiscountInput("");
+    setVoucherError("");
+  };
+
+  const applyFixedDiscount = (fixedVal: number, label: string) => {
+    const baseAmount = activeSubtotal > 0 ? activeSubtotal : Number(newQuickApp.amount) || 0;
+    if (baseAmount <= 0) {
+      setVoucherError("Primero seleccioná un servicio o producto, o ingresá un monto.");
+      return;
+    }
+    const saved = Math.min(baseAmount, fixedVal);
+    setAppliedDiscount({
+      type: "fixed",
+      value: fixedVal,
+      label,
+      amountSaved: saved,
+    });
+    setNewQuickApp(prev => ({ ...prev, amount: String(Math.max(0, baseAmount - saved)) }));
+    setDiscountInput("");
+    setVoucherError("");
+  };
+
+  const handleApplyDiscount = async () => {
+    const raw = discountInput.trim();
+    if (!raw) return;
+
+    const baseAmount = activeSubtotal > 0 ? activeSubtotal : Number(newQuickApp.amount) || 0;
+    if (baseAmount <= 0) {
+      setVoucherError("Primero seleccioná un servicio o producto, o ingresá un monto.");
+      return;
+    }
+
+    setVoucherError("");
+
+    // 1. Detectar si escribió porcentaje explícito (ej: "15%", "%15", "10 %")
+    if (raw.endsWith("%") || raw.startsWith("%")) {
+      const pct = parseFloat(raw.replace("%", "").trim());
+      if (!isNaN(pct) && pct > 0 && pct <= 100) {
+        applyPercentageDiscount(pct, `${pct}% OFF`);
+        return;
+      }
+    }
+
+    // 2. Detectar si escribió monto fijo explícito (ej: "$2000", "$ 1500", "-1500")
+    if (raw.startsWith("$") || raw.startsWith("-")) {
+      const fixedVal = parseFloat(raw.replace(/[^\d.]/g, ""));
+      if (!isNaN(fixedVal) && fixedVal > 0) {
+        applyFixedDiscount(fixedVal, `-$${fixedVal.toLocaleString("es-AR")}`);
+        return;
+      }
+    }
+
+    // 3. Validar contra el sistema de cupones / vouchers de base de datos
+    setValidatingVoucher(true);
+    try {
+      const res = await fetchAPI("/api/vouchers/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: raw }),
+      });
+      const data = await res.json();
+      if (data.valid) {
+        let saved = 0;
+        if (data.discountType === "percent") {
+          saved = Math.round((baseAmount * Number(data.discountValue)) / 100);
+        } else {
+          saved = Math.min(baseAmount, Number(data.discountValue));
+        }
+
+        const discountObj = {
+          code: raw.toUpperCase(),
+          type: data.discountType as "percent" | "fixed",
+          value: Number(data.discountValue),
+          label: `Cupón ${raw.toUpperCase()} (${data.discountType === "percent" ? data.discountValue + "%" : "$" + Number(data.discountValue).toLocaleString("es-AR")})`,
+          amountSaved: saved,
+        };
+
+        setAppliedDiscount(discountObj);
+        setNewQuickApp(prev => ({ ...prev, amount: String(Math.max(0, baseAmount - saved)) }));
+        setDiscountInput("");
+        return;
+      }
+    } catch {
+      // Continuar al fallback numérico
+    } finally {
+      setValidatingVoucher(false);
+    }
+
+    // 4. Si no fue cupón de BD, verificar si es número directo
+    const numericVal = parseFloat(raw.replace(/[^\d.]/g, ""));
+    if (!isNaN(numericVal) && numericVal > 0) {
+      if (numericVal <= 90 && !raw.includes("00")) {
+        applyPercentageDiscount(numericVal, `${numericVal}% OFF`);
+        return;
+      }
+      applyFixedDiscount(numericVal, `-$${numericVal.toLocaleString("es-AR")}`);
+      return;
+    }
+
+    setVoucherError("Cupón no encontrado. Podés ingresar un % (ej: 15%) o monto (ej: $1000).");
+  };
+
+  const handleQuickDiscount = (pct: number) => {
+    applyPercentageDiscount(pct, `${pct}% OFF`);
+  };
+
+  const handleRemoveDiscount = () => {
+    setAppliedDiscount(null);
+    setDiscountInput("");
+    setVoucherError("");
+    if (activeSubtotal > 0) {
+      setNewQuickApp(prev => ({ ...prev, amount: String(activeSubtotal) }));
+    }
+  };
+
   const handleAddExpense = async () => {
     if (!newExpense.concept || !newExpense.amount) return;
     try {
@@ -126,26 +311,164 @@ export default function Caja() {
   };
 
   const handleAddQuickApp = async (type: "cobro" | "shop") => {
-    if (!newQuickApp.clientId || !newQuickApp.professionalId || !newQuickApp.serviceId || !newQuickApp.amount) return;
+    if (!newQuickApp.clientId) {
+      alert("Por favor seleccioná un cliente usando la lupita de búsqueda");
+      return;
+    }
+    if (!newQuickApp.professionalId) {
+      alert("Por favor seleccioná un profesional");
+      return;
+    }
+
+    if (type === "cobro") {
+      if (selectedServiceIds.length === 0) {
+        alert("Por favor tildá al menos un servicio");
+        return;
+      }
+    } else {
+      if (selectedProducts.length === 0 && (!newQuickApp.amount || Number(newQuickApp.amount) <= 0)) {
+        alert("Por favor seleccioná al menos un producto o ingresá un monto para la venta shop");
+        return;
+      }
+    }
+
+    if (!newQuickApp.amount || Number(newQuickApp.amount) <= 0) {
+      alert("Por favor ingresá un monto válido");
+      return;
+    }
+
+    // SI ES VENTA SHOP
+    if (type === "shop") {
+      const totalEntered = Number(newQuickApp.amount);
+      const originalSum = productsSubtotal > 0 ? productsSubtotal : totalEntered;
+
+      let shopNotes = "";
+      if (selectedProducts.length > 0) {
+        shopNotes = `[SHOP_SALES]${JSON.stringify(selectedProducts.map(p => ({ id: p.id, name: p.name, price: p.price, qty: p.qty })))}[/SHOP_SALES]`;
+      }
+      if (appliedDiscount) {
+        const discText = `[DESCUENTO] ${appliedDiscount.label} (-$${appliedDiscount.amountSaved.toLocaleString("es-AR")}). Original: $${originalSum.toLocaleString("es-AR")} -> Cobrado: $${totalEntered.toLocaleString("es-AR")}`;
+        shopNotes = shopNotes ? `${shopNotes} ${discText}` : discText;
+      }
+
+      // Asignar un serviceId de referencia
+      const shopServiceId = services.find(s => 
+        s.name.toLowerCase().includes("shop") || 
+        s.name.toLowerCase().includes("venta") ||
+        s.name.toLowerCase().includes("producto")
+      )?.id || services[0]?.id || "";
+
+      try {
+        await fetchAPI("/api/data/appointments", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            clientId: newQuickApp.clientId,
+            professionalId: newQuickApp.professionalId,
+            serviceId: shopServiceId,
+            date: selectedDate,
+            time: newQuickApp.time,
+            duration: 15,
+            price: 0,
+            shopSales: totalEntered,
+            status: "completado",
+            paymentMethod: newQuickApp.paymentMethod === "Transferencia" ? `Transferencia (${bankAccount})` : newQuickApp.paymentMethod,
+            notes: shopNotes || undefined,
+          }),
+        });
+
+        if (appliedDiscount?.code) {
+          await fetchAPI("/api/vouchers/redeem", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              code: appliedDiscount.code,
+              clientId: newQuickApp.clientId,
+            }),
+          }).catch(console.error);
+        }
+
+        setSelectedProducts([]);
+        setAppliedDiscount(null);
+        setDiscountInput("");
+        setVoucherError("");
+        setNewQuickApp({ clientId: "", professionalId: "", serviceId: "", amount: "", paymentMethod: "Efectivo", time: "10:00" });
+        alert("¡Venta de shop registrada exitosamente!");
+        loadData();
+      } catch {
+        alert("Error al guardar la venta de shop");
+      }
+      return;
+    }
+
+    // SI ES COBRO DE SERVICIOS
+    const chosenServices = services.filter(s => selectedServiceIds.includes(s.id));
+    const totalEntered = Number(newQuickApp.amount);
+    const originalSum = chosenServices.reduce((acc, s) => acc + (s.price || 0), 0);
+
+    // Calcular distribución de precios si hay múltiples servicios
+    const prices = chosenServices.map((s, idx) => {
+      if (chosenServices.length === 1) return totalEntered;
+      if (originalSum === 0) return Math.round(totalEntered / chosenServices.length);
+      if (idx === chosenServices.length - 1) {
+        const previousSums = chosenServices
+          .slice(0, -1)
+          .reduce((acc, prevS) => acc + Math.round((prevS.price / originalSum) * totalEntered), 0);
+        return totalEntered - previousSums;
+      }
+      return Math.round((s.price / originalSum) * totalEntered);
+    });
+
+    let discountNote = "";
+    if (appliedDiscount) {
+      discountNote = `[DESCUENTO] ${appliedDiscount.label} (-$${appliedDiscount.amountSaved.toLocaleString("es-AR")}). Original: $${originalSum.toLocaleString("es-AR")} -> Cobrado: $${totalEntered.toLocaleString("es-AR")}`;
+    }
+
     try {
-      await fetchAPI("/api/data/appointments", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          clientId: newQuickApp.clientId,
-          professionalId: newQuickApp.professionalId,
-          serviceId: newQuickApp.serviceId,
-          date: selectedDate,
-          time: newQuickApp.time,
-          duration: 30, // Default duration for quick add
-          price: type === "cobro" ? Number(newQuickApp.amount) : 0,
-          shopSales: type === "shop" ? Number(newQuickApp.amount) : 0,
-          status: "completado",
-          paymentMethod: newQuickApp.paymentMethod,
-        }),
-      });
+      await Promise.all(
+        chosenServices.map((srv, idx) =>
+          fetchAPI("/api/data/appointments", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              clientId: newQuickApp.clientId,
+              professionalId: newQuickApp.professionalId,
+              serviceId: srv.id,
+              date: selectedDate,
+              time: newQuickApp.time,
+              duration: srv.duration || 30,
+              price: prices[idx],
+              shopSales: 0,
+              status: "completado",
+              paymentMethod: newQuickApp.paymentMethod === "Transferencia" ? `Transferencia (${bankAccount})` : newQuickApp.paymentMethod,
+              notes: discountNote || undefined,
+            }),
+          })
+        )
+      );
+
+      // Si fue un cupón oficial de base de datos, canjearlo
+      if (appliedDiscount?.code) {
+        await fetchAPI("/api/vouchers/redeem", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            code: appliedDiscount.code,
+            clientId: newQuickApp.clientId,
+          }),
+        }).catch(console.error);
+      }
+
+      setSelectedServiceIds([]);
+      setAppliedDiscount(null);
+      setDiscountInput("");
+      setVoucherError("");
       setNewQuickApp({ clientId: "", professionalId: "", serviceId: "", amount: "", paymentMethod: "Efectivo", time: "10:00" });
-      alert("Registro guardado exitosamente");
+      alert(
+        chosenServices.length > 1
+          ? `¡Se registraron ${chosenServices.length} servicios para el cliente con éxito!`
+          : "Registro guardado exitosamente"
+      );
       loadData();
     } catch {
       alert("Error al guardar el registro");
@@ -159,22 +482,26 @@ export default function Caja() {
   };
 
   const handleCancelAppointment = async (id: string) => {
-    if (!confirm("¿Estás seguro de anular/cancelar este cobro? Desaparecerá de la caja.")) return;
+    if (!confirm("¿Eliminar este registro cargado por error? Se borrará permanentemente de la caja sin afectar la tasa de asistencia de la clienta.")) return;
     try {
       await fetchAPI(`/api/data/appointments/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "cancelado" })
+        method: "DELETE"
       });
       loadData();
     } catch {
-      alert("Error al anular el cobro");
+      alert("Error al eliminar el registro");
     }
   };
 
+  const todayISO = new Date().toISOString().split("T")[0];
+  const isTodaySelected = selectedDate === todayISO;
   const dateObj = new Date(selectedDate + "T12:00:00");
   const displayDate = dateObj.toLocaleDateString("es-AR", { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const displayMonth = dateObj.toLocaleDateString("es-AR", { month: 'long', year: 'numeric' });
+
+  const formattedNavDate = isTodaySelected
+    ? `Hoy (${dateObj.toLocaleDateString("es-AR", { day: 'numeric', month: 'short' })})`
+    : dateObj.toLocaleDateString("es-AR", { weekday: 'short', day: 'numeric', month: 'short' });
 
   const handleExportCSV = () => {
     const rows = completedApps.map(a => [
@@ -196,19 +523,71 @@ export default function Caja() {
       subtitle={activeTab === "dia" ? displayDate.charAt(0).toUpperCase() + displayDate.slice(1) : `Balance de ${displayMonth}`}
       actions={
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 bg-card border border-border/50 rounded-lg p-1 mr-1">
-            <button onClick={() => {
-              const d = new Date(selectedDate + "T12:00:00");
-              d.setDate(d.getDate() - 1);
-              setSelectedDate(d.toISOString().split("T")[0]);
-            }} className="p-1 hover:bg-accent/5 rounded-md"><ChevronLeft size={16} /></button>
-            <button onClick={() => setSelectedDate(new Date().toISOString().split("T")[0])} className="text-xs font-semibold px-2">Hoy</button>
-            <button onClick={() => {
-              const d = new Date(selectedDate + "T12:00:00");
-              d.setDate(d.getDate() + 1);
-              setSelectedDate(d.toISOString().split("T")[0]);
-            }} className="p-1 hover:bg-accent/5 rounded-md"><ChevronRight size={16} /></button>
+          {/* Navegador de fecha con botón de calendario desplegable */}
+          <div className="relative flex items-center">
+            <div className="flex items-center gap-1 bg-card border border-border/80 shadow-sm rounded-lg p-1">
+              <button
+                type="button"
+                onClick={() => {
+                  const d = new Date(selectedDate + "T12:00:00");
+                  d.setDate(d.getDate() - 1);
+                  setSelectedDate(d.toISOString().split("T")[0]);
+                }}
+                className="p-1.5 hover:bg-accent/15 text-muted-foreground hover:text-foreground rounded-md transition-colors"
+                title="Día anterior"
+              >
+                <ChevronLeft size={16} />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowCalendarPopover(prev => !prev)}
+                className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-md transition-all ${
+                  showCalendarPopover
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "hover:bg-accent/10 text-foreground"
+                }`}
+                title="Desplegar calendario para elegir día"
+              >
+                <CalendarIcon size={14} className={showCalendarPopover ? "text-primary-foreground" : "text-primary"} />
+                <span className="capitalize">{formattedNavDate}</span>
+                <ChevronDown size={12} className={`transition-transform duration-200 ${showCalendarPopover ? "rotate-180" : "text-muted-foreground"}`} />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const d = new Date(selectedDate + "T12:00:00");
+                  d.setDate(d.getDate() + 1);
+                  setSelectedDate(d.toISOString().split("T")[0]);
+                }}
+                className="p-1.5 hover:bg-accent/15 text-muted-foreground hover:text-foreground rounded-md transition-colors"
+                title="Día siguiente"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+
+            {!isTodaySelected && (
+              <button
+                type="button"
+                onClick={() => setSelectedDate(todayISO)}
+                className="ml-1.5 text-xs font-bold text-primary bg-primary/10 hover:bg-primary/20 border border-primary/20 px-2.5 py-1.5 rounded-lg transition-colors shadow-sm"
+                title="Volver a la fecha de hoy"
+              >
+                Hoy
+              </button>
+            )}
+
+            <CalendarPopover
+              selectedDate={selectedDate}
+              onSelectDate={d => setSelectedDate(d)}
+              isOpen={showCalendarPopover}
+              onClose={() => setShowCalendarPopover(false)}
+              align="right"
+            />
           </div>
+
           <button onClick={handleExportCSV} className="flex items-center gap-2 bg-primary/10 text-primary text-xs font-semibold px-4 py-2 rounded-lg hover:bg-primary/20 transition-colors">
             <Download size={13} /> CSV
           </button>
@@ -377,12 +756,36 @@ export default function Caja() {
                   <tbody>
                     {completedApps.map((a, i) => {
                       const receiptMatch = a.notes?.includes("[COMPROBANTE]") ? a.notes.split("[COMPROBANTE]")[1] : null;
+                      const discountMatch = a.notes?.match(/\[DESCUENTO\]\s*([^.]+?)(?:\.|$)/);
+                      const shopMatch = a.notes?.match(/\[SHOP_SALES\](.*?)\[\/SHOP_SALES\]/);
+                      let shopProductsDesc = "";
+                      if (shopMatch) {
+                        try {
+                          const parsed = JSON.parse(shopMatch[1]);
+                          shopProductsDesc = parsed.map((p: any) => `${p.name}${p.qty > 1 ? ` x${p.qty}` : ""}`).join(", ");
+                        } catch {}
+                      }
+                      const isPureShop = (a.shopSales || 0) > 0 && a.price === 0;
+
                       return (
                         <tr key={i} className="border-b border-border/20 last:border-0 hover:bg-accent/5 transition-colors">
                           <td className="px-5 py-4">
                             <div className="flex flex-col">
                               <span className="text-xs font-semibold text-foreground">{a.clientName}</span>
-                              <span className="text-[10px] text-muted-foreground">{a.time} · {a.serviceName}</span>
+                              <span className="text-[10px] text-muted-foreground">
+                                {a.time} · {isPureShop ? (
+                                  <span className="text-emerald-400 font-semibold">
+                                    🛍️ {shopProductsDesc || "Venta Shop"}
+                                  </span>
+                                ) : (
+                                  a.serviceName
+                                )}
+                              </span>
+                              {discountMatch && (
+                                <span className="w-fit mt-1 text-[9px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/25 px-1.5 py-0.5 rounded flex items-center gap-1">
+                                  🏷️ {discountMatch[1].trim()}
+                                </span>
+                              )}
                               {receiptMatch && (
                                 <button
                                   type="button"
@@ -403,10 +806,12 @@ export default function Caja() {
                           <td className="px-5 py-4 text-right">
                             <div className="flex flex-col items-end gap-1">
                               <div className="flex items-center gap-3">
-                                <span className="text-xs font-bold text-foreground">$ {a.price.toLocaleString("es-AR")}</span>
+                                <span className="text-xs font-bold text-foreground">
+                                  $ {(isPureShop ? a.shopSales! : a.price).toLocaleString("es-AR")}
+                                </span>
                                 <button onClick={() => handleCancelAppointment(a.id)} className="text-muted-foreground hover:text-red-400 transition-colors" title="Anular cobro"><Trash2 size={12} /></button>
                               </div>
-                              {(a.shopSales || 0) > 0 && (
+                              {!isPureShop && (a.shopSales || 0) > 0 && (
                                 <span className="text-[10px] text-emerald-400">+ $ {a.shopSales!.toLocaleString("es-AR")} shop</span>
                               )}
                             </div>
@@ -427,16 +832,73 @@ export default function Caja() {
         ) : activeTab === "rapido" ? (
           <motion.div key="rapido" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }} className="max-w-2xl">
             <div className="flex gap-2 mb-4 bg-background border border-border/50 p-1 rounded-lg w-fit">
-              <button onClick={() => setQuickAction("cobro")} className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-all ${quickAction === "cobro" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>Cobro de Servicio</button>
-              <button onClick={() => setQuickAction("shop")} className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-all ${quickAction === "shop" ? "bg-emerald-500 text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>Venta Shop</button>
-              <button onClick={() => setQuickAction("egreso")} className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-all ${quickAction === "egreso" ? "bg-red-500 text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>Registrar Egreso</button>
+              <button
+                type="button"
+                onClick={() => {
+                  setQuickAction("cobro");
+                  setAppliedDiscount(null);
+                  setNewQuickApp(prev => ({ ...prev, amount: servicesSubtotal > 0 ? String(servicesSubtotal) : "" }));
+                }}
+                className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-all ${quickAction === "cobro" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                Cobro de Servicio
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setQuickAction("shop");
+                  setAppliedDiscount(null);
+                  setNewQuickApp(prev => ({ ...prev, amount: productsSubtotal > 0 ? String(productsSubtotal) : "" }));
+                }}
+                className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-all ${quickAction === "shop" ? "bg-emerald-500 text-white shadow-sm font-bold" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                🛍️ Venta Shop
+              </button>
+              <button
+                type="button"
+                onClick={() => setQuickAction("egreso")}
+                className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-all ${quickAction === "egreso" ? "bg-red-500 text-white shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                Registrar Egreso
+              </button>
             </div>
             
             <div className="bg-card border border-border/50 rounded-xl p-5 mb-6">
-              <span className="text-[10px] uppercase tracking-widest font-bold text-foreground mb-4 flex items-center gap-2">
-                <Plus size={14} className={quickAction === "egreso" ? "text-red-400" : quickAction === "shop" ? "text-emerald-400" : "text-primary"} /> 
-                {quickAction === "egreso" ? "Nuevo Egreso" : quickAction === "shop" ? "Nueva Venta de Shop" : "Nuevo Ingreso por Servicio"}
-              </span>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 pb-3 border-b border-border/40">
+                <span className="text-[10px] uppercase tracking-widest font-bold text-foreground flex items-center gap-2">
+                  <Plus size={14} className={quickAction === "egreso" ? "text-red-400" : quickAction === "shop" ? "text-emerald-400" : "text-primary"} /> 
+                  {quickAction === "egreso" ? "Nuevo Egreso" : quickAction === "shop" ? "Nueva Venta de Shop" : "Nuevo Ingreso por Servicio"}
+                </span>
+
+                {/* Selector rápido de fecha para la carga */}
+                <div className="relative flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <CalendarIcon size={13} className="text-primary" />
+                    <span>Fecha:</span>
+                    <strong className="text-foreground capitalize">{displayDate.split(",")[0] || displayDate}, {dateObj.getDate()} de {displayMonth.split(" ")[0]}</strong>
+                    {isTodaySelected && (
+                      <span className="text-[9px] bg-primary/15 text-primary font-bold px-1.5 py-0.5 rounded">
+                        Hoy
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowQuickCalendar(prev => !prev)}
+                    className="text-[11px] font-semibold text-primary hover:text-primary/90 bg-primary/10 hover:bg-primary/20 border border-primary/25 px-2 py-1 rounded-md transition-colors flex items-center gap-1"
+                  >
+                    <span>Cambiar día</span>
+                    <ChevronDown size={11} className={`transition-transform duration-150 ${showQuickCalendar ? "rotate-180" : ""}`} />
+                  </button>
+                  <CalendarPopover
+                    selectedDate={selectedDate}
+                    onSelectDate={d => setSelectedDate(d)}
+                    isOpen={showQuickCalendar}
+                    onClose={() => setShowQuickCalendar(false)}
+                    align="right"
+                  />
+                </div>
+              </div>
 
               {quickAction === "egreso" ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -452,34 +914,249 @@ export default function Caja() {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <select value={newQuickApp.clientId} onChange={e => setNewQuickApp(prev => ({ ...prev, clientId: e.target.value }))} className="bg-background border border-border rounded-md px-3 py-2 text-xs">
-                    <option value="">-- Seleccionar Cliente --</option>
-                    {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
+                  {/* Buscador de cliente con Lupita */}
+                  <ClientSearchSelect
+                    clients={clients}
+                    value={newQuickApp.clientId}
+                    onChange={(clientId) => setNewQuickApp(prev => ({ ...prev, clientId }))}
+                    placeholder="🔍 Buscar cliente por nombre o teléfono..."
+                  />
                   
                   <select value={newQuickApp.professionalId} onChange={e => setNewQuickApp(prev => ({ ...prev, professionalId: e.target.value }))} className="bg-background border border-border rounded-md px-3 py-2 text-xs">
                     <option value="">-- Seleccionar Profesional --</option>
                     {professionals.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                   
-                  <select value={newQuickApp.serviceId} onChange={e => setNewQuickApp(prev => ({ ...prev, serviceId: e.target.value }))} className="bg-background border border-border rounded-md px-3 py-2 text-xs">
-                    <option value="">-- Seleccionar Servicio --</option>
-                    {services.map(s => <option key={s.id} value={s.id}>{s.name} (${s.price})</option>)}
-                  </select>
+                  {/* Buscador de servicio o selector de productos según la pestaña activa */}
+                  {quickAction === "shop" ? (
+                    <div className="sm:col-span-2 space-y-1">
+                      <label className="text-[10px] font-bold tracking-wider uppercase text-muted-foreground block flex items-center justify-between">
+                        <span className="flex items-center gap-1 text-emerald-400">
+                          <Package size={12} /> Productos para Venta Shop ({shopOnlyProducts.length})
+                        </span>
+                        {productsSubtotal > 0 && (
+                          <span className="text-emerald-400 font-bold text-[10px]">
+                            Subtotal: ${productsSubtotal.toLocaleString("es-AR")}
+                          </span>
+                        )}
+                      </label>
+                      <ProductSearchSelect
+                        products={shopOnlyProducts}
+                        selectedProducts={selectedProducts}
+                        onChange={(prods) => {
+                          setSelectedProducts(prods);
+                          const sum = prods.reduce((acc, p) => acc + p.price * p.qty, 0);
+                          if (appliedDiscount) {
+                            let saved = 0;
+                            if (appliedDiscount.type === "percent") {
+                              saved = Math.round((sum * appliedDiscount.value) / 100);
+                            } else {
+                              saved = Math.min(sum, appliedDiscount.value);
+                            }
+                            setAppliedDiscount(prev => prev ? { ...prev, amountSaved: saved } : null);
+                            setNewQuickApp(prev => ({
+                              ...prev,
+                              amount: sum > 0 ? String(Math.max(0, sum - saved)) : (prods.length === 0 ? "" : prev.amount)
+                            }));
+                          } else {
+                            setNewQuickApp(prev => ({
+                              ...prev,
+                              amount: sum > 0 ? String(sum) : (prods.length === 0 ? "" : prev.amount)
+                            }));
+                          }
+                        }}
+                        placeholder="🔍 Buscar producto de venta shop (ej: tips, aceite, antifaz...)..."
+                      />
+                    </div>
+                  ) : (
+                    <div className="sm:col-span-2">
+                      <ServiceSearchSelect
+                        services={services}
+                        selectedServiceIds={selectedServiceIds}
+                        onChange={(ids, selectedSrvs) => {
+                          setSelectedServiceIds(ids);
+                          const sum = selectedSrvs.reduce((acc, s) => acc + (s.price || 0), 0);
+                          if (appliedDiscount) {
+                            let saved = 0;
+                            if (appliedDiscount.type === "percent") {
+                              saved = Math.round((sum * appliedDiscount.value) / 100);
+                            } else {
+                              saved = Math.min(sum, appliedDiscount.value);
+                            }
+                            setAppliedDiscount(prev => prev ? { ...prev, amountSaved: saved } : null);
+                            setNewQuickApp(prev => ({
+                              ...prev,
+                              serviceId: ids[0] || "",
+                              amount: sum > 0 ? String(Math.max(0, sum - saved)) : (ids.length === 0 ? "" : prev.amount)
+                            }));
+                          } else {
+                            setNewQuickApp(prev => ({
+                              ...prev,
+                              serviceId: ids[0] || "",
+                              amount: sum > 0 ? String(sum) : (ids.length === 0 ? "" : prev.amount)
+                            }));
+                          }
+                        }}
+                        placeholder="🔍 Buscar servicios con tildes (podés tildar varios: cejas, uñas, pies...)..."
+                      />
+                    </div>
+                  )}
 
-                  <select value={newQuickApp.paymentMethod} onChange={e => setNewQuickApp(prev => ({ ...prev, paymentMethod: e.target.value }))} className="bg-background border border-border rounded-md px-3 py-2 text-xs">
-                    <option value="Efectivo">Efectivo</option>
-                    <option value="Transferencia">Transferencia</option>
-                    <option value="Tarjeta">Tarjeta</option>
-                    <option value="Mercado Pago">Mercado Pago</option>
-                  </select>
+                  <div className="sm:col-span-2 flex flex-col sm:flex-row gap-2">
+                    <select
+                      value={newQuickApp.paymentMethod}
+                      onChange={e => setNewQuickApp(prev => ({ ...prev, paymentMethod: e.target.value }))}
+                      className="flex-1 bg-background border border-border rounded-md px-3 py-2 text-xs"
+                    >
+                      <option value="Efectivo">Efectivo</option>
+                      <option value="Transferencia">Transferencia</option>
+                      <option value="Tarjeta">Tarjeta</option>
+                      <option value="Mercado Pago">Mercado Pago</option>
+                      <option value="Cuenta Corriente">Cuenta Corriente</option>
+                    </select>
 
-                  <div className="relative flex items-center">
-                    <span className="absolute left-3 text-muted-foreground text-xs font-semibold">$</span>
-                    <input type="number" placeholder={quickAction === "shop" ? "Monto Venta Shop" : "Monto Cobrado"} value={newQuickApp.amount} onChange={e => setNewQuickApp(f => ({ ...f, amount: e.target.value }))} className="w-full bg-background border border-border rounded-md pl-7 pr-3 py-2 text-xs focus:border-primary focus:outline-none" />
+                    {newQuickApp.paymentMethod === "Transferencia" && (
+                      <select
+                        value={bankAccount}
+                        onChange={e => setBankAccount(e.target.value)}
+                        className="flex-1 bg-background border border-primary/50 text-foreground font-medium rounded-md px-2.5 py-2 text-xs focus:border-primary focus:outline-none animate-in fade-in-50 duration-150"
+                      >
+                        <option value="Banco de Córdoba">🏦 Banco de Córdoba</option>
+                        <option value="Naranja X">🍊 Naranja X</option>
+                        <option value="Ualá">💳 Ualá</option>
+                        <option value="Personal Pay">📱 Personal Pay</option>
+                      </select>
+                    )}
                   </div>
-                  
-                  <button onClick={() => handleAddQuickApp(quickAction)} className="bg-primary text-primary-foreground text-xs px-4 py-2 rounded-md font-semibold hover:bg-primary/90 transition-colors">Guardar {quickAction === "shop" ? "Venta Shop" : "Ingreso"}</button>
+
+                  {/* Monto Cobrado (Columna Izquierda) */}
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold tracking-wider uppercase text-muted-foreground block flex items-center justify-between h-4">
+                      <span>{quickAction === "shop" ? "Monto venta shop" : "Monto a cobrar"}</span>
+                      {appliedDiscount && <span className="text-emerald-400 font-bold text-[9px]">con descuento</span>}
+                    </label>
+                    <div className="relative flex items-center">
+                      <span className="absolute left-3 text-muted-foreground text-xs font-semibold">$</span>
+                      <input
+                        type="number"
+                        placeholder={quickAction === "shop" ? "Monto Venta Shop" : "Monto Cobrado"}
+                        value={newQuickApp.amount}
+                        onChange={e => setNewQuickApp(f => ({ ...f, amount: e.target.value }))}
+                        className="w-full bg-background border border-border rounded-md pl-7 pr-3 py-2 text-xs font-semibold text-foreground focus:border-primary focus:outline-none"
+                      />
+                    </div>
+                    {appliedDiscount ? (
+                      <p className="text-[10px] text-muted-foreground flex items-center justify-between px-0.5 pt-0.5">
+                        <span className="line-through text-muted-foreground/70">${activeSubtotal.toLocaleString("es-AR")}</span>
+                        <span className="text-emerald-400 font-semibold font-mono">Ahorro: -${appliedDiscount.amountSaved.toLocaleString("es-AR")}</span>
+                      </p>
+                    ) : (
+                      <p className="text-[10px] text-muted-foreground/50 px-0.5 pt-0.5">
+                        {activeSubtotal > 0
+                          ? `Subtotal ${quickAction === "shop" ? "productos" : "servicios"}: $${activeSubtotal.toLocaleString("es-AR")}`
+                          : "Ingreso directo"}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Cuadro de Voucher / Descuento / Código (Columna Derecha - según foto) */}
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold tracking-wider uppercase text-muted-foreground block flex items-center justify-between h-4">
+                      <span className="flex items-center gap-1 text-primary">
+                        <Tag size={11} /> Voucher / Descuento / Código
+                      </span>
+                      {appliedDiscount && (
+                        <span className="text-emerald-400 font-bold text-[9px]">Aplicado ✅</span>
+                      )}
+                    </label>
+
+                    {appliedDiscount ? (
+                      <div className="flex items-center justify-between bg-emerald-500/10 border border-emerald-500/30 px-3 py-1.5 rounded-md text-xs">
+                        <div className="min-w-0">
+                          <p className="font-bold text-emerald-400 truncate flex items-center gap-1">
+                            <Check size={12} /> {appliedDiscount.label}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">
+                            Ahorro de ${appliedDiscount.amountSaved.toLocaleString("es-AR")}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleRemoveDiscount}
+                          className="text-muted-foreground hover:text-red-400 p-1 transition-colors ml-2"
+                          title="Quitar descuento"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5">
+                        <div className="flex gap-1.5">
+                          <div className="relative flex-1 flex items-center">
+                            <Tag size={12} className="absolute left-2.5 text-muted-foreground pointer-events-none" />
+                            <input
+                              type="text"
+                              placeholder="Ej: 15%, $2000 o CÓDIGO"
+                              value={discountInput}
+                              onChange={e => {
+                                setDiscountInput(e.target.value);
+                                setVoucherError("");
+                              }}
+                              onKeyDown={e => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  handleApplyDiscount();
+                                }
+                              }}
+                              className="w-full bg-background border border-border rounded-md pl-7 pr-2 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            disabled={!discountInput.trim() || validatingVoucher}
+                            onClick={handleApplyDiscount}
+                            className="bg-primary/15 hover:bg-primary text-primary hover:text-primary-foreground border border-primary/30 px-3 py-2 rounded-md text-xs font-semibold transition-colors disabled:opacity-40"
+                          >
+                            {validatingVoucher ? "..." : "Aplicar"}
+                          </button>
+                        </div>
+
+                        {/* Botones rápidos de descuento para tablet */}
+                        <div className="flex items-center gap-1 flex-wrap">
+                          <span className="text-[9px] text-muted-foreground uppercase font-bold mr-0.5">Rápido:</span>
+                          {[10, 15, 20, 25, 30].map(pct => (
+                            <button
+                              key={pct}
+                              type="button"
+                              onClick={() => handleQuickDiscount(pct)}
+                              className="text-[10px] font-semibold bg-muted/40 hover:bg-primary/20 hover:text-primary border border-border px-1.5 py-0.5 rounded transition-colors"
+                            >
+                              -{pct}%
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {voucherError && (
+                      <p className="text-[10px] text-red-400 font-medium">{voucherError}</p>
+                    )}
+                  </div>
+
+                  {/* Botón Guardar Ingreso */}
+                  <div className="sm:col-span-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => handleAddQuickApp(quickAction)}
+                      className={`w-full text-xs px-4 py-2.5 rounded-md font-semibold transition-colors shadow-sm ${
+                        quickAction === "shop"
+                          ? "bg-emerald-500 hover:bg-emerald-600 text-white"
+                          : "bg-primary text-primary-foreground hover:bg-primary/90"
+                      }`}
+                    >
+                      Guardar {quickAction === "shop" ? "Venta Shop" : "Ingreso"}
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

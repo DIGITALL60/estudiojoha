@@ -1,7 +1,7 @@
 import { fetchAPI } from "@/lib/api";
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, ChevronRight, Plus, X, Search, Calendar } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, X, Search, Calendar, Trash2 } from "lucide-react";
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, startOfMonth, endOfMonth, isSameMonth, isSameDay } from "date-fns";
 import { es } from "date-fns/locale";
 import AdminLayout from "./AdminLayout";
@@ -265,7 +265,11 @@ function EditTurnModal({ app, onClose, onUpdated, isAdmin }: { app: Appointment;
   const [status, setStatus] = useState(app.status || "agendado");
   const [notes, setNotes] = useState(app.notes || "");
   const [clientNotes, setClientNotes] = useState(app.clientNotes || "");
-  const [paymentMethod, setPaymentMethod] = useState((app as any).paymentMethod || "Efectivo");
+  const initialMethod = (app as any).paymentMethod || "Efectivo";
+  const isTransfer = initialMethod.startsWith("Transferencia");
+  const extractedBank = isTransfer && initialMethod.includes("(") ? initialMethod.match(/\((.*?)\)/)?.[1] || "Banco de Córdoba" : "Banco de Córdoba";
+  const [paymentMethod, setPaymentMethod] = useState(isTransfer ? "Transferencia" : initialMethod);
+  const [bankAccount, setBankAccount] = useState(extractedBank);
   const [shopSales, setShopSales] = useState((app as any).shopSales || 0);
   const [receiptBase64, setReceiptBase64] = useState("");
   const [saving, setSaving] = useState(false);
@@ -356,7 +360,7 @@ function EditTurnModal({ app, onClose, onUpdated, isAdmin }: { app: Appointment;
         body: JSON.stringify({ 
           status, 
           notes: finalNotes,
-          paymentMethod,
+          paymentMethod: paymentMethod === "Transferencia" ? `Transferencia (${bankAccount})` : paymentMethod,
           shopSales: Number(shopSales)
         })
       });
@@ -373,6 +377,22 @@ function EditTurnModal({ app, onClose, onUpdated, isAdmin }: { app: Appointment;
       onClose();
     } catch (err) {
       console.error(err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteAppointment = async () => {
+    if (!confirm("¿Eliminar este turno definitivamente? Úsalo cuando se haya cargado por error. No contará como cancelación de la clienta ni perjudicará la tasa de asistencia.")) return;
+    setSaving(true);
+    try {
+      await fetchAPI(`/api/data/appointments/${app.id}`, {
+        method: "DELETE",
+      });
+      onUpdated();
+      onClose();
+    } catch {
+      alert("Error al eliminar el turno");
     } finally {
       setSaving(false);
     }
@@ -436,7 +456,20 @@ function EditTurnModal({ app, onClose, onUpdated, isAdmin }: { app: Appointment;
                 <option value="Transferencia">Transferencia</option>
                 <option value="Tarjeta">Tarjeta</option>
                 <option value="Mercado Pago">Mercado Pago</option>
+                <option value="Cuenta Corriente">Cuenta Corriente</option>
               </select>
+              {paymentMethod === "Transferencia" && (
+                <div className="mt-2">
+                  <label className="text-[9px] font-bold tracking-wider uppercase text-muted-foreground block mb-1">Cuenta destino</label>
+                  <select value={bankAccount} onChange={e => setBankAccount(e.target.value)}
+                    className="w-full bg-background border border-primary/50 text-foreground font-medium rounded-sm px-2.5 py-1.5 text-xs focus:outline-none focus:border-primary animate-in fade-in-50 duration-150">
+                    <option value="Banco de Córdoba">🏦 Banco de Córdoba</option>
+                    <option value="Naranja X">🍊 Naranja X</option>
+                    <option value="Ualá">💳 Ualá</option>
+                    <option value="Personal Pay">📱 Personal Pay</option>
+                  </select>
+                </div>
+              )}
             </div>
           </div>
 
@@ -560,6 +593,15 @@ function EditTurnModal({ app, onClose, onUpdated, isAdmin }: { app: Appointment;
           ) : <div />}
           
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleDeleteAppointment}
+              disabled={saving}
+              className="text-xs text-red-500 hover:text-red-400 hover:bg-red-500/10 px-2.5 py-1.5 rounded-md font-semibold transition-colors flex items-center gap-1.5"
+              title="Eliminar permanentemente por error de carga"
+            >
+              <Trash2 size={13} /> Eliminar (error de carga)
+            </button>
             <button onClick={onClose} className="text-xs text-muted-foreground hover:text-foreground px-3 py-2 font-medium">Cancelar</button>
             <button onClick={handleUpdate} disabled={saving}
               className="bg-primary text-primary-foreground text-xs font-bold px-4 py-2 rounded-md hover:bg-primary/90 disabled:opacity-50 shadow-sm">

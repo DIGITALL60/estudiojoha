@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Plus, Search, X, ChevronRight, Edit2, Download, Phone, Cake, Trash2, AlertTriangle } from "lucide-react";
 import AdminLayout from "./AdminLayout";
+import ClientHistoryModal, { AppointmentItem } from "./ClientHistoryModal";
 
 const COLORS = ["#7c3aed","#db2777","#0891b2","#d97706","#16a34a","#dc2626","#ea580c","#0d9488"];
 
@@ -28,7 +29,7 @@ function ClientModal({
   onDelete,
 }: {
   client?: Client | null;
-  appointments: {date: string; status: string; serviceName: string; professionalName: string}[];
+  appointments: AppointmentItem[];
   onClose: () => void;
   onSaved: (c: Client) => void;
   onDelete?: () => void;
@@ -235,12 +236,13 @@ function DeleteConfirmModal({
 
 export default function Clientes() {
   const [clients, setClients] = useState<Client[]>([]);
-  const [appointments, setAppointments] = useState<{clientId: string; date: string; status: string; serviceName: string; professionalName: string}[]>([]);
+  const [appointments, setAppointments] = useState<AppointmentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState("todos");
   const [showModal, setShowModal] = useState(false);
   const [editClient, setEditClient] = useState<Client | null>(null);
+  const [historyClient, setHistoryClient] = useState<Client | null>(null);
   const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -408,18 +410,28 @@ export default function Clientes() {
             {filtered.map((client, i) => {
               const color = getColor(client.id);
               const isDuplicate = (duplicateMap.get(cleanPhoneDigits(client.phone)) || 0) > 1;
+              const clientApps = appointments.filter(a => a.clientId === client.id);
+              const appsCount = clientApps.length;
 
               return (
                 <motion.div key={client.id} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.04 }}
-                  className={`flex items-center gap-4 px-4 py-3.5 border-b border-border/40 last:border-0 hover:bg-accent/5 group ${isDuplicate ? 'bg-amber-500/[0.03]' : ''}`}>
-                  <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-sm font-semibold"
+                  onClick={() => setHistoryClient(client)}
+                  className={`flex items-center gap-4 px-4 py-3.5 border-b border-border/40 last:border-0 hover:bg-accent/10 cursor-pointer group transition-colors ${isDuplicate ? 'bg-amber-500/[0.03]' : ''}`}>
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-sm font-semibold shadow-sm"
                     style={{ backgroundColor: color + "22", border: `1px solid ${color}55`, color }}>
                     {getInitial(client.name)}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-foreground">{client.name}</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-medium text-foreground group-hover:text-primary transition-colors">
+                        {client.name}
+                      </p>
+                      {appsCount > 0 && (
+                        <span className="text-[10px] bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.2 rounded-full font-medium">
+                          {appsCount} turno{appsCount !== 1 ? "s" : ""}
+                        </span>
+                      )}
                       {isDuplicate && (
                         <span className="text-[10px] bg-amber-500/15 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
                           <AlertTriangle size={10} /> Teléfono duplicado
@@ -431,12 +443,21 @@ export default function Clientes() {
                       {client.birthday && <span className="text-xs text-muted-foreground flex items-center gap-1"><Cake size={10} />{client.birthday}</span>}
                     </div>
                   </div>
-                  <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={() => { setEditClient(client); setShowModal(true); }}
-                      className="flex items-center gap-1.5 text-xs text-muted-foreground border border-border/60 px-2.5 py-1.5 rounded-sm hover:text-primary hover:border-primary/50 transition-colors">
+                  <div className="flex items-center gap-1.5 opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                    <button 
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditClient(client);
+                        setShowModal(true);
+                      }}
+                      className="flex items-center gap-1.5 text-xs text-muted-foreground border border-border/60 px-2.5 py-1.5 rounded-sm hover:text-primary hover:border-primary/50 transition-colors"
+                      title="Editar datos del cliente"
+                    >
                       <Edit2 size={11} /> Editar
                     </button>
                     <button
+                      type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         setClientToDelete(client);
@@ -447,13 +468,34 @@ export default function Clientes() {
                       <Trash2 size={11} /> Eliminar
                     </button>
                   </div>
-                  <ChevronRight size={14} className="text-muted-foreground/30 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <ChevronRight size={14} className="text-muted-foreground/30 group-hover:text-primary group-hover:translate-x-0.5 transition-all flex-shrink-0" />
                 </motion.div>
               );
             })}
           </motion.div>
         )}
       </div>
+
+      <AnimatePresence>
+        {historyClient && (
+          <ClientHistoryModal
+            client={historyClient}
+            appointments={appointments.filter(a => a.clientId === historyClient.id)}
+            onClose={() => setHistoryClient(null)}
+            onEdit={() => {
+              const c = historyClient;
+              setHistoryClient(null);
+              setEditClient(c);
+              setShowModal(true);
+            }}
+            onDelete={() => {
+              const c = historyClient;
+              setHistoryClient(null);
+              setClientToDelete(c);
+            }}
+          />
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {showModal && (

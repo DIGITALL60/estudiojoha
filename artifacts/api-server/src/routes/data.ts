@@ -510,6 +510,7 @@ router.post("/appointments", requireAuth, async (req, res) => {
       duration: Number(duration),
       price: Number(price),
       status: status ?? "agendado",
+      paymentMethod: req.body.paymentMethod || "Efectivo",
       notes,
       shopSales: req.body.shopSales ? Number(req.body.shopSales) : 0,
       createdAt: new Date(),
@@ -616,6 +617,46 @@ router.delete("/appointments/all", requireAuth, async (req, res) => {
     return res.status(200).json({ success: true, message: "Todos los turnos han sido eliminados" });
   } catch (err) {
     return res.status(500).json({ error: "Failed to delete appointments" });
+  }
+});
+
+router.delete("/appointments/:id", requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params as { id: string };
+    const [current] = await db.select().from(appointments).where(eq(appointments.id, id));
+    if (!current) return res.status(404).json({ error: "Turno no encontrado" });
+
+    // Si el turno estaba completado, devolver el stock que se había descontado
+    if (current.status === "completado") {
+      const recipes = await db.select().from(service_products).where(eq(service_products.serviceId, current.serviceId));
+      for (const recipe of recipes) {
+        const [product] = await db.select().from(products).where(eq(products.id, recipe.productId));
+        if (product) {
+          await db.update(products).set({ stock: product.stock + recipe.amount }).where(eq(products.id, product.id));
+        }
+      }
+
+      if (current.notes) {
+        const match = current.notes.match(/\[SHOP_SALES\](.*?)\[\/SHOP_SALES\]/);
+        if (match) {
+          try {
+            const shopItems = JSON.parse(match[1]);
+            for (const item of shopItems) {
+              const [product] = await db.select().from(products).where(eq(products.id, item.id));
+              if (product) {
+                await db.update(products).set({ stock: product.stock + item.qty }).where(eq(products.id, product.id));
+              }
+            }
+          } catch (e) {}
+        }
+      }
+    }
+
+    await db.delete(appointments).where(eq(appointments.id, id));
+    return res.json({ success: true, message: "Turno eliminado permanentemente" });
+  } catch (err) {
+    logger.error({ err }, "Error al eliminar turno");
+    return res.status(500).json({ error: "Error al eliminar el turno" });
   }
 });
 

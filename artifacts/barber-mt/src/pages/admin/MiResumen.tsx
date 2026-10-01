@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { 
   Calendar, CheckCircle2, TrendingUp, ShoppingBag, 
-  ChevronLeft, ChevronRight, Award, Sparkles, MessageCircle, Clock, DollarSign
+  ChevronLeft, ChevronRight, Award, Sparkles, MessageCircle, Clock, DollarSign, Trash2
 } from "lucide-react";
 import AdminLayout from "./AdminLayout";
 import { fetchAPI } from "@/lib/api";
@@ -107,9 +107,19 @@ export default function MiResumen() {
   const shopRevenue = completedApps.reduce((sum, a) => sum + (a.shopSales || 0), 0);
   const totalRevenue = serviceRevenue + shopRevenue;
 
-  // Shop goal progress calculation
-  const shopProgressPct = Math.min(100, Math.round((shopRevenue / shopGoal) * 100));
+  // Shop goal progress calculation (safeguard against division by zero)
+  const shopProgressPct = shopGoal > 0 ? Math.min(100, Math.round((shopRevenue / shopGoal) * 100)) : 0;
   const shopRemaining = Math.max(0, shopGoal - shopRevenue);
+
+  const handleDeleteCanceledApp = async (id: string, clientName: string) => {
+    if (!confirm(`¿Eliminar definitivamente este registro de ${clientName}? Úsalo cuando se haya cargado por error. Se borrará del historial y mejorará la tasa de asistencia real.`)) return;
+    try {
+      await fetchAPI(`/api/data/appointments/${id}`, { method: "DELETE" });
+      loadData();
+    } catch {
+      alert("Error al eliminar el turno");
+    }
+  };
 
   // Upcoming appointments starting from today
   const todayStr = new Date().toISOString().split("T")[0];
@@ -448,16 +458,27 @@ export default function MiResumen() {
                           </div>
                         </div>
 
-                        {app.clientPhone && (
-                          <a
-                            href={whatsappUrl(app.clientPhone, `¡Hola ${app.clientName}! 👋 Te escribimos desde Estudio Joha Molinero. Vimos que tu turno del ${app.date.split("-").reverse().join("/")} quedó cancelado. Si querés reprogramar tu cita, con gusto te ayudamos a buscar un nuevo horario disponible. ✨`)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="bg-red-500/10 hover:bg-red-500/20 text-red-500 text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors self-end sm:self-center"
+                        <div className="flex items-center gap-2 self-end sm:self-center flex-wrap justify-end">
+                          {app.clientPhone && (
+                            <a
+                              href={whatsappUrl(app.clientPhone, `¡Hola ${app.clientName}! 👋 Te escribimos desde Estudio Joha Molinero. Vimos que tu turno del ${app.date.split("-").reverse().join("/")} quedó cancelado. Si querés reprogramar tu cita, con gusto te ayudamos a buscar un nuevo horario disponible. ✨`)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="bg-red-500/10 hover:bg-red-500/20 text-red-500 text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"
+                            >
+                              <MessageCircle size={14} /> Reprogramar WA
+                            </a>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteCanceledApp(app.id, app.clientName)}
+                            className="bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/30 text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
+                            title="Eliminar por error humano de carga (no perjudica la tasa de asistencia)"
                           >
-                            <MessageCircle size={14} /> Reprogramar WA
-                          </a>
-                        )}
+                            <Trash2 size={13} /> Eliminar (error de carga)
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
