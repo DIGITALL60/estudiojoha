@@ -1,5 +1,5 @@
 import { motion, AnimatePresence, type Variants } from "framer-motion";
-import { Clock, MapPin, Instagram, ChevronRight, ChevronLeft, Sparkles, MessageCircle, X, ShoppingBag, Package, Pause, Play, MoveHorizontal } from "lucide-react";
+import { Clock, MapPin, Instagram, ChevronRight, ChevronLeft, Sparkles, MessageCircle, X, ShoppingBag, Package, Pause, Play, MoveHorizontal, Plus, Minus, Check, Copy } from "lucide-react";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import LogoIcon from "@/components/LogoIcon";
 import BookingWizard from "@/components/BookingWizard";
@@ -118,96 +118,326 @@ function groupServices(data: { id: string; name: string; category: string; durat
   return Object.values(grouped);
 }
 
-interface ShopRibbonProps {
-  products: ShopProduct[];
-  waLink: string;
+interface OrderProductModalProps {
+  product: ShopProduct;
+  businessPhone: string;
+  onClose: () => void;
 }
 
-function ShopRibbon({ products, waLink }: ShopRibbonProps) {
+function OrderProductModal({ product, businessPhone, onClose }: OrderProductModalProps) {
+  const [quantity, setQuantity] = useState(1);
+  const [copied, setCopied] = useState(false);
+
+  // Calcular precio total
+  const totalPrice = product.price * quantity;
+  const formattedTotal = totalPrice.toLocaleString("es-AR");
+
+  // Construir número de WhatsApp limpio y seguro
+  const phone = (() => {
+    let raw = (businessPhone || "").replace(/\D/g, "");
+    if (raw.length < 10) return "5493572532685";
+    if (!raw.startsWith("54")) {
+      const trimmed = raw.startsWith("0") ? raw.slice(1) : raw;
+      return `549${trimmed}`;
+    }
+    if (raw.startsWith("54") && !raw.startsWith("549") && raw.length === 12) {
+      return `549${raw.slice(2)}`;
+    }
+    return raw;
+  })();
+
+  const messageText = `¡Hola Joha! 💖 Me interesa pedir el producto *${product.name.trim()}*${
+    quantity > 1 ? ` (${quantity} unidades - Total: $${formattedTotal})` : ` ($${formattedTotal})`
+  } que vi en la boutique del salón. ¿Tienen disponible para retirar?`;
+
+  const waUrl = `https://wa.me/${phone}?text=${encodeURIComponent(messageText)}`;
+
+  const handleOpenWhatsApp = () => {
+    window.open(waUrl, "_blank", "noopener,noreferrer");
+    onClose();
+  };
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(messageText);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-background/80 backdrop-blur-md"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ scale: 0.95, opacity: 0, y: 15 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0.95, opacity: 0, y: 15 }}
+        transition={{ type: "spring", damping: 25, stiffness: 300 }}
+        className="relative w-full max-w-lg bg-card border border-border/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Cabecera */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border/50 bg-muted/10">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
+              <ShoppingBag size={16} />
+            </div>
+            <div>
+              <h3 className="font-serif text-base font-semibold text-foreground leading-tight">
+                Pedir por WhatsApp
+              </h3>
+              <p className="text-[11px] text-muted-foreground">
+                Boutique Oficial · Estudio Joha Molinero
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-8 h-8 rounded-full bg-muted/60 hover:bg-muted text-foreground flex items-center justify-center transition-colors cursor-pointer"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Cuerpo del modal */}
+        <div className="p-6 space-y-5">
+          {/* Ficha del producto */}
+          <div className="flex gap-4 p-3.5 bg-muted/20 border border-border/60 rounded-xl items-center">
+            <div className="w-20 h-20 rounded-lg overflow-hidden bg-muted/40 flex-shrink-0 border border-border/40 flex items-center justify-center">
+              {product.imageUrl ? (
+                <img
+                  src={product.imageUrl}
+                  alt={product.name}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <Package size={24} className="text-primary/60" />
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-[10px] uppercase font-bold tracking-wider text-primary">
+                  {product.category === "Shop" ? "Cuidado Personal" : product.category}
+                </span>
+                {product.stock > 0 ? (
+                  <span className="inline-flex items-center gap-1 text-[9px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    En Stock
+                  </span>
+                ) : (
+                  <span className="text-[9px] font-semibold text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+                    Consultar stock
+                  </span>
+                )}
+              </div>
+              <h4 className="font-serif text-base font-semibold text-foreground leading-snug truncate">
+                {product.name}
+              </h4>
+              <p className="text-sm font-bold text-primary mt-1">
+                ${product.price.toLocaleString("es-AR")}
+                <span className="text-xs text-muted-foreground font-normal ml-1">/ unidad</span>
+              </p>
+            </div>
+          </div>
+
+          {/* Selector de cantidad */}
+          <div className="flex items-center justify-between bg-card p-3 rounded-xl border border-border/60">
+            <span className="text-xs font-medium text-foreground">
+              Cantidad a encargar:
+            </span>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                disabled={quantity <= 1}
+                className="w-8 h-8 rounded-lg bg-muted hover:bg-muted/80 disabled:opacity-40 flex items-center justify-center font-bold text-foreground text-sm transition-colors cursor-pointer"
+                title="Menos"
+              >
+                <Minus size={14} />
+              </button>
+              <span className="w-6 text-center font-bold text-sm text-foreground">
+                {quantity}
+              </span>
+              <button
+                type="button"
+                onClick={() => setQuantity((q) => Math.min(20, q + 1))}
+                className="w-8 h-8 rounded-lg bg-muted hover:bg-muted/80 flex items-center justify-center font-bold text-foreground text-sm transition-colors cursor-pointer"
+                title="Más"
+              >
+                <Plus size={14} />
+              </button>
+            </div>
+          </div>
+
+          {/* Mensaje preparado para WhatsApp */}
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+              <MessageCircle size={13} className="text-emerald-500" />
+              Mensaje preparado para WhatsApp:
+            </label>
+            <div className="p-3 bg-emerald-500/5 dark:bg-emerald-950/20 border border-emerald-500/20 rounded-xl text-xs text-foreground/90 leading-relaxed font-sans relative">
+              <p className="italic">"{messageText}"</p>
+              <div className="mt-2 pt-2 border-t border-emerald-500/10 flex items-center justify-between text-[11px] text-muted-foreground">
+                <span>Total a consultar: <strong className="text-foreground">${formattedTotal}</strong></span>
+                <button
+                  type="button"
+                  onClick={handleCopy}
+                  className="inline-flex items-center gap-1 text-[10px] text-primary hover:underline cursor-pointer"
+                >
+                  {copied ? (
+                    <>
+                      <Check size={11} className="text-emerald-500" />
+                      <span>¡Copiado!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy size={11} />
+                      <span>Copiar texto</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Botones de acción */}
+        <div className="p-6 pt-2 pb-6 border-t border-border/40 bg-muted/5 flex flex-col sm:flex-row gap-3">
+          <button
+            type="button"
+            onClick={handleOpenWhatsApp}
+            className="flex-1 inline-flex items-center justify-center gap-2.5 bg-[#25D366] hover:bg-[#20ba59] active:scale-[0.99] text-white font-bold py-3.5 px-6 rounded-xl text-sm transition-all shadow-md hover:shadow-lg cursor-pointer"
+          >
+            <MessageCircle size={18} className="fill-white" />
+            <span>Pedir por WhatsApp</span>
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex items-center justify-center py-3.5 px-5 rounded-xl border border-border text-foreground hover:bg-muted text-xs font-semibold transition-colors cursor-pointer"
+          >
+            Seguir viendo
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+interface ShopRibbonProps {
+  products: ShopProduct[];
+  businessPhone?: string;
+  onOrderProduct: (prod: ShopProduct) => void;
+}
+
+function ShopRibbon({ products, onOrderProduct }: ShopRibbonProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [isUserPaused, setIsUserPaused] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const [touchPaused, setTouchPaused] = useState(false);
 
+  const scrollPosRef = useRef(0);
   const isMouseDownRef = useRef(false);
+  const isInteractingRef = useRef(false);
   const startXRef = useRef(0);
+  const startYRef = useRef(0);
   const startScrollLeftRef = useRef(0);
   const hasDraggedRef = useRef(false);
-  const touchResumeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const resumeTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Replicar lista para garantizar un carrusel lleno y con loop infinito fluido
   const displayedItems = useMemo(() => {
     if (!products || products.length === 0) return [];
     let base = [...products];
-    // Asegurar al menos 6 items para loop continuo sin cortes visuales
-    while (base.length < 6) {
+    while (base.length < 8) {
       base = [...base, ...products];
     }
-    // Duplicar para el scroll continuo infinito (scrollWidth / 2)
     return [...base, ...base];
   }, [products]);
 
-  // Bucle de auto-scroll suave (velocidad relajada y pausada)
+  // Bucle de auto-scroll suave y continuo con acumulador de punto flotante (nunca se trunca a 0)
   useEffect(() => {
     const el = scrollRef.current;
     if (!el || displayedItems.length === 0) return;
 
+    if (scrollPosRef.current === 0 && el.scrollLeft > 0) {
+      scrollPosRef.current = el.scrollLeft;
+    }
+
     let animId: number;
-    // Velocidad: 0.42 px por frame (~25px/segundo) - muy tranquila y serena
-    const speed = 0.42;
+    // Velocidad fluida y serena: 0.6px por frame (~36px/segundo)
+    const speed = 0.6;
 
     const tick = () => {
-      // Solo avanza si no está pausado manualmente, no está en hover en PC, y no se está tocando/arrastrando
-      if (!isUserPaused && !isHovered && !touchPaused && !isMouseDownRef.current) {
-        el.scrollLeft += speed;
+      if (!isUserPaused && !isHovered && !isInteractingRef.current) {
+        // Sincronizar si fue movido externamente (scroll nativo de celular o flechas)
+        if (Math.abs(el.scrollLeft - scrollPosRef.current) > 4) {
+          scrollPosRef.current = el.scrollLeft;
+        }
 
+        scrollPosRef.current += speed;
         const halfWidth = el.scrollWidth / 2;
+
         if (halfWidth > 0) {
-          if (el.scrollLeft >= halfWidth) {
+          if (scrollPosRef.current >= halfWidth) {
+            scrollPosRef.current -= halfWidth;
             el.scrollLeft -= halfWidth;
-          } else if (el.scrollLeft <= 0) {
+          } else if (scrollPosRef.current <= 0) {
+            scrollPosRef.current += halfWidth;
             el.scrollLeft += halfWidth;
           }
         }
+
+        el.scrollLeft = Math.round(scrollPosRef.current);
       }
+
       animId = requestAnimationFrame(tick);
     };
 
     animId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(animId);
-  }, [isUserPaused, isHovered, touchPaused, displayedItems]);
+  }, [isUserPaused, isHovered, displayedItems]);
 
-  // Manejo táctil para celular (Pausa instantánea al tocar, reanuda tras 3.5s al soltar)
-  const handleTouchStart = () => {
-    if (touchResumeTimeoutRef.current) clearTimeout(touchResumeTimeoutRef.current);
-    setTouchPaused(true);
+  // Manejo táctil para celular (Pausa mientras se toca/arrastra, reanuda tras soltar)
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
+    isInteractingRef.current = true;
     hasDraggedRef.current = false;
+    const t = e.touches[0];
+    startXRef.current = t.clientX;
+    startYRef.current = t.clientY;
+    startScrollLeftRef.current = scrollRef.current?.scrollLeft || 0;
   };
 
-  const handleTouchMove = () => {
-    hasDraggedRef.current = true;
-    const el = scrollRef.current;
-    if (el) {
-      const halfWidth = el.scrollWidth / 2;
-      if (halfWidth > 0) {
-        if (el.scrollLeft >= halfWidth) {
-          el.scrollLeft -= halfWidth;
-        } else if (el.scrollLeft <= 0) {
-          el.scrollLeft += halfWidth;
-        }
-      }
+  const handleTouchMove = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    const dx = t.clientX - startXRef.current;
+    const dy = t.clientY - startYRef.current;
+    // Umbral de 12px para distinguir toque intencional de un simple tap
+    if (Math.abs(dx) > 12 || Math.abs(dy) > 12) {
+      hasDraggedRef.current = true;
     }
   };
 
   const handleTouchEnd = () => {
-    // Al soltar en celular, permanece congelado durante 3.5 segundos para que la clienta
-    // pueda leer con comodidad el producto y precio sin que se le escape la tarjeta
-    if (touchResumeTimeoutRef.current) clearTimeout(touchResumeTimeoutRef.current);
-    touchResumeTimeoutRef.current = setTimeout(() => {
-      setTouchPaused(false);
-      hasDraggedRef.current = false;
-    }, 3500);
+    isInteractingRef.current = false;
+    // Si hubo arrastre deliberado, congelar unos ms el click para evitar abrir el modal por accidente
+    if (hasDraggedRef.current) {
+      setTimeout(() => {
+        hasDraggedRef.current = false;
+      }, 120);
+    }
+    // Reanudar desplazamiento suave después de 1 segundo de inactividad
+    if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
+    resumeTimerRef.current = setTimeout(() => {
+      if (scrollRef.current) {
+        scrollPosRef.current = scrollRef.current.scrollLeft;
+      }
+    }, 1000);
   };
 
   // Manejo de arrastre con mouse para PC / Web
@@ -215,6 +445,7 @@ function ShopRibbon({ products, waLink }: ShopRibbonProps) {
     const el = scrollRef.current;
     if (!el) return;
     isMouseDownRef.current = true;
+    isInteractingRef.current = true;
     hasDraggedRef.current = false;
     startXRef.current = e.pageX - el.offsetLeft;
     startScrollLeftRef.current = el.scrollLeft;
@@ -224,40 +455,42 @@ function ShopRibbon({ products, waLink }: ShopRibbonProps) {
   const handleMouseMove = (e: React.MouseEvent) => {
     const el = scrollRef.current;
     if (!isMouseDownRef.current || !el) return;
-    e.preventDefault();
     const x = e.pageX - el.offsetLeft;
-    const walk = (x - startXRef.current) * 1.35; // Factor de respuesta para deslizar rápido
-    if (Math.abs(walk) > 5) {
+    const walk = (x - startXRef.current) * 1.3;
+    if (Math.abs(walk) > 8) {
       hasDraggedRef.current = true;
     }
     el.scrollLeft = startScrollLeftRef.current - walk;
-
-    const halfWidth = el.scrollWidth / 2;
-    if (halfWidth > 0) {
-      if (el.scrollLeft >= halfWidth) {
-        el.scrollLeft -= halfWidth;
-        startScrollLeftRef.current -= halfWidth;
-      } else if (el.scrollLeft <= 0) {
-        el.scrollLeft += halfWidth;
-        startScrollLeftRef.current += halfWidth;
-      }
-    }
+    scrollPosRef.current = el.scrollLeft;
   };
 
   const handleMouseUpOrLeave = () => {
+    if (!isMouseDownRef.current) return;
     isMouseDownRef.current = false;
+    isInteractingRef.current = false;
     setIsDragging(false);
-    setTimeout(() => {
-      hasDraggedRef.current = false;
-    }, 60);
+    if (scrollRef.current) {
+      scrollPosRef.current = scrollRef.current.scrollLeft;
+    }
+    if (hasDraggedRef.current) {
+      setTimeout(() => {
+        hasDraggedRef.current = false;
+      }, 100);
+    }
   };
 
   // Desplazamiento manual por botones de flechas
   const scrollStep = (direction: "left" | "right") => {
     const el = scrollRef.current;
     if (!el) return;
-    const step = 310;
-    el.scrollBy({ left: direction === "right" ? step : -step, behavior: "smooth" });
+    const step = 320;
+    const target = el.scrollLeft + (direction === "right" ? step : -step);
+    el.scrollTo({ left: target, behavior: "smooth" });
+    setTimeout(() => {
+      if (scrollRef.current) {
+        scrollPosRef.current = scrollRef.current.scrollLeft;
+      }
+    }, 350);
   };
 
   return (
@@ -266,7 +499,7 @@ function ShopRibbon({ products, waLink }: ShopRibbonProps) {
       <div className="flex flex-wrap items-center justify-between gap-3 px-6 sm:px-12 max-w-7xl mx-auto mb-6">
         <div className="inline-flex items-center gap-2 text-[11px] sm:text-xs text-muted-foreground bg-card/60 backdrop-blur-sm border border-border/60 px-3.5 py-1.5 rounded-full">
           <MoveHorizontal size={13} className="text-primary animate-pulse flex-shrink-0" />
-          <span>Deslizá para buscar rápido · Tocá para frenar</span>
+          <span>Deslizá para explorar · Tocá cualquier producto para pedirlo</span>
         </div>
 
         <div className="flex items-center gap-2">
@@ -274,7 +507,7 @@ function ShopRibbon({ products, waLink }: ShopRibbonProps) {
           <button
             type="button"
             onClick={() => setIsUserPaused((p) => !p)}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold px-3.5 py-1.5 rounded-full bg-card hover:bg-muted/80 border border-border/80 text-foreground transition-all duration-200 shadow-xs"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold px-3.5 py-1.5 rounded-full bg-card hover:bg-muted/80 border border-border/80 text-foreground transition-all duration-200 shadow-xs cursor-pointer"
             title={isUserPaused ? "Reanudar movimiento" : "Pausar cinta"}
           >
             {isUserPaused ? (
@@ -295,7 +528,7 @@ function ShopRibbon({ products, waLink }: ShopRibbonProps) {
             <button
               type="button"
               onClick={() => scrollStep("left")}
-              className="w-8 h-8 rounded-full bg-card hover:bg-muted border border-border/80 flex items-center justify-center text-foreground hover:text-primary transition-colors shadow-xs"
+              className="w-8 h-8 rounded-full bg-card hover:bg-muted border border-border/80 flex items-center justify-center text-foreground hover:text-primary transition-colors shadow-xs cursor-pointer"
               title="Ver anteriores"
               aria-label="Anterior"
             >
@@ -304,7 +537,7 @@ function ShopRibbon({ products, waLink }: ShopRibbonProps) {
             <button
               type="button"
               onClick={() => scrollStep("right")}
-              className="w-8 h-8 rounded-full bg-card hover:bg-muted border border-border/80 flex items-center justify-center text-foreground hover:text-primary transition-colors shadow-xs"
+              className="w-8 h-8 rounded-full bg-card hover:bg-muted border border-border/80 flex items-center justify-center text-foreground hover:text-primary transition-colors shadow-xs cursor-pointer"
               title="Ver siguientes"
               aria-label="Siguiente"
             >
@@ -324,7 +557,7 @@ function ShopRibbon({ products, waLink }: ShopRibbonProps) {
         <button
           type="button"
           onClick={() => scrollStep("left")}
-          className="hidden md:flex absolute left-4 top-1/2 -translate-y-1/2 z-20 w-10 h-10 rounded-full bg-background/90 hover:bg-background border border-border/80 shadow-lg items-center justify-center text-foreground hover:text-primary transition-all duration-200 backdrop-blur-md opacity-0 group-hover:opacity-100"
+          className="hidden md:flex absolute left-4 top-1/2 -translate-y-1/2 z-20 w-10 h-10 rounded-full bg-background/90 hover:bg-background border border-border/80 shadow-lg items-center justify-center text-foreground hover:text-primary transition-all duration-200 backdrop-blur-md opacity-0 group-hover:opacity-100 cursor-pointer"
           aria-label="Deslizar a la izquierda"
         >
           <ChevronLeft size={20} />
@@ -332,7 +565,7 @@ function ShopRibbon({ products, waLink }: ShopRibbonProps) {
         <button
           type="button"
           onClick={() => scrollStep("right")}
-          className="hidden md:flex absolute right-4 top-1/2 -translate-y-1/2 z-20 w-10 h-10 rounded-full bg-background/90 hover:bg-background border border-border/80 shadow-lg items-center justify-center text-foreground hover:text-primary transition-all duration-200 backdrop-blur-md opacity-0 group-hover:opacity-100"
+          className="hidden md:flex absolute right-4 top-1/2 -translate-y-1/2 z-20 w-10 h-10 rounded-full bg-background/90 hover:bg-background border border-border/80 shadow-lg items-center justify-center text-foreground hover:text-primary transition-all duration-200 backdrop-blur-md opacity-0 group-hover:opacity-100 cursor-pointer"
           aria-label="Deslizar a la derecha"
         >
           <ChevronRight size={20} />
@@ -359,99 +592,92 @@ function ShopRibbon({ products, waLink }: ShopRibbonProps) {
             scrollbarWidth: "none",
             msOverflowStyle: "none",
             WebkitOverflowScrolling: "touch",
+            scrollBehavior: "auto",
           }}
         >
-          {displayedItems.map((prod, idx) => {
-            const productWaMessage = encodeURIComponent(
-              `¡Hola Joha! 💖 Me interesa el producto *${prod.name}* ($${prod.price.toLocaleString("es-AR")}) de la boutique del salón. ¿Tienen disponible para retirar?`
-            );
-            const itemWaUrl = waLink
-              ? `${waLink.split("?")[0]}?text=${productWaMessage}`
-              : `https://wa.me/5493572532685?text=${productWaMessage}`;
+          {displayedItems.map((prod, idx) => (
+            <div
+              key={`${prod.id}-${idx}`}
+              onClick={() => {
+                if (!hasDraggedRef.current) {
+                  onOrderProduct(prod);
+                }
+              }}
+              className="w-64 sm:w-72 bg-card border border-border/70 hover:border-primary/50 rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col group/card flex-shrink-0 cursor-pointer"
+            >
+              {/* Imagen del producto */}
+              <div className="relative w-full h-48 bg-muted/20 overflow-hidden flex items-center justify-center">
+                {prod.imageUrl ? (
+                  <img
+                    src={prod.imageUrl}
+                    alt={prod.name}
+                    draggable={false}
+                    className="w-full h-full object-cover group-hover/card:scale-105 transition-transform duration-500 pointer-events-none select-none"
+                  />
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground bg-accent/5 pointer-events-none select-none">
+                    <Package size={40} className="text-primary/60 mb-2" />
+                    <span className="text-[10px] tracking-wider uppercase text-muted-foreground/60 font-semibold">
+                      Estudio Joha
+                    </span>
+                  </div>
+                )}
 
-            return (
-              <div
-                key={`${prod.id}-${idx}`}
-                className="w-64 sm:w-72 bg-card border border-border/70 hover:border-primary/50 rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col group/card flex-shrink-0"
-              >
-                {/* Imagen del producto */}
-                <div className="relative w-full h-48 bg-muted/20 overflow-hidden flex items-center justify-center">
-                  {prod.imageUrl ? (
-                    <img
-                      src={prod.imageUrl}
-                      alt={prod.name}
-                      draggable={false}
-                      className="w-full h-full object-cover group-hover/card:scale-105 transition-transform duration-500 pointer-events-none select-none"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground bg-accent/5 pointer-events-none select-none">
-                      <Package size={40} className="text-primary/60 mb-2" />
-                      <span className="text-[10px] tracking-wider uppercase text-muted-foreground/60 font-semibold">
-                        Estudio Joha
-                      </span>
-                    </div>
-                  )}
+                {/* Badge Venta Shop */}
+                <span className="absolute top-2.5 left-2.5 bg-black/70 backdrop-blur-md text-white text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1 border border-white/20 pointer-events-none">
+                  <Sparkles size={9} className="text-primary" /> Shop
+                </span>
 
-                  {/* Badge Venta Shop */}
-                  <span className="absolute top-2.5 left-2.5 bg-black/70 backdrop-blur-md text-white text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1 border border-white/20 pointer-events-none">
-                    <Sparkles size={9} className="text-primary" /> Shop
+                {prod.stock > 0 ? (
+                  <span className="absolute top-2.5 right-2.5 bg-emerald-500/90 text-white text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm pointer-events-none flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                    En Stock
                   </span>
+                ) : (
+                  <span className="absolute top-2.5 right-2.5 bg-zinc-800/80 text-zinc-300 text-[9px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wider pointer-events-none">
+                    Consultar
+                  </span>
+                )}
+              </div>
 
-                  {prod.stock > 0 ? (
-                    <span className="absolute top-2.5 right-2.5 bg-emerald-500/90 text-white text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm pointer-events-none flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-                      En Stock
-                    </span>
-                  ) : (
-                    <span className="absolute top-2.5 right-2.5 bg-zinc-800/80 text-zinc-300 text-[9px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wider pointer-events-none">
-                      Consultar
-                    </span>
-                  )}
+              {/* Info */}
+              <div className="p-4 flex flex-col flex-1 justify-between bg-card">
+                <div>
+                  <span className="text-[10px] uppercase tracking-widest text-primary font-bold">
+                    {prod.category === "Shop" ? "Cuidado Personal" : prod.category}
+                  </span>
+                  <h3 className="font-serif text-sm font-semibold text-foreground line-clamp-1 mt-0.5 group-hover/card:text-primary transition-colors">
+                    {prod.name}
+                  </h3>
                 </div>
 
-                {/* Info */}
-                <div className="p-4 flex flex-col flex-1 justify-between bg-card">
+                <div className="mt-3 pt-3 border-t border-border/40 flex items-center justify-between">
                   <div>
-                    <span className="text-[10px] uppercase tracking-widest text-primary font-bold">
-                      {prod.category === "Shop" ? "Cuidado Personal" : prod.category}
+                    <span className="text-[9px] uppercase tracking-wider text-muted-foreground block">
+                      Precio
                     </span>
-                    <h3 className="font-serif text-sm font-semibold text-foreground line-clamp-1 mt-0.5 group-hover/card:text-primary transition-colors">
-                      {prod.name}
-                    </h3>
+                    <span className="text-base font-bold text-foreground">
+                      ${prod.price.toLocaleString("es-AR")}
+                    </span>
                   </div>
 
-                  <div className="mt-3 pt-3 border-t border-border/40 flex items-center justify-between">
-                    <div>
-                      <span className="text-[9px] uppercase tracking-wider text-muted-foreground block">
-                        Precio
-                      </span>
-                      <span className="text-base font-bold text-foreground">
-                        ${prod.price.toLocaleString("es-AR")}
-                      </span>
-                    </div>
-
-                    <a
-                      href={itemWaUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => {
-                        // Evita abrir WhatsApp por error si el usuario estaba arrastrando/deslizando
-                        if (hasDraggedRef.current) {
-                          e.preventDefault();
-                          e.stopPropagation();
-                        }
-                      }}
-                      className="inline-flex items-center gap-1.5 bg-primary/10 hover:bg-primary text-primary hover:text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-300 shadow-xs"
-                      title="Consultar o pedir por WhatsApp"
-                    >
-                      <MessageCircle size={13} />
-                      <span>Pedir</span>
-                    </a>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (hasDraggedRef.current) return;
+                      onOrderProduct(prod);
+                    }}
+                    className="inline-flex items-center gap-1.5 bg-primary hover:bg-primary/90 active:scale-95 text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 shadow-sm hover:shadow-md cursor-pointer"
+                    title={`Pedir ${prod.name} por WhatsApp`}
+                  >
+                    <MessageCircle size={13} />
+                    <span>Pedir</span>
+                  </button>
                 </div>
               </div>
-            );
-          })}
+            </div>
+          ))}
         </div>
       </div>
     </div>
@@ -464,6 +690,7 @@ export default function Home() {
   const [showMisTurnos, setShowMisTurnos] = useState(false);
   const [initialServiceId, setInitialServiceId] = useState<string | undefined>();
   const [selectedServiceImage, setSelectedServiceImage] = useState<string | null>(null);
+  const [selectedProductOrder, setSelectedProductOrder] = useState<ShopProduct | null>(null);
   const [sectors, setSectors] = useState<SectorGroup[]>(() => groupServices(DEFAULT_SERVICES));
   const [publicInfo, setPublicInfo] = useState<PublicInfo | null>(null);
   const [products, setProducts] = useState<ShopProduct[]>([]);
@@ -923,7 +1150,11 @@ export default function Home() {
               </p>
             </div>
 
-            <ShopRibbon products={displayedShopProducts} waLink={waLink} />
+            <ShopRibbon
+              products={displayedShopProducts}
+              businessPhone={settings?.business_phone || "5493572532685"}
+              onOrderProduct={(prod) => setSelectedProductOrder(prod)}
+            />
           </section>
         );
       })()}
@@ -1092,6 +1323,13 @@ export default function Home() {
 
       <AnimatePresence>
         {showMisTurnos && <MisTurnosModal onClose={() => setShowMisTurnos(false)} />}
+        {selectedProductOrder && (
+          <OrderProductModal
+            product={selectedProductOrder}
+            businessPhone={settings?.business_phone || "5493572532685"}
+            onClose={() => setSelectedProductOrder(null)}
+          />
+        )}
         {selectedServiceImage && (
           <motion.div
             initial={{ opacity: 0 }}
