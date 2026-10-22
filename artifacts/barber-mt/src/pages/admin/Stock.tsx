@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Search, AlertTriangle, Package, Edit2, Trash2, ChevronDown, ChevronUp, X, Save, Check } from "lucide-react";
+import { Plus, Search, AlertTriangle, Package, Edit2, Trash2, ChevronDown, ChevronUp, X, Save, Check, Upload, Loader2, Image as ImageIcon } from "lucide-react";
 import AdminLayout from "./AdminLayout";
 import { fetchAPI } from "@/lib/api";
 
@@ -12,6 +12,7 @@ export interface Product {
   minStock: number;
   unit: string;
   price: number;
+  imageUrl?: string | null;
 }
 
 export default function Stock() {
@@ -56,7 +57,7 @@ export default function Stock() {
   };
 
   const handleNew = () => {
-    setEditing({ id: "", name: "", category: "Insumos", stock: 0, minStock: 0, unit: "unidad", price: 0 });
+    setEditing({ id: "", name: "", category: filterType === "Shop" ? "Shop" : "Insumos", stock: 0, minStock: 0, unit: "unidad", price: 0, imageUrl: "" });
   };
 
   const handleDelete = async (id: string) => {
@@ -183,9 +184,26 @@ export default function Stock() {
                   className="border-b border-border/20 last:border-0 hover:bg-accent/5 transition-colors group"
                 >
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <Package size={13} className={isLow ? "text-amber-400" : "text-muted-foreground"} />
-                      <span className="text-xs font-medium text-foreground">{item.name}</span>
+                    <div className="flex items-center gap-3">
+                      {item.imageUrl ? (
+                        <img
+                          src={item.imageUrl}
+                          alt={item.name}
+                          className="w-9 h-9 rounded-md object-cover border border-border/60 shadow-xs flex-shrink-0"
+                        />
+                      ) : (
+                        <div className="w-9 h-9 rounded-md bg-muted/40 border border-border/40 flex items-center justify-center flex-shrink-0">
+                          <Package size={14} className={isLow ? "text-amber-400" : "text-muted-foreground"} />
+                        </div>
+                      )}
+                      <div>
+                        <span className="text-xs font-semibold text-foreground block">{item.name}</span>
+                        {item.category === "Shop" && (
+                          <span className="text-[9px] uppercase tracking-wider text-emerald-500 font-semibold bg-emerald-500/10 px-1.5 py-0.2 rounded inline-block mt-0.5">
+                            Venta Shop
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </td>
                   <td className="px-4 py-3 hidden sm:table-cell">
@@ -240,6 +258,7 @@ export default function Stock() {
 function ProductModal({ product, onClose, onSave }: { product: Product; onClose: () => void; onSave: (p: Product, isNew: boolean) => void }) {
   const [form, setForm] = useState(product);
   const [saving, setSaving] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [services, setServices] = useState<any[]>([]);
   const [linkedServices, setLinkedServices] = useState<{serviceId: string, amount: number}[]>([]);
   const [filterCat, setFilterCat] = useState("Todas");
@@ -254,7 +273,40 @@ function ProductModal({ product, onClose, onSave }: { product: Product; onClose:
     }
   }, [product.id]);
 
+  const handleImageFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) return alert("Máximo 5MB. Por favor comprimí la imagen.");
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const base64 = reader.result as string;
+      setForm(f => ({ ...f, imageUrl: base64 }));
+      setUploadingImage(true);
+      try {
+        const res = await fetchAPI("/api/data/upload", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image: base64, folder: "estudiojoha/products" }),
+        });
+        if (res.ok) {
+          const { url } = await res.json();
+          setForm(f => ({ ...f, imageUrl: url }));
+        }
+      } catch {
+        // Fallback to base64
+      } finally {
+        setUploadingImage(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleSave = async () => {
+    if (uploadingImage) {
+      alert("Esperá a que termine de subirse la imagen.");
+      return;
+    }
     setSaving(true);
     const isNew = !product.id;
     try {
@@ -276,7 +328,7 @@ function ProductModal({ product, onClose, onSave }: { product: Product; onClose:
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
-      <motion.div initial={{ scale: 0.96, y: 8 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.96, y: 8 }} className="bg-card border border-border shadow-2xl rounded-sm w-full max-w-md p-5">
+      <motion.div initial={{ scale: 0.96, y: 8 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.96, y: 8 }} className="bg-card border border-border shadow-2xl rounded-sm w-full max-w-md p-5 max-h-[90vh] overflow-y-auto">
         <h3 className="text-sm font-semibold mb-4">{product.id ? "Editar" : "Nuevo"} Producto</h3>
         <div className="space-y-4">
           <div>
@@ -326,9 +378,55 @@ function ProductModal({ product, onClose, onSave }: { product: Product; onClose:
               <label className="text-[9px] font-bold tracking-widest text-muted-foreground uppercase block mb-1.5">Precio Unit ($)</label>
               <div className="relative flex items-center">
                 <span className="absolute left-3 text-muted-foreground text-xs font-semibold">$</span>
-                <input type="number" value={form.price} onChange={e => setForm({...form, price: Number(e.target.value)})} className="w-full bg-background border border-border rounded-sm pl-7 pr-3 py-2 text-xs focus:border-primary focus:outline-none" />
+                <input type="number" value={form.price} onChange={e => setForm({...form, price: Number(e.target.value)})} className="w-full bg-background border border-border rounded-sm pl-7 pr-3 py-2 text-xs focus:border-primary focus:outline-none font-semibold" />
               </div>
             </div>
+          </div>
+
+          {/* Imagen del Producto */}
+          <div>
+            <label className="text-[9px] font-bold tracking-widest text-muted-foreground uppercase block mb-1.5 flex items-center justify-between">
+              <span>Foto del Producto {form.category === "Shop" && <strong className="text-primary">(Venta Shop)</strong>}</span>
+              {uploadingImage && <span className="text-[10px] text-primary flex items-center gap-1 font-semibold animate-pulse"><Loader2 size={10} className="animate-spin" /> Subiendo...</span>}
+            </label>
+
+            {form.imageUrl ? (
+              <div className="relative w-full h-32 rounded-lg overflow-hidden border border-border group bg-muted/20 flex items-center justify-center">
+                <img src={form.imageUrl} alt="Vista previa" className="w-full h-full object-contain" />
+                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                  <label className="cursor-pointer bg-primary text-primary-foreground text-xs px-2.5 py-1.5 rounded font-semibold hover:bg-primary/90 flex items-center gap-1">
+                    <Upload size={12} /> Cambiar
+                    <input type="file" accept="image/*" onChange={handleImageFile} className="hidden" />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, imageUrl: "" })}
+                    className="bg-red-500/80 hover:bg-red-500 text-white text-xs px-2.5 py-1.5 rounded font-semibold flex items-center gap-1"
+                  >
+                    <X size={12} /> Quitar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <label className="border-2 border-dashed border-border/80 hover:border-primary/60 rounded-lg p-3.5 flex flex-col items-center justify-center gap-1 cursor-pointer bg-muted/10 hover:bg-muted/20 transition-all">
+                  <Upload size={16} className="text-muted-foreground" />
+                  <span className="text-xs font-semibold text-foreground">Subir imagen del producto</span>
+                  <span className="text-[10px] text-muted-foreground">PNG, JPG o WEBP (máx. 5MB)</span>
+                  <input type="file" accept="image/*" onChange={handleImageFile} className="hidden" />
+                </label>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-muted-foreground flex-shrink-0">o Link:</span>
+                  <input
+                    type="url"
+                    placeholder="https://.../foto.jpg"
+                    value={form.imageUrl || ""}
+                    onChange={e => setForm({ ...form, imageUrl: e.target.value })}
+                    className="flex-1 bg-background border border-border rounded-sm px-2.5 py-1.5 text-xs text-foreground focus:border-primary focus:outline-none"
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

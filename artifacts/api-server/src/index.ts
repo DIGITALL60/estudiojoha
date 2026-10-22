@@ -77,7 +77,8 @@ function initSchema() {
         \`stock\` integer DEFAULT 0 NOT NULL,
         \`min_stock\` integer DEFAULT 0 NOT NULL,
         \`unit\` text NOT NULL,
-        \`price\` integer DEFAULT 0 NOT NULL
+        \`price\` integer DEFAULT 0 NOT NULL,
+        \`image_url\` text
       );
       CREATE TABLE IF NOT EXISTS \`professional_schedules\` (
         \`id\` text PRIMARY KEY NOT NULL,
@@ -144,6 +145,7 @@ function initSchema() {
     try { sqlite.exec("ALTER TABLE vouchers ADD COLUMN client_id text"); } catch (e) {}
     try { sqlite.exec("ALTER TABLE vouchers ADD COLUMN expires_at integer"); } catch (e) {}
     try { sqlite.exec("ALTER TABLE vouchers ADD COLUMN used_at integer"); } catch (e) {}
+    try { sqlite.exec("ALTER TABLE products ADD COLUMN image_url text"); } catch (e) {}
 
 
     logger.info("Database schema initialized successfully");

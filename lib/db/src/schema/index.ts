@@ -63,6 +63,7 @@ export const products = sqliteTable("products", {
   minStock: integer("min_stock").notNull().default(0),
   unit: text("unit").notNull(), // e.g., 'unidad', 'litro', 'kit'
   price: integer("price").notNull().default(0),
+  imageUrl: text("image_url"),
 });
 
 export const insertProductSchema = createInsertSchema(products);

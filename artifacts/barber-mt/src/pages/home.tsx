@@ -1,6 +1,6 @@
 import { motion, AnimatePresence, type Variants } from "framer-motion";
-import { Clock, MapPin, Instagram, ChevronRight, Sparkles, MessageCircle, X } from "lucide-react";
-import { useState, useEffect, useCallback } from "react";
+import { Clock, MapPin, Instagram, ChevronRight, Sparkles, MessageCircle, X, ShoppingBag, Package } from "lucide-react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import LogoIcon from "@/components/LogoIcon";
 import BookingWizard from "@/components/BookingWizard";
 import MisTurnosModal from "@/components/MisTurnosModal";
@@ -33,6 +33,55 @@ interface ServiceRow {
   price: number;
   imageUrl?: string | null;
 }
+
+interface ShopProduct {
+  id: string;
+  name: string;
+  category: string;
+  price: number;
+  stock: number;
+  unit: string;
+  imageUrl?: string | null;
+}
+
+const DEFAULT_SHOP_PRODUCTS: ShopProduct[] = [
+  {
+    id: "sample-1",
+    name: "Óleo Reparador Capilar",
+    category: "Shop",
+    price: 18500,
+    stock: 12,
+    unit: "unidad",
+    imageUrl: "https://images.unsplash.com/photo-1608248597359-54d193d259c2?auto=format&fit=crop&w=600&q=80",
+  },
+  {
+    id: "sample-2",
+    name: "Serum Facial Rejuvenecedor",
+    category: "Shop",
+    price: 24000,
+    stock: 8,
+    unit: "unidad",
+    imageUrl: "https://images.unsplash.com/photo-1620916566398-39f1143ab7be?auto=format&fit=crop&w=600&q=80",
+  },
+  {
+    id: "sample-3",
+    name: "Crema Hidratante Manos & Cutículas",
+    category: "Shop",
+    price: 12500,
+    stock: 15,
+    unit: "unidad",
+    imageUrl: "https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=600&q=80",
+  },
+  {
+    id: "sample-4",
+    name: "Shampoo Nutritivo Post-Color",
+    category: "Shop",
+    price: 19500,
+    stock: 10,
+    unit: "unidad",
+    imageUrl: "https://images.unsplash.com/photo-1535585209827-a15fcdbc4c2d?auto=format&fit=crop&w=600&q=80",
+  },
+];
 
 interface SectorGroup {
   id: string;
@@ -77,6 +126,7 @@ export default function Home() {
   const [selectedServiceImage, setSelectedServiceImage] = useState<string | null>(null);
   const [sectors, setSectors] = useState<SectorGroup[]>(() => groupServices(DEFAULT_SERVICES));
   const [publicInfo, setPublicInfo] = useState<PublicInfo | null>(null);
+  const [products, setProducts] = useState<ShopProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
@@ -91,14 +141,22 @@ export default function Home() {
           return Array.isArray(data) && data.length > 0 ? data : DEFAULT_SERVICES;
         })
         .catch(() => DEFAULT_SERVICES),
+      fetchAPI("/api/data/products")
+        .then(async r => {
+          if (!r.ok) return [];
+          const data = await r.json();
+          return Array.isArray(data) ? data : [];
+        })
+        .catch(() => []),
       fetchPublicInfo(),
     ])
-      .then(([services, info]) => {
+      .then(([services, prods, info]) => {
         const grp = groupServices(services);
         setSectors(grp);
         if (grp.length > 0 && !openSector) {
           setOpenSector(grp[0].id);
         }
+        setProducts(prods);
         setPublicInfo(info);
       })
       .catch(() => {
@@ -163,6 +221,12 @@ export default function Home() {
         </button>
         
         <div className="flex items-center gap-1.5 sm:gap-3">
+          <button
+            onClick={() => document.getElementById("shop")?.scrollIntoView({ behavior: "smooth" })}
+            className="text-xs font-sans tracking-[0.2em] uppercase text-muted-foreground hover:text-primary transition-colors px-2.5 py-1 hidden sm:inline-flex items-center gap-1.5 font-semibold"
+          >
+            <ShoppingBag size={13} className="text-primary" /> Shop
+          </button>
           <ThemeToggle />
           <button
             onClick={() => window.location.href = "/admin"}
@@ -492,6 +556,129 @@ export default function Home() {
         </div>
       </section>
 
+      {/* ─── CINTA EN MOVIMIENTO: VENTA SHOP / PRODUCTOS ─── */}
+      {(() => {
+        const fromDb = products.filter(p => {
+          const cat = (p.category || "").toLowerCase();
+          const isShop = cat === "shop" || cat.includes("shop") || cat.includes("venta");
+          const isNotSupply = cat !== "insumos" && !cat.includes("insumo") && !cat.includes("interno");
+          return (isShop || isNotSupply) && (p.price > 0 || p.imageUrl);
+        });
+        const displayedShopProducts = fromDb.length > 0 ? fromDb : DEFAULT_SHOP_PRODUCTS;
+
+        return (
+          <section id="shop" className="py-20 border-y border-border/40 bg-gradient-to-b from-card/30 via-background to-card/30 overflow-hidden relative">
+            <div className="max-w-5xl mx-auto px-6 mb-10 text-center">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-[10px] font-bold uppercase tracking-widest mb-3 shadow-xs">
+                <ShoppingBag size={12} />
+                <span>Boutique de Salón · Cuidado en Casa</span>
+              </div>
+              <h2 className="font-serif font-light text-3xl sm:text-4xl md:text-5xl text-foreground">
+                Productos Exclusivos <em className="not-italic text-primary font-normal">para vos</em>
+              </h2>
+              <p className="font-sans text-xs sm:text-sm text-muted-foreground mt-2 max-w-lg mx-auto">
+                Llevate la calidad profesional a tu hogar. Consultanos o adquirilos directamente en nuestro salón.
+              </p>
+            </div>
+
+            {/* Cinta en movimiento con degradados en los extremos para suavizar bordes */}
+            <div className="relative w-full overflow-hidden">
+              {/* Sombras difuminadas en bordes */}
+              <div className="absolute left-0 top-0 bottom-0 w-16 sm:w-28 bg-gradient-to-r from-background to-transparent z-10 pointer-events-none" />
+              <div className="absolute right-0 top-0 bottom-0 w-16 sm:w-28 bg-gradient-to-l from-background to-transparent z-10 pointer-events-none" />
+
+              <motion.div
+                animate={{ x: ["0%", "-50%"] }}
+                transition={{
+                  repeat: Infinity,
+                  ease: "linear",
+                  duration: Math.max(25, displayedShopProducts.length * 5),
+                }}
+                whileHover={{ animationPlayState: "paused" }}
+                className="flex gap-5 sm:gap-6 w-max py-3 px-4"
+              >
+                {[...displayedShopProducts, ...displayedShopProducts].map((prod, idx) => {
+                  const productWaMessage = encodeURIComponent(
+                    `¡Hola Joha! 💖 Me interesa el producto *${prod.name}* ($${prod.price.toLocaleString("es-AR")}) que vi en la tienda online. ¿Tienen disponible para retirar en el salón?`
+                  );
+                  const buyLink = `https://wa.me/5493572532685?text=${productWaMessage}`;
+
+                  return (
+                    <div
+                      key={`${prod.id}-${idx}`}
+                      className="w-64 sm:w-72 bg-card border border-border/70 hover:border-primary/50 rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col group flex-shrink-0"
+                    >
+                      {/* Imagen del producto */}
+                      <div className="relative w-full h-48 bg-muted/20 overflow-hidden flex items-center justify-center">
+                        {prod.imageUrl ? (
+                          <img
+                            src={prod.imageUrl}
+                            alt={prod.name}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground bg-accent/5">
+                            <Package size={40} className="text-primary/60 mb-2" />
+                            <span className="text-[10px] tracking-wider uppercase text-muted-foreground/60 font-semibold">
+                              Estudio Joha
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Badge Venta Shop */}
+                        <span className="absolute top-2.5 left-2.5 bg-black/70 backdrop-blur-md text-white text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1 border border-white/20">
+                          <Sparkles size={9} className="text-primary" /> Shop
+                        </span>
+
+                        {prod.stock > 0 ? (
+                          <span className="absolute top-2.5 right-2.5 bg-emerald-500/90 text-white text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm">
+                            En Stock
+                          </span>
+                        ) : null}
+                      </div>
+
+                      {/* Info */}
+                      <div className="p-4 flex flex-col flex-1 justify-between bg-card">
+                        <div>
+                          <span className="text-[10px] uppercase tracking-widest text-primary font-bold">
+                            {prod.category === "Shop" ? "Cuidado Personal" : prod.category}
+                          </span>
+                          <h3 className="font-serif text-sm font-semibold text-foreground line-clamp-1 mt-0.5 group-hover:text-primary transition-colors">
+                            {prod.name}
+                          </h3>
+                        </div>
+
+                        <div className="mt-3 pt-3 border-t border-border/40 flex items-center justify-between">
+                          <div>
+                            <span className="text-[9px] uppercase tracking-wider text-muted-foreground block">
+                              Precio
+                            </span>
+                            <span className="text-base font-bold text-foreground">
+                              ${prod.price.toLocaleString("es-AR")}
+                            </span>
+                          </div>
+
+                          <a
+                            href={buyLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 bg-primary/10 hover:bg-primary text-primary hover:text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-300 shadow-xs"
+                            title="Consultar o pedir por WhatsApp"
+                          >
+                            <MessageCircle size={13} />
+                            <span>Pedir</span>
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </motion.div>
+            </div>
+          </section>
+        );
+      })()}
+
       <section className="relative w-full min-h-[360px] sm:min-h-[420px] py-16 flex items-center justify-center overflow-hidden border-y border-border/40">
         {/* Foto de fondo optimizada para móviles (sin bug de bg-fixed en iOS) */}
         <div 
@@ -615,6 +802,12 @@ export default function Home() {
               className="font-sans text-xs tracking-[0.2em] uppercase text-muted-foreground hover:text-primary transition-colors"
             >
               Reservar Online
+            </button>
+            <button
+              onClick={() => document.getElementById("shop")?.scrollIntoView({ behavior: "smooth" })}
+              className="font-sans text-xs tracking-[0.2em] uppercase text-muted-foreground hover:text-primary transition-colors"
+            >
+              Shop Salón
             </button>
             <button
               onClick={() => setShowMisTurnos(true)}

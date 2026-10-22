@@ -966,7 +966,7 @@ router.patch("/settings", requireAuth, async (req, res) => {
 });
 
 // ─── PRODUCTS (STOCK) ──────────────────────────────────────
-router.get("/products", requireAuth, async (req, res) => {
+router.get("/products", async (req, res) => {
   try {
     const data = await db.select().from(products);
     res.json(data);
@@ -977,7 +977,7 @@ router.get("/products", requireAuth, async (req, res) => {
 
 router.post("/products", requireAuth, async (req, res) => {
   try {
-    const { name, category, stock, minStock, unit, price, services: linkedServices } = req.body;
+    const { name, category, stock, minStock, unit, price, imageUrl, services: linkedServices } = req.body;
     if (!name || !category || !unit) return res.status(400).json({ error: "Name, category and unit required" });
     const id = randomUUID();
     await db.insert(products).values({
@@ -986,6 +986,7 @@ router.post("/products", requireAuth, async (req, res) => {
       minStock: Number(minStock || 0),
       unit,
       price: Number(price || 0),
+      imageUrl: imageUrl || null,
     });
 
     if (linkedServices && Array.isArray(linkedServices)) {
@@ -1009,13 +1010,14 @@ router.post("/products", requireAuth, async (req, res) => {
 router.patch("/products/:id", requireAuth, async (req, res) => {
   try {
     const { id } = req.params as { id: string };
-    const { name, category, stock, minStock, unit, price, services: linkedServices } = req.body;
+    const { name, category, stock, minStock, unit, price, imageUrl, services: linkedServices } = req.body;
     await db.update(products).set({
       name, category,
       stock: stock !== undefined ? Number(stock) : undefined,
       minStock: minStock !== undefined ? Number(minStock) : undefined,
       unit,
       price: price !== undefined ? Number(price) : undefined,
+      imageUrl: imageUrl !== undefined ? imageUrl : undefined,
     }).where(eq(products.id, id as string));
 
     if (linkedServices && Array.isArray(linkedServices)) {
