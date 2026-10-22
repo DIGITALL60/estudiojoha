@@ -1,6 +1,6 @@
 import { motion, AnimatePresence, type Variants } from "framer-motion";
-import { Clock, MapPin, Instagram, ChevronRight, Sparkles, MessageCircle, X, ShoppingBag, Package } from "lucide-react";
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { Clock, MapPin, Instagram, ChevronRight, ChevronLeft, Sparkles, MessageCircle, X, ShoppingBag, Package, Pause, Play, MoveHorizontal } from "lucide-react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import LogoIcon from "@/components/LogoIcon";
 import BookingWizard from "@/components/BookingWizard";
 import MisTurnosModal from "@/components/MisTurnosModal";
@@ -116,6 +116,346 @@ function groupServices(data: { id: string; name: string; category: string; durat
     return acc;
   }, {});
   return Object.values(grouped);
+}
+
+interface ShopRibbonProps {
+  products: ShopProduct[];
+  waLink: string;
+}
+
+function ShopRibbon({ products, waLink }: ShopRibbonProps) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [isUserPaused, setIsUserPaused] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [touchPaused, setTouchPaused] = useState(false);
+
+  const isMouseDownRef = useRef(false);
+  const startXRef = useRef(0);
+  const startScrollLeftRef = useRef(0);
+  const hasDraggedRef = useRef(false);
+  const touchResumeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Replicar lista para garantizar un carrusel lleno y con loop infinito fluido
+  const displayedItems = useMemo(() => {
+    if (!products || products.length === 0) return [];
+    let base = [...products];
+    // Asegurar al menos 6 items para loop continuo sin cortes visuales
+    while (base.length < 6) {
+      base = [...base, ...products];
+    }
+    // Duplicar para el scroll continuo infinito (scrollWidth / 2)
+    return [...base, ...base];
+  }, [products]);
+
+  // Bucle de auto-scroll suave (velocidad relajada y pausada)
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || displayedItems.length === 0) return;
+
+    let animId: number;
+    // Velocidad: 0.42 px por frame (~25px/segundo) - muy tranquila y serena
+    const speed = 0.42;
+
+    const tick = () => {
+      // Solo avanza si no está pausado manualmente, no está en hover en PC, y no se está tocando/arrastrando
+      if (!isUserPaused && !isHovered && !touchPaused && !isMouseDownRef.current) {
+        el.scrollLeft += speed;
+
+        const halfWidth = el.scrollWidth / 2;
+        if (halfWidth > 0) {
+          if (el.scrollLeft >= halfWidth) {
+            el.scrollLeft -= halfWidth;
+          } else if (el.scrollLeft <= 0) {
+            el.scrollLeft += halfWidth;
+          }
+        }
+      }
+      animId = requestAnimationFrame(tick);
+    };
+
+    animId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(animId);
+  }, [isUserPaused, isHovered, touchPaused, displayedItems]);
+
+  // Manejo táctil para celular (Pausa instantánea al tocar, reanuda tras 3.5s al soltar)
+  const handleTouchStart = () => {
+    if (touchResumeTimeoutRef.current) clearTimeout(touchResumeTimeoutRef.current);
+    setTouchPaused(true);
+    hasDraggedRef.current = false;
+  };
+
+  const handleTouchMove = () => {
+    hasDraggedRef.current = true;
+    const el = scrollRef.current;
+    if (el) {
+      const halfWidth = el.scrollWidth / 2;
+      if (halfWidth > 0) {
+        if (el.scrollLeft >= halfWidth) {
+          el.scrollLeft -= halfWidth;
+        } else if (el.scrollLeft <= 0) {
+          el.scrollLeft += halfWidth;
+        }
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    // Al soltar en celular, permanece congelado durante 3.5 segundos para que la clienta
+    // pueda leer con comodidad el producto y precio sin que se le escape la tarjeta
+    if (touchResumeTimeoutRef.current) clearTimeout(touchResumeTimeoutRef.current);
+    touchResumeTimeoutRef.current = setTimeout(() => {
+      setTouchPaused(false);
+      hasDraggedRef.current = false;
+    }, 3500);
+  };
+
+  // Manejo de arrastre con mouse para PC / Web
+  const handleMouseDown = (e: React.MouseEvent) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    isMouseDownRef.current = true;
+    hasDraggedRef.current = false;
+    startXRef.current = e.pageX - el.offsetLeft;
+    startScrollLeftRef.current = el.scrollLeft;
+    setIsDragging(true);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    const el = scrollRef.current;
+    if (!isMouseDownRef.current || !el) return;
+    e.preventDefault();
+    const x = e.pageX - el.offsetLeft;
+    const walk = (x - startXRef.current) * 1.35; // Factor de respuesta para deslizar rápido
+    if (Math.abs(walk) > 5) {
+      hasDraggedRef.current = true;
+    }
+    el.scrollLeft = startScrollLeftRef.current - walk;
+
+    const halfWidth = el.scrollWidth / 2;
+    if (halfWidth > 0) {
+      if (el.scrollLeft >= halfWidth) {
+        el.scrollLeft -= halfWidth;
+        startScrollLeftRef.current -= halfWidth;
+      } else if (el.scrollLeft <= 0) {
+        el.scrollLeft += halfWidth;
+        startScrollLeftRef.current += halfWidth;
+      }
+    }
+  };
+
+  const handleMouseUpOrLeave = () => {
+    isMouseDownRef.current = false;
+    setIsDragging(false);
+    setTimeout(() => {
+      hasDraggedRef.current = false;
+    }, 60);
+  };
+
+  // Desplazamiento manual por botones de flechas
+  const scrollStep = (direction: "left" | "right") => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const step = 310;
+    el.scrollBy({ left: direction === "right" ? step : -step, behavior: "smooth" });
+  };
+
+  return (
+    <div className="relative w-full">
+      {/* Barra superior de controles interactivos */}
+      <div className="flex flex-wrap items-center justify-between gap-3 px-6 sm:px-12 max-w-7xl mx-auto mb-6">
+        <div className="inline-flex items-center gap-2 text-[11px] sm:text-xs text-muted-foreground bg-card/60 backdrop-blur-sm border border-border/60 px-3.5 py-1.5 rounded-full">
+          <MoveHorizontal size={13} className="text-primary animate-pulse flex-shrink-0" />
+          <span>Deslizá para buscar rápido · Tocá para frenar</span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {/* Botón Pausa / Reanudar explícito */}
+          <button
+            type="button"
+            onClick={() => setIsUserPaused((p) => !p)}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold px-3.5 py-1.5 rounded-full bg-card hover:bg-muted/80 border border-border/80 text-foreground transition-all duration-200 shadow-xs"
+            title={isUserPaused ? "Reanudar movimiento" : "Pausar cinta"}
+          >
+            {isUserPaused ? (
+              <>
+                <Play size={12} className="text-primary fill-primary" />
+                <span>Reanudar</span>
+              </>
+            ) : (
+              <>
+                <Pause size={12} className="text-primary fill-primary" />
+                <span>Pausar</span>
+              </>
+            )}
+          </button>
+
+          {/* Flechas de navegación rápida */}
+          <div className="hidden sm:flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => scrollStep("left")}
+              className="w-8 h-8 rounded-full bg-card hover:bg-muted border border-border/80 flex items-center justify-center text-foreground hover:text-primary transition-colors shadow-xs"
+              title="Ver anteriores"
+              aria-label="Anterior"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <button
+              type="button"
+              onClick={() => scrollStep("right")}
+              className="w-8 h-8 rounded-full bg-card hover:bg-muted border border-border/80 flex items-center justify-center text-foreground hover:text-primary transition-colors shadow-xs"
+              title="Ver siguientes"
+              aria-label="Siguiente"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Contenedor de la cinta con sombras en los bordes y botones flotantes */}
+      <div className="relative w-full group">
+        {/* Sombras difuminadas en bordes laterales */}
+        <div className="absolute left-0 top-0 bottom-0 w-12 sm:w-24 bg-gradient-to-r from-background to-transparent z-10 pointer-events-none" />
+        <div className="absolute right-0 top-0 bottom-0 w-12 sm:w-24 bg-gradient-to-l from-background to-transparent z-10 pointer-events-none" />
+
+        {/* Botones de navegación flotantes sobre la cinta en desktop */}
+        <button
+          type="button"
+          onClick={() => scrollStep("left")}
+          className="hidden md:flex absolute left-4 top-1/2 -translate-y-1/2 z-20 w-10 h-10 rounded-full bg-background/90 hover:bg-background border border-border/80 shadow-lg items-center justify-center text-foreground hover:text-primary transition-all duration-200 backdrop-blur-md opacity-0 group-hover:opacity-100"
+          aria-label="Deslizar a la izquierda"
+        >
+          <ChevronLeft size={20} />
+        </button>
+        <button
+          type="button"
+          onClick={() => scrollStep("right")}
+          className="hidden md:flex absolute right-4 top-1/2 -translate-y-1/2 z-20 w-10 h-10 rounded-full bg-background/90 hover:bg-background border border-border/80 shadow-lg items-center justify-center text-foreground hover:text-primary transition-all duration-200 backdrop-blur-md opacity-0 group-hover:opacity-100"
+          aria-label="Deslizar a la derecha"
+        >
+          <ChevronRight size={20} />
+        </button>
+
+        {/* Contenedor deslizante interactivo */}
+        <div
+          ref={scrollRef}
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => {
+            setIsHovered(false);
+            handleMouseUpOrLeave();
+          }}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUpOrLeave}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          className={`flex gap-5 sm:gap-6 overflow-x-auto scrollbar-none py-4 px-6 sm:px-12 select-none ${
+            isDragging ? "cursor-grabbing" : "cursor-grab"
+          }`}
+          style={{
+            scrollbarWidth: "none",
+            msOverflowStyle: "none",
+            WebkitOverflowScrolling: "touch",
+          }}
+        >
+          {displayedItems.map((prod, idx) => {
+            const productWaMessage = encodeURIComponent(
+              `¡Hola Joha! 💖 Me interesa el producto *${prod.name}* ($${prod.price.toLocaleString("es-AR")}) de la boutique del salón. ¿Tienen disponible para retirar?`
+            );
+            const itemWaUrl = waLink
+              ? `${waLink.split("?")[0]}?text=${productWaMessage}`
+              : `https://wa.me/5493572532685?text=${productWaMessage}`;
+
+            return (
+              <div
+                key={`${prod.id}-${idx}`}
+                className="w-64 sm:w-72 bg-card border border-border/70 hover:border-primary/50 rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col group/card flex-shrink-0"
+              >
+                {/* Imagen del producto */}
+                <div className="relative w-full h-48 bg-muted/20 overflow-hidden flex items-center justify-center">
+                  {prod.imageUrl ? (
+                    <img
+                      src={prod.imageUrl}
+                      alt={prod.name}
+                      draggable={false}
+                      className="w-full h-full object-cover group-hover/card:scale-105 transition-transform duration-500 pointer-events-none select-none"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground bg-accent/5 pointer-events-none select-none">
+                      <Package size={40} className="text-primary/60 mb-2" />
+                      <span className="text-[10px] tracking-wider uppercase text-muted-foreground/60 font-semibold">
+                        Estudio Joha
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Badge Venta Shop */}
+                  <span className="absolute top-2.5 left-2.5 bg-black/70 backdrop-blur-md text-white text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1 border border-white/20 pointer-events-none">
+                    <Sparkles size={9} className="text-primary" /> Shop
+                  </span>
+
+                  {prod.stock > 0 ? (
+                    <span className="absolute top-2.5 right-2.5 bg-emerald-500/90 text-white text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm pointer-events-none flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                      En Stock
+                    </span>
+                  ) : (
+                    <span className="absolute top-2.5 right-2.5 bg-zinc-800/80 text-zinc-300 text-[9px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wider pointer-events-none">
+                      Consultar
+                    </span>
+                  )}
+                </div>
+
+                {/* Info */}
+                <div className="p-4 flex flex-col flex-1 justify-between bg-card">
+                  <div>
+                    <span className="text-[10px] uppercase tracking-widest text-primary font-bold">
+                      {prod.category === "Shop" ? "Cuidado Personal" : prod.category}
+                    </span>
+                    <h3 className="font-serif text-sm font-semibold text-foreground line-clamp-1 mt-0.5 group-hover/card:text-primary transition-colors">
+                      {prod.name}
+                    </h3>
+                  </div>
+
+                  <div className="mt-3 pt-3 border-t border-border/40 flex items-center justify-between">
+                    <div>
+                      <span className="text-[9px] uppercase tracking-wider text-muted-foreground block">
+                        Precio
+                      </span>
+                      <span className="text-base font-bold text-foreground">
+                        ${prod.price.toLocaleString("es-AR")}
+                      </span>
+                    </div>
+
+                    <a
+                      href={itemWaUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => {
+                        // Evita abrir WhatsApp por error si el usuario estaba arrastrando/deslizando
+                        if (hasDraggedRef.current) {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }
+                      }}
+                      className="inline-flex items-center gap-1.5 bg-primary/10 hover:bg-primary text-primary hover:text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-300 shadow-xs"
+                      title="Consultar o pedir por WhatsApp"
+                    >
+                      <MessageCircle size={13} />
+                      <span>Pedir</span>
+                    </a>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function Home() {
@@ -556,19 +896,21 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ─── CINTA EN MOVIMIENTO: VENTA SHOP / PRODUCTOS ─── */}
+      {/* ─── CINTA EN MOVIMIENTO: VENTA SHOP / PRODUCTOS DEL SISTEMA ─── */}
       {(() => {
-        const fromDb = products.filter(p => {
-          const cat = (p.category || "").toLowerCase();
+        // Vinculación directa con los productos de Venta de Shop registrados en el sistema (Stock)
+        const systemShopProducts = products.filter(p => {
+          const cat = (p.category || "").trim().toLowerCase();
           const isShop = cat === "shop" || cat.includes("shop") || cat.includes("venta");
           const isNotSupply = cat !== "insumos" && !cat.includes("insumo") && !cat.includes("interno");
-          return (isShop || isNotSupply) && (p.price > 0 || p.imageUrl);
+          return isShop && isNotSupply;
         });
-        const displayedShopProducts = fromDb.length > 0 ? fromDb : DEFAULT_SHOP_PRODUCTS;
+
+        const displayedShopProducts = systemShopProducts.length > 0 ? systemShopProducts : DEFAULT_SHOP_PRODUCTS;
 
         return (
           <section id="shop" className="py-20 border-y border-border/40 bg-gradient-to-b from-card/30 via-background to-card/30 overflow-hidden relative">
-            <div className="max-w-5xl mx-auto px-6 mb-10 text-center">
+            <div className="max-w-5xl mx-auto px-6 mb-8 text-center">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-[10px] font-bold uppercase tracking-widest mb-3 shadow-xs">
                 <ShoppingBag size={12} />
                 <span>Boutique de Salón · Cuidado en Casa</span>
@@ -581,100 +923,7 @@ export default function Home() {
               </p>
             </div>
 
-            {/* Cinta en movimiento con degradados en los extremos para suavizar bordes */}
-            <div className="relative w-full overflow-hidden">
-              {/* Sombras difuminadas en bordes */}
-              <div className="absolute left-0 top-0 bottom-0 w-16 sm:w-28 bg-gradient-to-r from-background to-transparent z-10 pointer-events-none" />
-              <div className="absolute right-0 top-0 bottom-0 w-16 sm:w-28 bg-gradient-to-l from-background to-transparent z-10 pointer-events-none" />
-
-              <motion.div
-                animate={{ x: ["0%", "-50%"] }}
-                transition={{
-                  repeat: Infinity,
-                  ease: "linear",
-                  duration: Math.max(25, displayedShopProducts.length * 5),
-                }}
-                whileHover={{ animationPlayState: "paused" }}
-                className="flex gap-5 sm:gap-6 w-max py-3 px-4"
-              >
-                {[...displayedShopProducts, ...displayedShopProducts].map((prod, idx) => {
-                  const productWaMessage = encodeURIComponent(
-                    `¡Hola Joha! 💖 Me interesa el producto *${prod.name}* ($${prod.price.toLocaleString("es-AR")}) que vi en la tienda online. ¿Tienen disponible para retirar en el salón?`
-                  );
-                  const buyLink = `https://wa.me/5493572532685?text=${productWaMessage}`;
-
-                  return (
-                    <div
-                      key={`${prod.id}-${idx}`}
-                      className="w-64 sm:w-72 bg-card border border-border/70 hover:border-primary/50 rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col group flex-shrink-0"
-                    >
-                      {/* Imagen del producto */}
-                      <div className="relative w-full h-48 bg-muted/20 overflow-hidden flex items-center justify-center">
-                        {prod.imageUrl ? (
-                          <img
-                            src={prod.imageUrl}
-                            alt={prod.name}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground bg-accent/5">
-                            <Package size={40} className="text-primary/60 mb-2" />
-                            <span className="text-[10px] tracking-wider uppercase text-muted-foreground/60 font-semibold">
-                              Estudio Joha
-                            </span>
-                          </div>
-                        )}
-
-                        {/* Badge Venta Shop */}
-                        <span className="absolute top-2.5 left-2.5 bg-black/70 backdrop-blur-md text-white text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1 border border-white/20">
-                          <Sparkles size={9} className="text-primary" /> Shop
-                        </span>
-
-                        {prod.stock > 0 ? (
-                          <span className="absolute top-2.5 right-2.5 bg-emerald-500/90 text-white text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm">
-                            En Stock
-                          </span>
-                        ) : null}
-                      </div>
-
-                      {/* Info */}
-                      <div className="p-4 flex flex-col flex-1 justify-between bg-card">
-                        <div>
-                          <span className="text-[10px] uppercase tracking-widest text-primary font-bold">
-                            {prod.category === "Shop" ? "Cuidado Personal" : prod.category}
-                          </span>
-                          <h3 className="font-serif text-sm font-semibold text-foreground line-clamp-1 mt-0.5 group-hover:text-primary transition-colors">
-                            {prod.name}
-                          </h3>
-                        </div>
-
-                        <div className="mt-3 pt-3 border-t border-border/40 flex items-center justify-between">
-                          <div>
-                            <span className="text-[9px] uppercase tracking-wider text-muted-foreground block">
-                              Precio
-                            </span>
-                            <span className="text-base font-bold text-foreground">
-                              ${prod.price.toLocaleString("es-AR")}
-                            </span>
-                          </div>
-
-                          <a
-                            href={buyLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 bg-primary/10 hover:bg-primary text-primary hover:text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-300 shadow-xs"
-                            title="Consultar o pedir por WhatsApp"
-                          >
-                            <MessageCircle size={13} />
-                            <span>Pedir</span>
-                          </a>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </motion.div>
-            </div>
+            <ShopRibbon products={displayedShopProducts} waLink={waLink} />
           </section>
         );
       })()}

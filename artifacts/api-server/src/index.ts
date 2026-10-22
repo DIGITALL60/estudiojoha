@@ -1,6 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
-import { db, sqlite, professionals, services, app_settings, professional_schedules, appointments, clients, expenses, vouchers, blocked_dates } from "@workspace/db";
+import { db, sqlite, professionals, services, app_settings, professional_schedules, appointments, clients, expenses, vouchers, blocked_dates, products } from "@workspace/db";
 import { randomUUID } from "crypto";
 import { DEFAULT_SETTINGS } from "./lib/settings.js";
 
@@ -324,7 +324,67 @@ async function seedIfEmpty() {
       }
     }
 
-    // App settings check completed
+    // Seed default shop products if empty
+    const existingProducts = db.select().from(products).all();
+    if (existingProducts.length === 0) {
+      logger.info("Seeding default shop products...");
+      const sampleShopProducts = [
+        {
+          id: randomUUID(),
+          name: "Óleo Reparador Capilar",
+          category: "Shop",
+          price: 18500,
+          stock: 12,
+          minStock: 2,
+          unit: "unidad",
+          imageUrl: "https://images.unsplash.com/photo-1608248597359-54d193d259c2?auto=format&fit=crop&w=600&q=80",
+        },
+        {
+          id: randomUUID(),
+          name: "Serum Facial Rejuvenecedor",
+          category: "Shop",
+          price: 24000,
+          stock: 8,
+          minStock: 2,
+          unit: "unidad",
+          imageUrl: "https://images.unsplash.com/photo-1620916566398-39f1143ab7be?auto=format&fit=crop&w=600&q=80",
+        },
+        {
+          id: randomUUID(),
+          name: "Crema Hidratante Manos & Cutículas",
+          category: "Shop",
+          price: 12500,
+          stock: 15,
+          minStock: 3,
+          unit: "unidad",
+          imageUrl: "https://images.unsplash.com/photo-1556228720-195a672e8a03?auto=format&fit=crop&w=600&q=80",
+        },
+        {
+          id: randomUUID(),
+          name: "Shampoo Nutritivo Post-Color",
+          category: "Shop",
+          price: 19500,
+          stock: 10,
+          minStock: 2,
+          unit: "unidad",
+          imageUrl: "https://images.unsplash.com/photo-1535585209827-a15fcdbc4c2d?auto=format&fit=crop&w=600&q=80",
+        },
+        {
+          id: randomUUID(),
+          name: "Máscara Capilar Nutrición Profunda",
+          category: "Shop",
+          price: 21000,
+          stock: 6,
+          minStock: 2,
+          unit: "unidad",
+          imageUrl: "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?auto=format&fit=crop&w=600&q=80",
+        },
+      ];
+      for (const p of sampleShopProducts) {
+        db.insert(products).values(p).run();
+      }
+      logger.info("Shop products seeded successfully.");
+    }
 
   } catch (err) {
     logger.error({ err }, "Auto-seed failed");
