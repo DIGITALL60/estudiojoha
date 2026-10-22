@@ -146,6 +146,7 @@ function initSchema() {
     try { sqlite.exec("ALTER TABLE vouchers ADD COLUMN expires_at integer"); } catch (e) {}
     try { sqlite.exec("ALTER TABLE vouchers ADD COLUMN used_at integer"); } catch (e) {}
     try { sqlite.exec("ALTER TABLE products ADD COLUMN image_url text"); } catch (e) {}
+    try { sqlite.exec("ALTER TABLE expenses ADD COLUMN payment_method text DEFAULT 'Efectivo'"); } catch (e) {}
 
 
     logger.info("Database schema initialized successfully");

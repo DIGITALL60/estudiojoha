@@ -149,6 +149,7 @@ export const expenses = sqliteTable("expenses", {
   concept: text("concept").notNull(),
   amount: integer("amount").notNull(),
   category: text("category").notNull().default("General"), // e.g. Insumos, Alquiler, Sueldos
+  paymentMethod: text("payment_method").default("Efectivo"), // Efectivo, Transferencia (billetera), etc.
   date: text("date").notNull(), // YYYY-MM-DD
   professionalId: text("professional_id").references(() => professionals.id), // If expense is tied to a professional
   createdAt: integer("created_at", { mode: 'timestamp' }).notNull(),

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import { Search, X, Check, Tag } from "lucide-react";
+import { Search, X, Check, Tag, Plus, Minus } from "lucide-react";
 
 export interface ServiceItem {
   id: string;
@@ -9,17 +9,28 @@ export interface ServiceItem {
   duration?: number;
 }
 
+export interface SelectedServiceItem {
+  id: string;
+  name: string;
+  price: number;
+  qty: number;
+  category?: string;
+  duration?: number;
+}
+
 interface ServiceSearchSelectProps {
   services: ServiceItem[];
-  selectedServiceIds: string[];
-  onChange: (selectedIds: string[], selectedServices: ServiceItem[]) => void;
+  selectedServiceIds?: string[];
+  selectedServices?: SelectedServiceItem[];
+  onChange: (selectedIds: string[], selectedServices: SelectedServiceItem[]) => void;
   placeholder?: string;
   className?: string;
 }
 
 export default function ServiceSearchSelect({
   services,
-  selectedServiceIds,
+  selectedServiceIds = [],
+  selectedServices: propSelectedServices,
   onChange,
   placeholder = "🔍 Buscar servicios con tildes (podés elegir varios)...",
   className = "",
@@ -30,15 +41,36 @@ export default function ServiceSearchSelect({
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Servicios seleccionados actualmente como objetos completos
-  const selectedServices = useMemo(() => {
-    return services.filter((s) => selectedServiceIds.includes(s.id));
-  }, [services, selectedServiceIds]);
+  // Servicios seleccionados normalizados con cantidad (qty >= 1)
+  const currentSelected = useMemo<SelectedServiceItem[]>(() => {
+    if (propSelectedServices && propSelectedServices.length > 0) {
+      return propSelectedServices;
+    }
+    // Reconstruir a partir de selectedServiceIds si no se pasó propSelectedServices
+    return selectedServiceIds
+      .map((id) => {
+        const s = services.find((item) => item.id === id);
+        if (!s) return null;
+        return {
+          id: s.id,
+          name: s.name,
+          price: s.price || 0,
+          qty: 1,
+          category: s.category,
+          duration: s.duration,
+        };
+      })
+      .filter(Boolean) as SelectedServiceItem[];
+  }, [propSelectedServices, selectedServiceIds, services]);
 
-  // Suma total calculada de los servicios seleccionados
+  // Suma total calculada de los servicios seleccionados considerando cantidad (price * qty)
   const totalSelectedPrice = useMemo(() => {
-    return selectedServices.reduce((sum, s) => sum + (s.price || 0), 0);
-  }, [selectedServices]);
+    return currentSelected.reduce((sum, s) => sum + (s.price || 0) * (s.qty || 1), 0);
+  }, [currentSelected]);
+
+  const totalSelectedQty = useMemo(() => {
+    return currentSelected.reduce((sum, s) => sum + (s.qty || 1), 0);
+  }, [currentSelected]);
 
   // Lista de categorías únicas disponibles con contador
   const categories = useMemo(() => {
@@ -50,7 +82,7 @@ export default function ServiceSearchSelect({
     return Array.from(map.entries()).map(([name, count]) => ({ name, count }));
   }, [services]);
 
-  // Cerrar al tocar o hacer clic afuera (mouse + touch para tablets)
+  // Cerrar al tocar o hacer clic afuera (mouse + touch para tablets y celulares)
   useEffect(() => {
     function handleClickOutside(e: MouseEvent | TouchEvent) {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
@@ -104,23 +136,48 @@ export default function ServiceSearchSelect({
   }, [filteredServices]);
 
   // Alternar selección de un servicio (agregar o quitar)
-  const toggleService = (s: ServiceItem) => {
-    let nextIds: string[];
-    if (selectedServiceIds.includes(s.id)) {
-      nextIds = selectedServiceIds.filter((id) => id !== s.id);
+  const handleToggleService = (s: ServiceItem) => {
+    const existing = currentSelected.find((item) => item.id === s.id);
+    let next: SelectedServiceItem[];
+    if (existing) {
+      next = currentSelected.filter((item) => item.id !== s.id);
     } else {
-      nextIds = [...selectedServiceIds, s.id];
+      next = [
+        ...currentSelected,
+        {
+          id: s.id,
+          name: s.name,
+          price: s.price || 0,
+          qty: 1,
+          category: s.category,
+          duration: s.duration,
+        },
+      ];
     }
-    const nextServices = services.filter((item) => nextIds.includes(item.id));
-    onChange(nextIds, nextServices);
+    onChange(next.map((i) => i.id), next);
+  };
+
+  // Cambiar cantidad (+ o -) de un servicio seleccionado
+  const handleUpdateQty = (sId: string, delta: number, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const next = currentSelected
+      .map((item) => {
+        if (item.id === sId) {
+          const newQty = (item.qty || 1) + delta;
+          return newQty > 0 ? { ...item, qty: newQty } : null;
+        }
+        return item;
+      })
+      .filter(Boolean) as SelectedServiceItem[];
+
+    onChange(next.map((i) => i.id), next);
   };
 
   // Quitar un servicio específico desde los chips
-  const removeService = (sId: string, e?: React.MouseEvent) => {
+  const handleRemoveService = (sId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    const nextIds = selectedServiceIds.filter((id) => id !== sId);
-    const nextServices = services.filter((item) => nextIds.includes(item.id));
-    onChange(nextIds, nextServices);
+    const next = currentSelected.filter((item) => item.id !== sId);
+    onChange(next.map((i) => i.id), next);
   };
 
   // Limpiar todos
@@ -155,8 +212,8 @@ export default function ServiceSearchSelect({
             if (!isOpen) setIsOpen(true);
           }}
           placeholder={
-            selectedServices.length > 0
-              ? `Buscar más servicios... (${selectedServices.length} seleccionados)`
+            currentSelected.length > 0
+              ? `Buscar más servicios... (${totalSelectedQty} items seleccionados)`
               : placeholder
           }
           className="w-full bg-transparent pl-9 pr-16 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none"
@@ -164,7 +221,7 @@ export default function ServiceSearchSelect({
 
         {/* Indicador de cantidad o botón limpiar */}
         <div className="absolute right-2 flex items-center gap-1">
-          {selectedServices.length > 0 && (
+          {currentSelected.length > 0 && (
             <button
               type="button"
               onClick={clearAll}
@@ -179,18 +236,18 @@ export default function ServiceSearchSelect({
             onClick={() => setIsOpen(!isOpen)}
             className="text-[10px] bg-primary/10 text-primary font-bold px-2 py-0.5 rounded-full hover:bg-primary/20 transition-colors"
           >
-            {selectedServices.length > 0 ? `${selectedServices.length} sel.` : "Elegir"}
+            {currentSelected.length > 0 ? `${totalSelectedQty} serv.` : "Elegir"}
           </button>
         </div>
       </div>
 
-      {/* Chips de servicios seleccionados (con tilde y botón para quitar) */}
-      {selectedServices.length > 0 && (
+      {/* Chips de servicios seleccionados (con selector de cantidad + y - y botón para quitar) */}
+      {currentSelected.length > 0 && (
         <div className="bg-muted/30 border border-border/50 rounded-md p-2 space-y-1.5">
           <div className="flex items-center justify-between text-[11px]">
             <span className="font-semibold text-foreground flex items-center gap-1">
               <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block animate-pulse" />
-              {selectedServices.length} servicio{selectedServices.length !== 1 ? "s" : ""} seleccionado{selectedServices.length !== 1 ? "s" : ""}:
+              {currentSelected.length} servicio{currentSelected.length !== 1 ? "s" : ""} ({totalSelectedQty} unidades):
             </span>
             <span className="font-bold text-emerald-400 font-mono">
               Total: ${totalSelectedPrice.toLocaleString("es-AR")}
@@ -198,19 +255,46 @@ export default function ServiceSearchSelect({
           </div>
 
           <div className="flex flex-wrap gap-1.5">
-            {selectedServices.map((s) => (
+            {currentSelected.map((s) => (
               <span
                 key={s.id}
                 className="inline-flex items-center gap-1.5 bg-background border border-primary/30 text-foreground text-xs px-2 py-1 rounded shadow-xs"
               >
                 <Check size={11} className="text-primary flex-shrink-0" />
-                <span className="font-medium truncate max-w-[200px]">{s.name}</span>
-                <span className="text-[10px] text-muted-foreground font-mono">
-                  ${s.price.toLocaleString("es-AR")}
+                <span className="font-medium truncate max-w-[170px]">{s.name}</span>
+
+                {/* Control de Cantidad (+ y -) */}
+                <div
+                  className="flex items-center gap-1 bg-muted/70 border border-border/60 rounded px-1 py-0.5"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    onClick={(e) => handleUpdateQty(s.id, -1, e)}
+                    className="p-0.5 hover:bg-background rounded text-muted-foreground hover:text-foreground transition-colors"
+                    title="Restar cantidad"
+                  >
+                    <Minus size={10} />
+                  </button>
+                  <span className="text-[11px] font-bold text-foreground font-mono min-w-[14px] text-center">
+                    {s.qty || 1}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={(e) => handleUpdateQty(s.id, 1, e)}
+                    className="p-0.5 hover:bg-background rounded text-muted-foreground hover:text-foreground transition-colors"
+                    title="Sumar cantidad (ej: 2 soft gel)"
+                  >
+                    <Plus size={10} />
+                  </button>
+                </div>
+
+                <span className="text-[10px] text-emerald-400 font-mono font-bold">
+                  ${((s.price || 0) * (s.qty || 1)).toLocaleString("es-AR")}
                 </span>
                 <button
                   type="button"
-                  onClick={(e) => removeService(s.id, e)}
+                  onClick={(e) => handleRemoveService(s.id, e)}
                   className="text-muted-foreground hover:text-red-400 p-0.5 rounded transition-colors"
                   title="Quitar servicio"
                 >
@@ -222,7 +306,7 @@ export default function ServiceSearchSelect({
         </div>
       )}
 
-      {/* Menú desplegable con Checkboxes (Cajitas con tilde) */}
+      {/* Menú desplegable con Checkboxes y controles de cantidad */}
       {isOpen && (
         <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-card border border-border rounded-md shadow-2xl max-h-80 flex flex-col overflow-hidden animate-in fade-in-50 zoom-in-95 duration-100">
           {/* Barra de Categorías */}
@@ -257,7 +341,7 @@ export default function ServiceSearchSelect({
             </div>
           </div>
 
-          {/* Lista de servicios con Cajita con Tilde (Checkboxes) */}
+          {/* Lista de servicios con Cajita con Tilde y selector de cantidad */}
           <div className="flex-1 overflow-y-auto p-1.5 space-y-2.5 scrollbar-thin">
             {filteredServices.length === 0 ? (
               <div className="py-6 px-3 text-center text-xs text-muted-foreground">
@@ -283,42 +367,83 @@ export default function ServiceSearchSelect({
                   </div>
 
                   {servList.map((s) => {
-                    const isChecked = selectedServiceIds.includes(s.id);
+                    const selectedItem = currentSelected.find((item) => item.id === s.id);
+                    const isChecked = !!selectedItem;
+
                     return (
                       <div
                         key={s.id}
-                        onClick={() => toggleService(s)}
-                        className={`w-full text-left px-3 py-2.5 rounded-sm text-xs flex items-center gap-3 transition-colors cursor-pointer select-none ${
+                        onClick={() => handleToggleService(s)}
+                        className={`w-full text-left px-3 py-2 rounded-sm text-xs flex items-center justify-between gap-3 transition-colors cursor-pointer select-none ${
                           isChecked
                             ? "bg-primary/15 border border-primary/30"
                             : "hover:bg-accent/40 border border-transparent"
                         }`}
                       >
-                        {/* Cajita con tilde (Checkbox visual) */}
-                        <div
-                          className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 transition-all ${
-                            isChecked
-                              ? "bg-primary text-primary-foreground shadow-xs"
-                              : "border border-border bg-background"
-                          }`}
-                        >
-                          {isChecked && <Check size={12} strokeWidth={3} />}
-                        </div>
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          {/* Cajita con tilde (Checkbox visual) */}
+                          <div
+                            className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 transition-all ${
+                              isChecked
+                                ? "bg-primary text-primary-foreground shadow-xs"
+                                : "border border-border bg-background"
+                            }`}
+                          >
+                            {isChecked && <Check size={12} strokeWidth={3} />}
+                          </div>
 
-                        <div className="min-w-0 flex-1">
-                          <p className={`truncate ${isChecked ? "font-bold text-foreground" : "font-medium text-foreground/90"}`}>
-                            {s.name}
-                          </p>
-                          {s.duration && (
-                            <p className="text-[10px] text-muted-foreground truncate">
-                              ⏱️ {s.duration} min
+                          <div className="min-w-0 flex-1">
+                            <p
+                              className={`truncate ${
+                                isChecked ? "font-bold text-foreground" : "font-medium text-foreground/90"
+                              }`}
+                            >
+                              {s.name}
                             </p>
-                          )}
+                            {s.duration && (
+                              <p className="text-[10px] text-muted-foreground truncate">
+                                ⏱️ {s.duration} min
+                              </p>
+                            )}
+                          </div>
                         </div>
 
-                        <span className="text-xs font-bold text-foreground font-mono flex-shrink-0">
-                          ${s.price.toLocaleString("es-AR")}
-                        </span>
+                        {/* Controles de cantidad en la fila */}
+                        {isChecked ? (
+                          <div
+                            className="flex items-center gap-2 flex-shrink-0"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div className="flex items-center gap-1 bg-background border border-primary/40 rounded px-1 py-0.5">
+                              <button
+                                type="button"
+                                onClick={(e) => handleUpdateQty(s.id, -1, e)}
+                                className="p-0.5 hover:bg-muted rounded text-muted-foreground hover:text-foreground transition-colors"
+                                title="Restar cantidad"
+                              >
+                                <Minus size={10} />
+                              </button>
+                              <span className="text-[11px] font-bold text-primary font-mono min-w-[14px] text-center">
+                                {selectedItem.qty || 1}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => handleUpdateQty(s.id, 1, e)}
+                                className="p-0.5 hover:bg-muted rounded text-muted-foreground hover:text-foreground transition-colors"
+                                title="Sumar cantidad"
+                              >
+                                <Plus size={10} />
+                              </button>
+                            </div>
+                            <span className="text-xs font-bold text-emerald-400 font-mono min-w-[65px] text-right">
+                              ${((s.price || 0) * (selectedItem.qty || 1)).toLocaleString("es-AR")}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-xs font-bold text-foreground font-mono flex-shrink-0">
+                            ${(s.price || 0).toLocaleString("es-AR")}
+                          </span>
+                        )}
                       </div>
                     );
                   })}
@@ -330,10 +455,12 @@ export default function ServiceSearchSelect({
           {/* Footer del dropdown con resumen y botón Listo */}
           <div className="p-2 border-t border-border bg-muted/30 flex items-center justify-between gap-2">
             <div className="text-[11px] truncate">
-              {selectedServices.length > 0 ? (
+              {currentSelected.length > 0 ? (
                 <span>
-                  <strong className="text-foreground">{selectedServices.length}</strong> tildado{selectedServices.length !== 1 ? "s" : ""} · Total:{" "}
-                  <strong className="text-emerald-400 font-mono">${totalSelectedPrice.toLocaleString("es-AR")}</strong>
+                  <strong className="text-foreground">{totalSelectedQty}</strong> seleccionados · Total:{" "}
+                  <strong className="text-emerald-400 font-mono">
+                    ${totalSelectedPrice.toLocaleString("es-AR")}
+                  </strong>
                 </span>
               ) : (
                 <span className="text-muted-foreground">Tildá los servicios que se realizó</span>
@@ -345,7 +472,7 @@ export default function ServiceSearchSelect({
               onClick={() => setIsOpen(false)}
               className="bg-primary text-primary-foreground text-xs font-semibold px-4 py-1.5 rounded-sm hover:bg-primary/90 transition-colors shadow-xs"
             >
-              Listo ({selectedServices.length})
+              Listo ({totalSelectedQty})
             </button>
           </div>
         </div>

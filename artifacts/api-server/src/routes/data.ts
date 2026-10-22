@@ -1098,13 +1098,15 @@ router.get("/expenses", requireAuth, async (req, res) => {
 
 router.post("/expenses", requireAuth, async (req, res) => {
   try {
-    const { concept, amount, category, date, professionalId } = req.body;
+    const { concept, amount, category, paymentMethod, date, professionalId } = req.body;
     if (!concept || amount === undefined || !date) {
       return res.status(400).json({ error: "Missing required fields" });
     }
     const id = randomUUID();
     await db.insert(expenses).values({
-      id, concept, amount: Number(amount), category, date, professionalId,
+      id, concept, amount: Number(amount), category,
+      paymentMethod: paymentMethod || "Efectivo",
+      date, professionalId,
       createdAt: new Date(),
     });
     const [created] = await db.select().from(expenses).where(eq(expenses.id, id)).limit(1);
@@ -1127,11 +1129,12 @@ router.delete("/expenses/:id", requireAuth, async (req, res) => {
 router.put("/expenses/:id", requireAuth, async (req, res) => {
   try {
     const { id } = req.params as { id: string };
-    const { concept, amount, category, date, professionalId } = req.body;
+    const { concept, amount, category, paymentMethod, date, professionalId } = req.body;
     await db.update(expenses).set({
       concept: concept !== undefined ? concept : undefined,
       amount: amount !== undefined ? Number(amount) : undefined,
       category: category !== undefined ? category : undefined,
+      paymentMethod: paymentMethod !== undefined ? paymentMethod : undefined,
       date: date !== undefined ? date : undefined,
       professionalId: professionalId !== undefined ? professionalId : undefined,
     }).where(eq(expenses.id, id));
@@ -1145,11 +1148,12 @@ router.put("/expenses/:id", requireAuth, async (req, res) => {
 router.patch("/expenses/:id", requireAuth, async (req, res) => {
   try {
     const { id } = req.params as { id: string };
-    const { concept, amount, category, date, professionalId } = req.body;
+    const { concept, amount, category, paymentMethod, date, professionalId } = req.body;
     await db.update(expenses).set({
       concept: concept !== undefined ? concept : undefined,
       amount: amount !== undefined ? Number(amount) : undefined,
       category: category !== undefined ? category : undefined,
+      paymentMethod: paymentMethod !== undefined ? paymentMethod : undefined,
       date: date !== undefined ? date : undefined,
       professionalId: professionalId !== undefined ? professionalId : undefined,
     }).where(eq(expenses.id, id));

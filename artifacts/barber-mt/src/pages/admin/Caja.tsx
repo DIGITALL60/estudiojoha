@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ChevronRight, ChevronDown, Download, Wallet, Plus, Trash2, Pencil, TrendingUp, TrendingDown, BarChart3, Tag, Check, X, Calendar as CalendarIcon, Package } from "lucide-react";
 import AdminLayout from "./AdminLayout";
 import ClientSearchSelect from "@/components/ClientSearchSelect";
-import ServiceSearchSelect from "@/components/ServiceSearchSelect";
+import ServiceSearchSelect, { type SelectedServiceItem } from "@/components/ServiceSearchSelect";
 import ProductSearchSelect, { SelectedProductItem, ProductItem } from "@/components/ProductSearchSelect";
 import CalendarPopover from "@/components/CalendarPopover";
 import { fetchAPI } from "@/lib/api";
@@ -19,7 +19,7 @@ interface Client { id: string; name: string; phone: string; }
 interface Service { id: string; name: string; price: number; category?: string; duration?: number; }
 
 interface ExpenseRow {
-  id: string; concept: string; amount: number; category: string; date: string; professionalId?: string;
+  id: string; concept: string; amount: number; category: string; paymentMethod?: string; date: string; professionalId?: string;
 }
 
 const EXPENSE_CATEGORIES = [
@@ -33,11 +33,21 @@ const CATEGORY_ICONS: Record<string, string> = {
   "General": "📋", "Otros": "📌"
 };
 
+const VIRTUAL_WALLETS = [
+  "Mercado Pago",
+  "Banco de Córdoba",
+  "Naranja X",
+  "Ualá",
+  "Personal Pay",
+  "Cuenta DNI",
+  "Otra Billetera"
+];
+
 export default function Caja() {
   const [appointments, setAppointments] = useState<AppointmentRow[]>([]);
   const [expenses, setExpenses] = useState<ExpenseRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [newExpense, setNewExpense] = useState({ concept: "", amount: "", category: "General" });
+  const [newExpense, setNewExpense] = useState({ concept: "", amount: "", category: "General", paymentMethod: "Efectivo", wallet: "Mercado Pago" });
   const [showExpenseForm, setShowExpenseForm] = useState(false);
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -48,6 +58,7 @@ export default function Caja() {
   const [quickAction, setQuickAction] = useState<"cobro" | "shop" | "egreso">("cobro");
   const [newQuickApp, setNewQuickApp] = useState({ clientId: "", professionalId: "", serviceId: "", amount: "", paymentMethod: "Efectivo", time: "10:00" });
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
+  const [selectedServicesWithQty, setSelectedServicesWithQty] = useState<SelectedServiceItem[]>([]);
   const [bankAccount, setBankAccount] = useState("Banco de Córdoba");
   const [viewReceipt, setViewReceipt] = useState<string | null>(null);
 
@@ -57,6 +68,8 @@ export default function Caja() {
     concept: string;
     amount: string;
     category: string;
+    paymentMethod: string;
+    wallet: string;
     date: string;
   } | null>(null);
 
@@ -90,11 +103,12 @@ export default function Caja() {
   const [voucherError, setVoucherError] = useState("");
 
   const chosenServices = useMemo(() => {
-    return services.filter(s => selectedServiceIds.includes(s.id));
-  }, [services, selectedServiceIds]);
+    if (selectedServicesWithQty.length > 0) return selectedServicesWithQty;
+    return services.filter(s => selectedServiceIds.includes(s.id)).map(s => ({ ...s, qty: 1 }));
+  }, [services, selectedServiceIds, selectedServicesWithQty]);
 
   const servicesSubtotal = useMemo(() => {
-    return chosenServices.reduce((acc, s) => acc + (s.price || 0), 0);
+    return chosenServices.reduce((acc, s) => acc + (s.price || 0) * (s.qty || 1), 0);
   }, [chosenServices]);
 
   const productsSubtotal = useMemo(() => {
@@ -314,6 +328,10 @@ export default function Caja() {
 
   const handleAddExpense = async () => {
     if (!newExpense.concept || !newExpense.amount) return;
+    const finalMethod = newExpense.paymentMethod === "Transferencia"
+      ? `Transferencia (${newExpense.wallet || "Mercado Pago"})`
+      : newExpense.paymentMethod;
+
     try {
       await fetchAPI("/api/data/expenses", {
         method: "POST",
@@ -322,10 +340,11 @@ export default function Caja() {
           concept: newExpense.concept,
           amount: Number(newExpense.amount),
           category: newExpense.category,
+          paymentMethod: finalMethod,
           date: selectedDate,
         }),
       });
-      setNewExpense({ concept: "", amount: "", category: "General" });
+      setNewExpense({ concept: "", amount: "", category: "General", paymentMethod: "Efectivo", wallet: "Mercado Pago" });
       setShowExpenseForm(false);
       loadData();
     } catch {
@@ -424,22 +443,25 @@ export default function Caja() {
       return;
     }
 
-    // SI ES COBRO DE SERVICIOS
-    const chosenServices = services.filter(s => selectedServiceIds.includes(s.id));
+    // SI ES COBRO DE SERVICIOS (Con soporte para cantidad: ej: 2 soft gel)
+    const chosen = selectedServicesWithQty.length > 0
+      ? selectedServicesWithQty
+      : services.filter(s => selectedServiceIds.includes(s.id)).map(s => ({ ...s, qty: 1 }));
     const totalEntered = Number(newQuickApp.amount);
-    const originalSum = chosenServices.reduce((acc, s) => acc + (s.price || 0), 0);
+    const originalSum = chosen.reduce((acc, s) => acc + (s.price || 0) * (s.qty || 1), 0);
 
-    // Calcular distribución de precios si hay múltiples servicios
-    const prices = chosenServices.map((s, idx) => {
-      if (chosenServices.length === 1) return totalEntered;
-      if (originalSum === 0) return Math.round(totalEntered / chosenServices.length);
-      if (idx === chosenServices.length - 1) {
-        const previousSums = chosenServices
+    // Calcular distribución de precios si hay múltiples servicios o cantidades
+    const prices = chosen.map((s, idx) => {
+      const sItemTotal = (s.price || 0) * (s.qty || 1);
+      if (chosen.length === 1) return totalEntered;
+      if (originalSum === 0) return Math.round(totalEntered / chosen.length);
+      if (idx === chosen.length - 1) {
+        const previousSums = chosen
           .slice(0, -1)
-          .reduce((acc, prevS) => acc + Math.round((prevS.price / originalSum) * totalEntered), 0);
+          .reduce((acc, prevS) => acc + Math.round((((prevS.price || 0) * (prevS.qty || 1)) / originalSum) * totalEntered), 0);
         return totalEntered - previousSums;
       }
-      return Math.round((s.price / originalSum) * totalEntered);
+      return Math.round((sItemTotal / originalSum) * totalEntered);
     });
 
     let discountNote = "";
@@ -449,8 +471,11 @@ export default function Caja() {
 
     try {
       await Promise.all(
-        chosenServices.map((srv, idx) =>
-          fetchAPI("/api/data/appointments", {
+        chosen.map((srv, idx) => {
+          const qtyNote = (srv.qty || 1) > 1 ? `[CANTIDAD: ${srv.qty}]` : "";
+          const combinedNotes = [qtyNote, discountNote].filter(Boolean).join(" ");
+
+          return fetchAPI("/api/data/appointments", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -459,15 +484,15 @@ export default function Caja() {
               serviceId: srv.id,
               date: selectedDate,
               time: newQuickApp.time,
-              duration: srv.duration || 30,
+              duration: (srv.duration || 30) * (srv.qty || 1),
               price: prices[idx],
               shopSales: 0,
               status: "completado",
               paymentMethod: newQuickApp.paymentMethod === "Transferencia" ? `Transferencia (${bankAccount})` : newQuickApp.paymentMethod,
-              notes: discountNote || undefined,
+              notes: combinedNotes || undefined,
             }),
-          })
-        )
+          });
+        })
       );
 
       // Si fue un cupón oficial de base de datos, canjearlo
@@ -483,6 +508,7 @@ export default function Caja() {
       }
 
       setSelectedServiceIds([]);
+      setSelectedServicesWithQty([]);
       setAppliedDiscount(null);
       setDiscountInput("");
       setVoucherError("");
@@ -515,6 +541,10 @@ export default function Caja() {
       return;
     }
 
+    const finalMethod = editingExpense.paymentMethod === "Transferencia"
+      ? `Transferencia (${editingExpense.wallet || "Mercado Pago"})`
+      : editingExpense.paymentMethod;
+
     try {
       await fetchAPI(`/api/data/expenses/${editingExpense.id}`, {
         method: "PUT",
@@ -523,6 +553,7 @@ export default function Caja() {
           concept: editingExpense.concept.trim(),
           amount: Number(editingExpense.amount),
           category: editingExpense.category,
+          paymentMethod: finalMethod,
           date: editingExpense.date,
         }),
       });
@@ -737,33 +768,75 @@ export default function Caja() {
                 {showExpenseForm && (
                   <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}
                     className="overflow-hidden">
-                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 mb-4 p-3 bg-background border border-border/50 rounded-lg">
-                      <input
-                        placeholder="Concepto (ej: Gas de agosto)"
-                        value={newExpense.concept}
-                        onChange={e => setNewExpense(f => ({ ...f, concept: e.target.value }))}
-                        className="sm:col-span-1 bg-card border border-border rounded-sm px-3 py-2 text-xs"
-                      />
-                      <select
-                        value={newExpense.category}
-                        onChange={e => setNewExpense(f => ({ ...f, category: e.target.value }))}
-                        className="bg-card border border-border rounded-sm px-3 py-2 text-xs"
-                      >
-                        {EXPENSE_CATEGORIES.map(c => (
-                          <option key={c} value={c}>{CATEGORY_ICONS[c]} {c}</option>
-                        ))}
-                      </select>
-                      <div className="relative flex items-center">
-                        <span className="absolute left-3 text-muted-foreground text-xs font-semibold">$</span>
+                    <div className="p-3.5 bg-background border border-border/60 rounded-xl space-y-2.5 mb-4 shadow-xs">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                         <input
-                          type="number" placeholder="Monto" value={newExpense.amount}
-                          onChange={e => setNewExpense(f => ({ ...f, amount: e.target.value }))}
-                          className="w-full bg-card border border-border rounded-sm pl-7 pr-3 py-2 text-xs focus:border-primary focus:outline-none"
+                          placeholder="Concepto (ej: Pago Mili, Insumos, Gas)"
+                          value={newExpense.concept}
+                          onChange={e => setNewExpense(f => ({ ...f, concept: e.target.value }))}
+                          className="bg-card border border-border rounded-md px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none"
                         />
+                        <select
+                          value={newExpense.category}
+                          onChange={e => setNewExpense(f => ({ ...f, category: e.target.value }))}
+                          className="bg-card border border-border rounded-md px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none"
+                        >
+                          {EXPENSE_CATEGORIES.map(c => (
+                            <option key={c} value={c}>{CATEGORY_ICONS[c]} {c}</option>
+                          ))}
+                        </select>
+                        <div className="relative flex items-center">
+                          <span className="absolute left-3 text-muted-foreground text-xs font-semibold">$</span>
+                          <input
+                            type="number"
+                            placeholder="Monto"
+                            value={newExpense.amount}
+                            onChange={e => setNewExpense(f => ({ ...f, amount: e.target.value }))}
+                            className="w-full bg-card border border-border rounded-md pl-7 pr-3 py-2 text-xs font-semibold text-foreground focus:border-primary focus:outline-none"
+                          />
+                        </div>
                       </div>
-                      <button onClick={handleAddExpense} className="bg-primary text-primary-foreground text-xs px-4 py-2 rounded-sm font-semibold">
-                        Guardar
-                      </button>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 items-center">
+                        <div>
+                          <select
+                            value={newExpense.paymentMethod}
+                            onChange={e => setNewExpense(f => ({ ...f, paymentMethod: e.target.value }))}
+                            className="w-full bg-card border border-border rounded-md px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none"
+                          >
+                            <option value="Efectivo">💵 Efectivo</option>
+                            <option value="Transferencia">📱 Transferencia / Billetera</option>
+                            <option value="Tarjeta">💳 Tarjeta</option>
+                          </select>
+                        </div>
+
+                        {newExpense.paymentMethod === "Transferencia" ? (
+                          <div>
+                            <select
+                              value={newExpense.wallet}
+                              onChange={e => setNewExpense(f => ({ ...f, wallet: e.target.value }))}
+                              className="w-full bg-card border border-primary/50 text-foreground font-medium rounded-md px-3 py-2 text-xs focus:border-primary focus:outline-none"
+                            >
+                              {VIRTUAL_WALLETS.map(w => (
+                                <option key={w} value={w}>📱 {w}</option>
+                              ))}
+                            </select>
+                          </div>
+                        ) : (
+                          <div className="text-[11px] text-muted-foreground px-1 hidden sm:block">
+                            Salida de caja en efectivo
+                          </div>
+                        )}
+
+                        <div className="sm:text-right">
+                          <button
+                            onClick={handleAddExpense}
+                            className="w-full sm:w-auto bg-primary text-primary-foreground text-xs px-5 py-2 rounded-md font-semibold hover:bg-primary/90 transition-colors shadow-xs"
+                          >
+                            Guardar Egreso
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </motion.div>
                 )}
@@ -777,13 +850,29 @@ export default function Caja() {
                         <div>
                           <span className="font-medium text-foreground">{e.concept}</span>
                           <span className="text-muted-foreground ml-2 text-[10px] uppercase tracking-wider bg-border/30 px-1.5 py-0.5 rounded">{e.category}</span>
+                          <span className="ml-1.5 text-[10px] uppercase tracking-wider bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 rounded font-medium">
+                            {e.paymentMethod || "Efectivo"}
+                          </span>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="font-semibold text-red-400">$ {e.amount.toLocaleString("es-AR")}</span>
                         <button
                           type="button"
-                          onClick={() => setEditingExpense({ ...e, amount: String(e.amount) })}
+                          onClick={() => {
+                            const isTransfer = (e.paymentMethod || "").startsWith("Transferencia");
+                            const walletName = isTransfer && e.paymentMethod?.includes("(")
+                              ? e.paymentMethod.replace("Transferencia (", "").replace(")", "").trim()
+                              : "Mercado Pago";
+                            const mainMethod = isTransfer ? "Transferencia" : (e.paymentMethod || "Efectivo");
+
+                            setEditingExpense({
+                              ...e,
+                              amount: String(e.amount),
+                              paymentMethod: mainMethod,
+                              wallet: walletName,
+                            });
+                          }}
                           className="p-1.5 text-muted-foreground hover:text-primary transition-colors rounded hover:bg-accent/15"
                           title="Editar egreso"
                         >
@@ -856,6 +945,8 @@ export default function Caja() {
                         } catch {}
                       }
                       const isPureShop = (a.shopSales || 0) > 0 && a.price === 0;
+                      const qtyMatch = a.notes?.match(/\[CANTIDAD:\s*(\d+)\]/);
+                      const qtyText = qtyMatch ? ` (x${qtyMatch[1]})` : "";
 
                       return (
                         <tr key={i} className="border-b border-border/20 last:border-0 hover:bg-accent/5 transition-colors">
@@ -868,7 +959,9 @@ export default function Caja() {
                                     🛍️ {shopProductsDesc || "Venta Shop"}
                                   </span>
                                 ) : (
-                                  a.serviceName
+                                  <span className="font-medium text-foreground/90">
+                                    {a.serviceName}{qtyText}
+                                  </span>
                                 )}
                               </span>
                               {discountMatch && (
@@ -1021,7 +1114,7 @@ export default function Caja() {
 
               {quickAction === "egreso" ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <input placeholder="Concepto (ej: Gas de agosto)" value={newExpense.concept} onChange={e => setNewExpense(f => ({ ...f, concept: e.target.value }))} className="bg-background border border-border rounded-md px-3 py-2 text-xs" />
+                  <input placeholder="Concepto (ej: Pago Gas, Insumos, Sueldo)" value={newExpense.concept} onChange={e => setNewExpense(f => ({ ...f, concept: e.target.value }))} className="bg-background border border-border rounded-md px-3 py-2 text-xs" />
                   <select value={newExpense.category} onChange={e => setNewExpense(f => ({ ...f, category: e.target.value }))} className="bg-background border border-border rounded-md px-3 py-2 text-xs">
                     {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{CATEGORY_ICONS[c]} {c}</option>)}
                   </select>
@@ -1029,7 +1122,37 @@ export default function Caja() {
                     <span className="absolute left-3 text-muted-foreground text-xs font-semibold">$</span>
                     <input type="number" placeholder="Monto" value={newExpense.amount} onChange={e => setNewExpense(f => ({ ...f, amount: e.target.value }))} className="w-full bg-background border border-border rounded-md pl-7 pr-3 py-2 text-xs focus:border-primary focus:outline-none" />
                   </div>
-                  <button onClick={handleAddExpense} className="bg-primary text-primary-foreground text-xs px-4 py-2 rounded-md font-semibold hover:bg-primary/90 transition-colors">Guardar Egreso</button>
+
+                  {/* Selector Forma de Egreso / Billetera */}
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <select
+                      value={newExpense.paymentMethod}
+                      onChange={e => setNewExpense(f => ({ ...f, paymentMethod: e.target.value }))}
+                      className="flex-1 bg-background border border-border rounded-md px-3 py-2 text-xs"
+                    >
+                      <option value="Efectivo">💵 Efectivo</option>
+                      <option value="Transferencia">📱 Transferencia / Billetera</option>
+                      <option value="Tarjeta">💳 Tarjeta</option>
+                    </select>
+
+                    {newExpense.paymentMethod === "Transferencia" && (
+                      <select
+                        value={newExpense.wallet}
+                        onChange={e => setNewExpense(f => ({ ...f, wallet: e.target.value }))}
+                        className="flex-1 bg-background border border-primary/50 text-foreground font-medium rounded-md px-2.5 py-2 text-xs focus:border-primary focus:outline-none animate-in fade-in-50 duration-150"
+                      >
+                        {VIRTUAL_WALLETS.map(w => (
+                          <option key={w} value={w}>📱 {w}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+
+                  <div className="sm:col-span-2 pt-1">
+                    <button onClick={handleAddExpense} className="w-full bg-primary text-primary-foreground text-xs px-4 py-2.5 rounded-md font-semibold hover:bg-primary/90 transition-colors shadow-sm">
+                      Guardar Egreso
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1092,9 +1215,11 @@ export default function Caja() {
                       <ServiceSearchSelect
                         services={services}
                         selectedServiceIds={selectedServiceIds}
+                        selectedServices={selectedServicesWithQty}
                         onChange={(ids, selectedSrvs) => {
                           setSelectedServiceIds(ids);
-                          const sum = selectedSrvs.reduce((acc, s) => acc + (s.price || 0), 0);
+                          setSelectedServicesWithQty(selectedSrvs);
+                          const sum = selectedSrvs.reduce((acc, s) => acc + (s.price || 0) * (s.qty || 1), 0);
                           if (appliedDiscount) {
                             let saved = 0;
                             if (appliedDiscount.type === "percent") {
@@ -1116,7 +1241,7 @@ export default function Caja() {
                             }));
                           }
                         }}
-                        placeholder="🔍 Buscar servicios con tildes (podés tildar varios: cejas, uñas, pies...)..."
+                        placeholder="🔍 Buscar servicios con tildes (podés tildar varios y elegir cantidad)..."
                       />
                     </div>
                   )}
@@ -1470,17 +1595,65 @@ export default function Caja() {
                   </div>
                 </div>
 
-                <div>
-                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">
-                    Fecha del egreso
-                  </label>
-                  <input
-                    type="date"
-                    value={editingExpense.date}
-                    onChange={e => setEditingExpense(prev => prev ? { ...prev, date: e.target.value } : null)}
-                    className="w-full bg-background border border-border/80 rounded-lg px-3.5 py-2 text-xs text-foreground focus:outline-none focus:border-primary transition-all"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">
+                      Forma de Egreso
+                    </label>
+                    <select
+                      value={editingExpense.paymentMethod}
+                      onChange={e => setEditingExpense(prev => prev ? { ...prev, paymentMethod: e.target.value } : null)}
+                      className="w-full bg-background border border-border/80 rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:border-primary transition-all"
+                    >
+                      <option value="Efectivo">💵 Efectivo</option>
+                      <option value="Transferencia">📱 Transferencia / Billetera</option>
+                      <option value="Tarjeta">💳 Tarjeta</option>
+                    </select>
+                  </div>
+
+                  {editingExpense.paymentMethod === "Transferencia" ? (
+                    <div>
+                      <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">
+                        Billetera Virtual / Banco
+                      </label>
+                      <select
+                        value={editingExpense.wallet}
+                        onChange={e => setEditingExpense(prev => prev ? { ...prev, wallet: e.target.value } : null)}
+                        className="w-full bg-background border border-primary/50 text-foreground font-medium rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-primary transition-all"
+                      >
+                        {VIRTUAL_WALLETS.map(w => (
+                          <option key={w} value={w}>📱 {w}</option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">
+                        Fecha del egreso
+                      </label>
+                      <input
+                        type="date"
+                        value={editingExpense.date}
+                        onChange={e => setEditingExpense(prev => prev ? { ...prev, date: e.target.value } : null)}
+                        className="w-full bg-background border border-border/80 rounded-lg px-3.5 py-2 text-xs text-foreground focus:outline-none focus:border-primary transition-all"
+                      />
+                    </div>
+                  )}
                 </div>
+
+                {editingExpense.paymentMethod === "Transferencia" && (
+                  <div>
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">
+                      Fecha del egreso
+                    </label>
+                    <input
+                      type="date"
+                      value={editingExpense.date}
+                      onChange={e => setEditingExpense(prev => prev ? { ...prev, date: e.target.value } : null)}
+                      className="w-full bg-background border border-border/80 rounded-lg px-3.5 py-2 text-xs text-foreground focus:outline-none focus:border-primary transition-all"
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border/50 bg-accent/5">
