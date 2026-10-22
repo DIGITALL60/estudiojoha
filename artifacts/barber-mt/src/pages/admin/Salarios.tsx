@@ -193,6 +193,10 @@ export default function Salarios() {
 
   const totalPayroll = staffPayroll.reduce((s, e) => s + e.totalEarned, 0);
   const totalRevenue = staffPayroll.reduce((s, e) => s + e.revenue, 0);
+  const totalShopSales = staffPayroll.reduce((s, e) => s + e.shopSales, 0);
+  const totalBaseSalary = staffPayroll.reduce((s, e) => s + e.baseSalary, 0);
+  const totalCommissionEarned = staffPayroll.reduce((s, e) => s + e.commissionEarned, 0);
+  const totalAppointments = staffPayroll.reduce((s, e) => s + e.appointments, 0);
 
   return (
     <AdminLayout
@@ -300,113 +304,169 @@ export default function Salarios() {
       </div>
 
       {/* Payroll table */}
-      <div className="bg-card border border-border rounded-sm overflow-hidden">
-        {/* Table header */}
-        <div className="px-4 py-3 border-b border-border/40 bg-muted/20 grid grid-cols-[auto_1fr_auto_auto_auto_auto_auto_auto_auto] gap-4 items-center">
-          <div />
-          <span className="text-[10px] font-bold tracking-widest uppercase text-muted-foreground">Profesional</span>
-          <span className="text-[10px] font-bold tracking-widest uppercase text-muted-foreground text-right">Turnos</span>
-          <span className="text-[10px] font-bold tracking-widest uppercase text-muted-foreground text-right hidden sm:block">%</span>
-          <span className="text-[10px] font-bold tracking-widest uppercase text-muted-foreground text-right hidden md:block">Vtas Shop</span>
-          <span className="text-[10px] font-bold tracking-widest uppercase text-muted-foreground text-right hidden md:block">Facturado</span>
-          <span className="text-[10px] font-bold tracking-widest uppercase text-muted-foreground text-right hidden md:block">Sueldo Fijo</span>
-          <span className="text-[10px] font-bold tracking-widest uppercase text-muted-foreground text-right hidden md:block">Comisión</span>
-          <span className="text-[10px] font-bold tracking-widest uppercase text-muted-foreground text-right">Total</span>
+      <div className="bg-card border border-border/80 rounded-xl overflow-hidden shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b border-border/60 bg-muted/30 text-[10px] font-bold tracking-wider uppercase text-muted-foreground">
+                <th className="py-3.5 px-5 text-left">Profesional</th>
+                <th className="py-3.5 px-3 text-center">Turnos</th>
+                <th className="py-3.5 px-3 text-center">% Comisión</th>
+                <th className="py-3.5 px-4 text-right">Vtas Shop</th>
+                <th className="py-3.5 px-4 text-right">Facturado</th>
+                <th className="py-3.5 px-4 text-right">Sueldo Fijo</th>
+                <th className="py-3.5 px-4 text-right">Comisión</th>
+                <th className="py-3.5 px-5 text-right font-extrabold text-foreground">Total a Pagar</th>
+              </tr>
+            </thead>
+
+            {loading ? (
+              <tbody>
+                <tr>
+                  <td colSpan={8} className="py-16 text-center text-xs text-muted-foreground">
+                    Cargando salarios del período...
+                  </td>
+                </tr>
+              </tbody>
+            ) : staffPayroll.length === 0 ? (
+              <tbody>
+                <tr>
+                  <td colSpan={8} className="py-16 text-center text-xs text-muted-foreground">
+                    No hay profesionales registradas.
+                  </td>
+                </tr>
+              </tbody>
+            ) : (
+              <tbody className="divide-y divide-border/20 text-xs">
+                {staffPayroll.map((emp) => (
+                  <tr
+                    key={emp.id}
+                    className="hover:bg-accent/5 transition-colors"
+                  >
+                    {/* Profesional */}
+                    <td className="py-3.5 px-5">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 shadow-sm"
+                          style={{
+                            backgroundColor: emp.color + "22",
+                            border: `1.5px solid ${emp.color}55`,
+                            color: emp.color,
+                          }}
+                        >
+                          {emp.initial}
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold text-foreground">{emp.name}</p>
+                          <p className="text-[10px] text-muted-foreground capitalize">{emp.role || "Profesional"}</p>
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* Turnos */}
+                    <td className="py-3.5 px-3 text-center">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-muted/40 text-foreground border border-border/40">
+                        <Calendar size={11} className="text-muted-foreground" />
+                        {emp.appointments}
+                      </span>
+                    </td>
+
+                    {/* % Comisión */}
+                    <td className="py-3.5 px-3 text-center">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold text-muted-foreground bg-accent/20">
+                        {emp.commission}%
+                      </span>
+                    </td>
+
+                    {/* Vtas Shop */}
+                    <td className="py-3.5 px-4 text-right">
+                      <div className="flex flex-col items-end">
+                        <span className="font-medium text-foreground">
+                          ${emp.shopSales.toLocaleString("es-AR")}
+                        </span>
+                        {emp.salesTarget > 0 && (
+                          <span
+                            className={`text-[9px] font-semibold mt-0.5 px-1.5 py-0.5 rounded ${
+                              emp.shopSales >= emp.salesTarget
+                                ? "text-emerald-500 bg-emerald-500/10"
+                                : "text-amber-500 bg-amber-500/10"
+                            }`}
+                          >
+                            Obj: ${emp.salesTarget.toLocaleString("es-AR")}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* Facturado */}
+                    <td className="py-3.5 px-4 text-right">
+                      <span className="font-medium text-foreground">
+                        {emp.revenue > 0 ? `$${emp.revenue.toLocaleString("es-AR")}` : "—"}
+                      </span>
+                    </td>
+
+                    {/* Sueldo Fijo */}
+                    <td className="py-3.5 px-4 text-right">
+                      <span className="text-muted-foreground">
+                        {emp.baseSalary > 0 ? `$${emp.baseSalary.toLocaleString("es-AR")}` : "—"}
+                      </span>
+                    </td>
+
+                    {/* Comisión */}
+                    <td className="py-3.5 px-4 text-right">
+                      <span className={emp.commissionEarned > 0 ? "font-semibold text-emerald-500" : "text-muted-foreground"}>
+                        {emp.commissionEarned > 0 ? `$${emp.commissionEarned.toLocaleString("es-AR")}` : "—"}
+                      </span>
+                    </td>
+
+                    {/* Total a Pagar */}
+                    <td className="py-3.5 px-5 text-right">
+                      <span
+                        className={`inline-block font-bold text-sm ${
+                          emp.totalEarned > 0 ? "text-emerald-500" : "text-muted-foreground"
+                        }`}
+                      >
+                        ${emp.totalEarned.toLocaleString("es-AR")}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            )}
+
+            {/* Total row */}
+            {!loading && staffPayroll.length > 0 && (
+              <tfoot>
+                <tr className="border-t-2 border-primary/20 bg-primary/5 text-xs font-bold text-foreground">
+                  <td className="py-3.5 px-5">
+                    <span className="font-bold text-foreground uppercase tracking-wider text-[11px]">Total General</span>
+                  </td>
+                  <td className="py-3.5 px-3 text-center">
+                    <span className="font-semibold text-muted-foreground">{totalAppointments} turnos</span>
+                  </td>
+                  <td className="py-3.5 px-3 text-center text-muted-foreground">—</td>
+                  <td className="py-3.5 px-4 text-right text-muted-foreground">
+                    ${totalShopSales.toLocaleString("es-AR")}
+                  </td>
+                  <td className="py-3.5 px-4 text-right text-foreground font-semibold">
+                    ${totalRevenue.toLocaleString("es-AR")}
+                  </td>
+                  <td className="py-3.5 px-4 text-right text-muted-foreground">
+                    {totalBaseSalary > 0 ? `$${totalBaseSalary.toLocaleString("es-AR")}` : "—"}
+                  </td>
+                  <td className="py-3.5 px-4 text-right text-emerald-500 font-semibold">
+                    {totalCommissionEarned > 0 ? `$${totalCommissionEarned.toLocaleString("es-AR")}` : "—"}
+                  </td>
+                  <td className="py-3.5 px-5 text-right">
+                    <span className="text-base font-black text-emerald-500">
+                      ${totalPayroll.toLocaleString("es-AR")}
+                    </span>
+                  </td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
         </div>
-
-        {loading ? (
-          <div className="py-16 text-center text-sm text-muted-foreground">
-            Cargando sueldos...
-          </div>
-        ) : staffPayroll.length === 0 ? (
-          <div className="py-16 text-center text-sm text-muted-foreground">
-            No hay profesionales registradas.
-          </div>
-        ) : (
-          staffPayroll.map((emp, i) => (
-            <motion.div
-              key={emp.id}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: i * 0.05 }}
-              className="grid grid-cols-[auto_1fr_auto_auto_auto_auto_auto_auto] gap-4 items-center px-4 py-3.5 border-b border-border/20 last:border-0 hover:bg-accent/5 transition-colors"
-            >
-              <div
-                className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
-                style={{
-                  backgroundColor: emp.color + "22",
-                  border: `1px solid ${emp.color}44`,
-                  color: emp.color,
-                }}
-              >
-                {emp.initial}
-              </div>
-              <div>
-                <p className="text-xs font-medium text-foreground">{emp.name}</p>
-                <p className="text-[10px] text-muted-foreground">{emp.role}</p>
-              </div>
-              <div className="flex items-center gap-1 justify-end">
-                <Calendar size={10} className="text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">{emp.appointments}</span>
-              </div>
-              <div className="hidden sm:flex items-center gap-1 justify-end">
-                <Percent size={10} className="text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">{emp.commission}%</span>
-              </div>
-              <div className="hidden md:flex flex-col items-end justify-center">
-                <span className="text-xs text-muted-foreground">
-                  ${emp.shopSales.toLocaleString("es-AR")}
-                </span>
-                {emp.salesTarget > 0 && (
-                  <span className={`text-[9px] font-medium ${emp.shopSales >= emp.salesTarget ? "text-emerald-500" : "text-amber-500"}`}>
-                    Obj: ${emp.salesTarget.toLocaleString("es-AR")}
-                  </span>
-                )}
-              </div>
-              <div className="hidden md:flex justify-end">
-                <span className="text-xs text-muted-foreground">
-                  {emp.revenue > 0 ? `$${emp.revenue.toLocaleString("es-AR")}` : "—"}
-                </span>
-              </div>
-              <div className="hidden md:flex justify-end">
-                <span className="text-xs text-muted-foreground">
-                  {emp.baseSalary > 0 ? `$${emp.baseSalary.toLocaleString("es-AR")}` : "—"}
-                </span>
-              </div>
-              <div className="hidden md:flex justify-end">
-                <span className="text-xs text-emerald-400">
-                  {emp.commissionEarned > 0 ? `$${emp.commissionEarned.toLocaleString("es-AR")}` : "—"}
-                </span>
-              </div>
-              <div>
-                <span className="text-xs font-semibold text-primary">
-                  ${emp.totalEarned.toLocaleString("es-AR")}
-                </span>
-              </div>
-            </motion.div>
-          ))
-        )}
-
-        {/* Total row */}
-        {!loading && staffPayroll.length > 0 && (
-          <div className="grid grid-cols-[auto_1fr_auto_auto_auto_auto_auto_auto_auto] gap-4 items-center px-4 py-3 bg-primary/5 border-t border-primary/20">
-            <div />
-            <span className="text-xs font-bold text-foreground">Total</span>
-            <div />
-            <div className="hidden sm:block" />
-            <div className="hidden md:block">
-              <span className="text-xs text-muted-foreground">${staffPayroll.reduce((s, e) => s + e.shopSales, 0).toLocaleString("es-AR")}</span>
-            </div>
-            <div className="hidden md:block">
-              <span className="text-xs text-muted-foreground">${totalRevenue.toLocaleString("es-AR")}</span>
-            </div>
-            <div className="hidden md:block" />
-            <div className="hidden md:block" />
-            <span className="text-sm font-bold text-primary">
-              ${totalPayroll.toLocaleString("es-AR")}
-            </span>
-          </div>
-        )}
       </div>
 
       {/* Export info */}

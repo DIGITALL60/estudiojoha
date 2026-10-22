@@ -663,7 +663,7 @@ router.delete("/appointments/:id", requireAuth, async (req, res) => {
 router.patch("/appointments/:id", requireAuth, async (req, res) => {
   try {
     const { id } = req.params as { id: string };
-    const { status, notes, price, paymentMethod } = req.body;
+    const { status, notes, price, paymentMethod, professionalId, date, time, serviceId } = req.body;
 
     const [current] = await db.select().from(appointments).where(eq(appointments.id, id));
     if (!current) return res.status(404).json({ error: "Appointment not found" });
@@ -722,11 +722,15 @@ router.patch("/appointments/:id", requireAuth, async (req, res) => {
     }
 
     await db.update(appointments).set({ 
-      status, 
-      notes, 
-      price: price ? Number(price) : undefined,
+      status: status !== undefined ? status : undefined, 
+      notes: notes !== undefined ? notes : undefined, 
+      price: price !== undefined ? Number(price) : undefined,
       shopSales: req.body.shopSales !== undefined ? Number(req.body.shopSales) : undefined,
-      paymentMethod: paymentMethod !== undefined ? paymentMethod : undefined
+      paymentMethod: paymentMethod !== undefined ? paymentMethod : undefined,
+      professionalId: professionalId !== undefined ? professionalId : undefined,
+      date: date !== undefined ? date : undefined,
+      time: time !== undefined ? time : undefined,
+      serviceId: serviceId !== undefined ? serviceId : undefined,
     }).where(eq(appointments.id, id));
     const [updated] = await db.select().from(appointments).where(eq(appointments.id, id)).limit(1);
     return res.json(updated);
@@ -1115,6 +1119,42 @@ router.delete("/expenses/:id", requireAuth, async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: "Failed to delete expense" });
+  }
+});
+
+router.put("/expenses/:id", requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params as { id: string };
+    const { concept, amount, category, date, professionalId } = req.body;
+    await db.update(expenses).set({
+      concept: concept !== undefined ? concept : undefined,
+      amount: amount !== undefined ? Number(amount) : undefined,
+      category: category !== undefined ? category : undefined,
+      date: date !== undefined ? date : undefined,
+      professionalId: professionalId !== undefined ? professionalId : undefined,
+    }).where(eq(expenses.id, id));
+    const [updated] = await db.select().from(expenses).where(eq(expenses.id, id)).limit(1);
+    return res.json(updated);
+  } catch (err) {
+    return res.status(500).json({ error: "Failed to update expense" });
+  }
+});
+
+router.patch("/expenses/:id", requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params as { id: string };
+    const { concept, amount, category, date, professionalId } = req.body;
+    await db.update(expenses).set({
+      concept: concept !== undefined ? concept : undefined,
+      amount: amount !== undefined ? Number(amount) : undefined,
+      category: category !== undefined ? category : undefined,
+      date: date !== undefined ? date : undefined,
+      professionalId: professionalId !== undefined ? professionalId : undefined,
+    }).where(eq(expenses.id, id));
+    const [updated] = await db.select().from(expenses).where(eq(expenses.id, id)).limit(1);
+    return res.json(updated);
+  } catch (err) {
+    return res.status(500).json({ error: "Failed to update expense" });
   }
 });
 

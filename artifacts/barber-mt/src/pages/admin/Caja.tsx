@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, ChevronRight, ChevronDown, Download, Wallet, Plus, Trash2, TrendingUp, TrendingDown, BarChart3, Tag, Check, X, Calendar as CalendarIcon, Package } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronDown, Download, Wallet, Plus, Trash2, Pencil, TrendingUp, TrendingDown, BarChart3, Tag, Check, X, Calendar as CalendarIcon, Package } from "lucide-react";
 import AdminLayout from "./AdminLayout";
 import ClientSearchSelect from "@/components/ClientSearchSelect";
 import ServiceSearchSelect from "@/components/ServiceSearchSelect";
@@ -12,13 +12,14 @@ interface AppointmentRow {
   id: string; date: string; time: string; price: number; status: string;
   clientName: string; professionalName: string; serviceName: string; paymentMethod: string;
   shopSales?: number; notes?: string;
+  clientId?: string; professionalId?: string; serviceId?: string;
 }
 interface Professional { id: string; name: string; }
 interface Client { id: string; name: string; phone: string; }
 interface Service { id: string; name: string; price: number; category?: string; duration?: number; }
 
 interface ExpenseRow {
-  id: string; concept: string; amount: number; category: string; date: string;
+  id: string; concept: string; amount: number; category: string; date: string; professionalId?: string;
 }
 
 const EXPENSE_CATEGORIES = [
@@ -49,6 +50,28 @@ export default function Caja() {
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
   const [bankAccount, setBankAccount] = useState("Banco de Córdoba");
   const [viewReceipt, setViewReceipt] = useState<string | null>(null);
+
+  // Estados de edición (Lápiz para modificar sin borrar)
+  const [editingExpense, setEditingExpense] = useState<{
+    id: string;
+    concept: string;
+    amount: string;
+    category: string;
+    date: string;
+  } | null>(null);
+
+  const [editingAppointment, setEditingAppointment] = useState<{
+    id: string;
+    clientName: string;
+    serviceName: string;
+    price: string;
+    shopSales: string;
+    paymentMethod: string;
+    professionalId: string;
+    date: string;
+    time: string;
+    notes: string;
+  } | null>(null);
 
   // Estados de Calendario
   const [showCalendarPopover, setShowCalendarPopover] = useState(false);
@@ -481,6 +504,58 @@ export default function Caja() {
     loadData();
   };
 
+  const handleSaveEditExpense = async () => {
+    if (!editingExpense) return;
+    if (!editingExpense.concept.trim()) {
+      alert("Por favor ingresá un concepto.");
+      return;
+    }
+    if (!editingExpense.amount || Number(editingExpense.amount) < 0) {
+      alert("Por favor ingresá un monto válido.");
+      return;
+    }
+
+    try {
+      await fetchAPI(`/api/data/expenses/${editingExpense.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          concept: editingExpense.concept.trim(),
+          amount: Number(editingExpense.amount),
+          category: editingExpense.category,
+          date: editingExpense.date,
+        }),
+      });
+      setEditingExpense(null);
+      loadData();
+    } catch {
+      alert("Error al guardar los cambios del egreso");
+    }
+  };
+
+  const handleSaveEditAppointment = async () => {
+    if (!editingAppointment) return;
+    try {
+      await fetchAPI(`/api/data/appointments/${editingAppointment.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          price: Number(editingAppointment.price) || 0,
+          shopSales: Number(editingAppointment.shopSales) || 0,
+          paymentMethod: editingAppointment.paymentMethod,
+          professionalId: editingAppointment.professionalId || undefined,
+          date: editingAppointment.date,
+          time: editingAppointment.time,
+          notes: editingAppointment.notes || undefined,
+        }),
+      });
+      setEditingAppointment(null);
+      loadData();
+    } catch {
+      alert("Error al guardar los cambios del cobro");
+    }
+  };
+
   const handleCancelAppointment = async (id: string) => {
     if (!confirm("¿Eliminar este registro cargado por error? Se borrará permanentemente de la caja sin afectar la tasa de asistencia de la clienta.")) return;
     try {
@@ -704,9 +779,24 @@ export default function Caja() {
                           <span className="text-muted-foreground ml-2 text-[10px] uppercase tracking-wider bg-border/30 px-1.5 py-0.5 rounded">{e.category}</span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2">
                         <span className="font-semibold text-red-400">$ {e.amount.toLocaleString("es-AR")}</span>
-                        <button onClick={() => handleDeleteExpense(e.id)} className="text-muted-foreground hover:text-red-400 transition-colors"><Trash2 size={12} /></button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingExpense({ ...e, amount: String(e.amount) })}
+                          className="p-1.5 text-muted-foreground hover:text-primary transition-colors rounded hover:bg-accent/15"
+                          title="Editar egreso"
+                        >
+                          <Pencil size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteExpense(e.id)}
+                          className="p-1.5 text-muted-foreground hover:text-red-400 transition-colors rounded hover:bg-accent/15"
+                          title="Eliminar egreso"
+                        >
+                          <Trash2 size={13} />
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -805,11 +895,40 @@ export default function Caja() {
                           </td>
                           <td className="px-5 py-4 text-right">
                             <div className="flex flex-col items-end gap-1">
-                              <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2">
                                 <span className="text-xs font-bold text-foreground">
                                   $ {(isPureShop ? a.shopSales! : a.price).toLocaleString("es-AR")}
                                 </span>
-                                <button onClick={() => handleCancelAppointment(a.id)} className="text-muted-foreground hover:text-red-400 transition-colors" title="Anular cobro"><Trash2 size={12} /></button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const prof = professionals.find(p => p.name === a.professionalName || p.id === a.professionalId);
+                                    setEditingAppointment({
+                                      id: a.id,
+                                      clientName: a.clientName,
+                                      serviceName: a.serviceName,
+                                      price: String(a.price || 0),
+                                      shopSales: String(a.shopSales || 0),
+                                      paymentMethod: a.paymentMethod || "Efectivo",
+                                      professionalId: a.professionalId || prof?.id || "",
+                                      date: a.date,
+                                      time: a.time,
+                                      notes: a.notes || "",
+                                    });
+                                  }}
+                                  className="p-1.5 text-muted-foreground hover:text-primary transition-colors rounded hover:bg-accent/15"
+                                  title="Editar cobro"
+                                >
+                                  <Pencil size={13} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleCancelAppointment(a.id)}
+                                  className="p-1.5 text-muted-foreground hover:text-red-400 transition-colors rounded hover:bg-accent/15"
+                                  title="Anular cobro"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
                               </div>
                               {!isPureShop && (a.shopSales || 0) > 0 && (
                                 <span className="text-[10px] text-emerald-400">+ $ {a.shopSales!.toLocaleString("es-AR")} shop</span>
@@ -1247,9 +1366,24 @@ export default function Caja() {
                           <p className="text-[10px] text-muted-foreground">{e.date} · {e.category}</p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2">
                         <span className="text-xs font-semibold text-red-400">$ {e.amount.toLocaleString("es-AR")}</span>
-                        <button onClick={() => handleDeleteExpense(e.id)} className="text-muted-foreground hover:text-red-400 transition-colors"><Trash2 size={12} /></button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingExpense({ ...e, amount: String(e.amount) })}
+                          className="p-1.5 text-muted-foreground hover:text-primary transition-colors rounded hover:bg-accent/15"
+                          title="Editar egreso"
+                        >
+                          <Pencil size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteExpense(e.id)}
+                          className="p-1.5 text-muted-foreground hover:text-red-400 transition-colors rounded hover:bg-accent/15"
+                          title="Eliminar egreso"
+                        >
+                          <Trash2 size={13} />
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -1257,6 +1391,300 @@ export default function Caja() {
               ) : <p className="text-xs text-muted-foreground p-5">Sin egresos este mes.</p>}
             </div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal Editar Egreso */}
+      <AnimatePresence>
+        {editingExpense && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="bg-card border border-border/80 shadow-2xl rounded-2xl w-full max-w-md overflow-hidden"
+            >
+              <div className="flex items-center justify-between px-6 py-4 border-b border-border/50 bg-accent/5">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                    <Pencil size={16} />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-foreground">Editar Egreso</h3>
+                    <p className="text-[11px] text-muted-foreground">Modificá los datos sin necesidad de borrar y recargar</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditingExpense(null)}
+                  className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent/20 transition-colors"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">
+                    Concepto
+                  </label>
+                  <input
+                    type="text"
+                    value={editingExpense.concept}
+                    onChange={e => setEditingExpense(prev => prev ? { ...prev, concept: e.target.value } : null)}
+                    placeholder="Ej: Pago Mili, Insumos, etc."
+                    className="w-full bg-background border border-border/80 rounded-lg px-3.5 py-2.5 text-xs text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">
+                      Categoría
+                    </label>
+                    <select
+                      value={editingExpense.category}
+                      onChange={e => setEditingExpense(prev => prev ? { ...prev, category: e.target.value } : null)}
+                      className="w-full bg-background border border-border/80 rounded-lg px-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-primary transition-all"
+                    >
+                      {EXPENSE_CATEGORIES.map(c => (
+                        <option key={c} value={c}>{CATEGORY_ICONS[c]} {c}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">
+                      Monto
+                    </label>
+                    <div className="relative flex items-center">
+                      <span className="absolute left-3 text-muted-foreground text-xs font-semibold">$</span>
+                      <input
+                        type="number"
+                        value={editingExpense.amount}
+                        onChange={e => setEditingExpense(prev => prev ? { ...prev, amount: e.target.value } : null)}
+                        placeholder="0"
+                        className="w-full bg-background border border-border/80 rounded-lg pl-7 pr-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all font-semibold"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">
+                    Fecha del egreso
+                  </label>
+                  <input
+                    type="date"
+                    value={editingExpense.date}
+                    onChange={e => setEditingExpense(prev => prev ? { ...prev, date: e.target.value } : null)}
+                    className="w-full bg-background border border-border/80 rounded-lg px-3.5 py-2 text-xs text-foreground focus:outline-none focus:border-primary transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border/50 bg-accent/5">
+                <button
+                  type="button"
+                  onClick={() => setEditingExpense(null)}
+                  className="px-4 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent/20 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveEditExpense}
+                  className="px-4 py-2 text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
+                >
+                  <Check size={14} /> Guardar Cambios
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal Editar Cobro / Registro */}
+      <AnimatePresence>
+        {editingAppointment && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="bg-card border border-border/80 shadow-2xl rounded-2xl w-full max-w-lg overflow-hidden"
+            >
+              <div className="flex items-center justify-between px-6 py-4 border-b border-border/50 bg-accent/5">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-500">
+                    <Pencil size={16} />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-foreground">Editar Cobro / Venta</h3>
+                    <p className="text-[11px] text-muted-foreground">
+                      {editingAppointment.clientName} · {editingAppointment.serviceName}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditingAppointment(null)}
+                  className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent/20 transition-colors"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">
+                      Monto Servicio ($)
+                    </label>
+                    <div className="relative flex items-center">
+                      <span className="absolute left-3 text-muted-foreground text-xs font-semibold">$</span>
+                      <input
+                        type="number"
+                        value={editingAppointment.price}
+                        onChange={e => setEditingAppointment(prev => prev ? { ...prev, price: e.target.value } : null)}
+                        className="w-full bg-background border border-border/80 rounded-lg pl-7 pr-3 py-2 text-xs text-foreground focus:outline-none focus:border-primary transition-all font-semibold"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">
+                      Venta Shop ($)
+                    </label>
+                    <div className="relative flex items-center">
+                      <span className="absolute left-3 text-muted-foreground text-xs font-semibold">$</span>
+                      <input
+                        type="number"
+                        value={editingAppointment.shopSales}
+                        onChange={e => setEditingAppointment(prev => prev ? { ...prev, shopSales: e.target.value } : null)}
+                        className="w-full bg-background border border-border/80 rounded-lg pl-7 pr-3 py-2 text-xs text-foreground focus:outline-none focus:border-primary transition-all font-semibold text-emerald-400"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">
+                    Método de Pago
+                  </label>
+                  <select
+                    value={editingAppointment.paymentMethod}
+                    onChange={e => setEditingAppointment(prev => prev ? { ...prev, paymentMethod: e.target.value } : null)}
+                    className="w-full bg-background border border-border/80 rounded-lg px-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-primary transition-all"
+                  >
+                    <option value="Efectivo">Efectivo</option>
+                    <option value="Transferencia (Banco de Córdoba)">Transferencia (Banco de Córdoba)</option>
+                    <option value="Transferencia (Naranja X)">Transferencia (Naranja X)</option>
+                    <option value="Transferencia">Transferencia</option>
+                    <option value="Tarjeta de Débito">Tarjeta de Débito</option>
+                    <option value="Tarjeta de Crédito">Tarjeta de Crédito</option>
+                    <option value="Cuenta Corriente">Cuenta Corriente</option>
+                    <option value="Mercado Pago">Mercado Pago</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">
+                    Profesional Asignado
+                  </label>
+                  <select
+                    value={editingAppointment.professionalId}
+                    onChange={e => setEditingAppointment(prev => prev ? { ...prev, professionalId: e.target.value } : null)}
+                    className="w-full bg-background border border-border/80 rounded-lg px-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-primary transition-all"
+                  >
+                    <option value="">Seleccionar profesional...</option>
+                    {professionals.map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">
+                      Fecha
+                    </label>
+                    <input
+                      type="date"
+                      value={editingAppointment.date}
+                      onChange={e => setEditingAppointment(prev => prev ? { ...prev, date: e.target.value } : null)}
+                      className="w-full bg-background border border-border/80 rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:border-primary transition-all"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">
+                      Hora
+                    </label>
+                    <input
+                      type="time"
+                      value={editingAppointment.time}
+                      onChange={e => setEditingAppointment(prev => prev ? { ...prev, time: e.target.value } : null)}
+                      className="w-full bg-background border border-border/80 rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:border-primary transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">
+                    Observaciones / Notas
+                  </label>
+                  <input
+                    type="text"
+                    value={editingAppointment.notes}
+                    onChange={e => setEditingAppointment(prev => prev ? { ...prev, notes: e.target.value } : null)}
+                    placeholder="Notas o detalles adicionales..."
+                    className="w-full bg-background border border-border/80 rounded-lg px-3.5 py-2 text-xs text-foreground focus:outline-none focus:border-primary transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border/50 bg-accent/5">
+                <button
+                  type="button"
+                  onClick={() => setEditingAppointment(null)}
+                  className="px-4 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent/20 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveEditAppointment}
+                  className="px-4 py-2 text-xs font-semibold bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
+                >
+                  <Check size={14} /> Guardar Cambios
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal Ver Comprobante */}
+      <AnimatePresence>
+        {viewReceipt && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setViewReceipt(null)}>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              onClick={e => e.stopPropagation()}
+              className="bg-card border border-border shadow-2xl rounded-2xl max-w-lg w-full overflow-hidden p-4 relative"
+            >
+              <div className="flex items-center justify-between pb-3 border-b border-border/50 mb-3">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-foreground">Comprobante de Pago</h4>
+                <button onClick={() => setViewReceipt(null)} className="p-1 rounded-md text-muted-foreground hover:text-foreground">
+                  <X size={16} />
+                </button>
+              </div>
+              <img src={viewReceipt} alt="Comprobante" className="w-full max-h-[70vh] object-contain rounded-lg border border-border/50" />
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </AdminLayout>
