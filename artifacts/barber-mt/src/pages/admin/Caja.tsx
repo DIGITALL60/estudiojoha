@@ -43,6 +43,13 @@ const VIRTUAL_WALLETS = [
   "Otra Billetera"
 ];
 
+const getLocalDateString = (d: Date = new Date()) => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
 export default function Caja() {
   const [appointments, setAppointments] = useState<AppointmentRow[]>([]);
   const [expenses, setExpenses] = useState<ExpenseRow[]>([]);
@@ -133,7 +140,7 @@ export default function Caja() {
     return servicesSubtotal;
   }, [quickAction, productsSubtotal, servicesSubtotal]);
 
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
+  const [selectedDate, setSelectedDate] = useState(getLocalDateString());
 
   const loadData = () => {
     setLoading(true);
@@ -599,7 +606,7 @@ export default function Caja() {
     }
   };
 
-  const todayISO = new Date().toISOString().split("T")[0];
+  const todayISO = getLocalDateString();
   const isTodaySelected = selectedDate === todayISO;
   const dateObj = new Date(selectedDate + "T12:00:00");
   const displayDate = dateObj.toLocaleDateString("es-AR", { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
@@ -630,14 +637,14 @@ export default function Caja() {
       actions={
         <div className="flex items-center gap-2">
           {/* Navegador de fecha con botón de calendario desplegable */}
-          <div className="relative flex items-center">
+          <div className="relative z-30 flex items-center">
             <div className="flex items-center gap-1 bg-card border border-border/80 shadow-sm rounded-lg p-1">
               <button
                 type="button"
                 onClick={() => {
                   const d = new Date(selectedDate + "T12:00:00");
                   d.setDate(d.getDate() - 1);
-                  setSelectedDate(d.toISOString().split("T")[0]);
+                  setSelectedDate(getLocalDateString(d));
                 }}
                 className="p-1.5 hover:bg-accent/15 text-muted-foreground hover:text-foreground rounded-md transition-colors"
                 title="Día anterior"
@@ -665,7 +672,7 @@ export default function Caja() {
                 onClick={() => {
                   const d = new Date(selectedDate + "T12:00:00");
                   d.setDate(d.getDate() + 1);
-                  setSelectedDate(d.toISOString().split("T")[0]);
+                  setSelectedDate(getLocalDateString(d));
                 }}
                 className="p-1.5 hover:bg-accent/15 text-muted-foreground hover:text-foreground rounded-md transition-colors"
                 title="Día siguiente"
@@ -1083,7 +1090,7 @@ export default function Caja() {
                 </span>
 
                 {/* Selector rápido de fecha para la carga */}
-                <div className="relative flex items-center gap-2">
+                <div className="relative z-20 flex items-center gap-2">
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <CalendarIcon size={13} className="text-primary" />
                     <span>Fecha:</span>
@@ -1495,7 +1502,20 @@ export default function Caja() {
                         <span className="text-xs font-semibold text-red-400">$ {e.amount.toLocaleString("es-AR")}</span>
                         <button
                           type="button"
-                          onClick={() => setEditingExpense({ ...e, amount: String(e.amount) })}
+                          onClick={() => {
+                            const isTransfer = (e.paymentMethod || "").startsWith("Transferencia");
+                            const walletName = isTransfer && e.paymentMethod?.includes("(")
+                              ? e.paymentMethod.replace("Transferencia (", "").replace(")", "").trim()
+                              : "Mercado Pago";
+                            const mainMethod = isTransfer ? "Transferencia" : (e.paymentMethod || "Efectivo");
+
+                            setEditingExpense({
+                              ...e,
+                              amount: String(e.amount),
+                              paymentMethod: mainMethod,
+                              wallet: walletName,
+                            });
+                          }}
                           className="p-1.5 text-muted-foreground hover:text-primary transition-colors rounded hover:bg-accent/15"
                           title="Editar egreso"
                         >

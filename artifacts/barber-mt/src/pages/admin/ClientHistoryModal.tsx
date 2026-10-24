@@ -104,7 +104,7 @@ interface ClientHistoryModalProps {
   client: Client;
   appointments: AppointmentItem[];
   onClose: () => void;
-  onEdit: () => void;
+  onEdit?: () => void;
   onDelete?: () => void;
 }
 
@@ -416,14 +416,16 @@ export default function ClientHistoryModal({
         {/* Footer con opción explícita de editar (separada y segura) */}
         <div className="px-5 py-3.5 border-t border-border bg-card flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onEdit}
-              className="text-xs text-foreground hover:text-primary border border-border hover:border-primary/50 px-3.5 py-2 rounded-sm transition-colors flex items-center gap-1.5 font-medium"
-              title="Modificar datos personales o notas del cliente"
-            >
-              <Edit2 size={13} /> Editar cliente
-            </button>
+            {onEdit && (
+              <button
+                type="button"
+                onClick={onEdit}
+                className="text-xs text-foreground hover:text-primary border border-border hover:border-primary/50 px-3.5 py-2 rounded-sm transition-colors flex items-center gap-1.5 font-medium"
+                title="Modificar datos personales o notas del cliente"
+              >
+                <Edit2 size={13} /> Editar cliente
+              </button>
+            )}
             {onDelete && (
               <button
                 type="button"

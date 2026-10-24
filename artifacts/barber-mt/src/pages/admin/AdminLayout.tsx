@@ -386,7 +386,7 @@ export default function AdminLayout({ children, title, subtitle, actions }: Admi
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top bar */}
-        <header className="flex items-center justify-between px-6 py-4 border-b border-border/40 bg-background/80 backdrop-blur-sm flex-shrink-0">
+        <header className="relative z-40 flex items-center justify-between px-6 py-4 border-b border-border/40 bg-background/80 backdrop-blur-sm flex-shrink-0">
           <div className="flex items-center gap-4">
             <button
               onClick={() => setMobileOpen(!mobileOpen)}
