@@ -14,6 +14,8 @@ interface Expense {
   concept: string;
   amount: number;
   category: string;
+  paymentMethod?: string;
+  payment_method?: string;
   date: string;
 }
 
@@ -45,6 +47,19 @@ const MONTH_NAMES = [
   "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
 ];
 
+const DEFAULT_EXPENSE_CATEGORIES = [
+  "Insumos",
+  "Alquiler",
+  "Sueldos",
+  "Marketing",
+  "Mantenimiento",
+  "Limpieza",
+  "Publicidad",
+  "Carga de celular",
+  "Mentorías",
+  "Varios",
+];
+
 export default function CierreMensual() {
   const today = new Date();
   const [selectedYear, setSelectedYear] = useState<number>(today.getFullYear());
@@ -56,6 +71,18 @@ export default function CierreMensual() {
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [closureNotes, setClosureNotes] = useState("");
   const [isMonthClosed, setIsMonthClosed] = useState(false);
+  const [categories, setCategories] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem("custom_expense_categories");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return Array.from(new Set([...DEFAULT_EXPENSE_CATEGORIES, ...parsed]));
+      }
+    } catch {
+      // ignore
+    }
+    return DEFAULT_EXPENSE_CATEGORIES;
+  });
   const [showAddExpenseModal, setShowAddExpenseModal] = useState(false);
   const [showAuditPaymentsModal, setShowAuditPaymentsModal] = useState(false);
   const [auditSearch, setAuditSearch] = useState("");
@@ -73,6 +100,7 @@ export default function CierreMensual() {
   const [newConcept, setNewConcept] = useState("");
   const [newAmount, setNewAmount] = useState("");
   const [newCategory, setNewCategory] = useState("Insumos");
+  const [newPaymentMethod, setNewPaymentMethod] = useState("Efectivo");
   const [newDate, setNewDate] = useState("");
   const [savingExpense, setSavingExpense] = useState(false);
 
@@ -106,6 +134,17 @@ export default function CierreMensual() {
       const closureKey = `cierre_${periodPrefix}`;
       setIsMonthClosed(settings[closureKey] === "closed");
       setClosureNotes(settings[`${closureKey}_notes`] || "");
+
+      if (settings["custom_expense_categories"]) {
+        try {
+          const parsed = JSON.parse(settings["custom_expense_categories"]);
+          if (Array.isArray(parsed)) {
+            setCategories(Array.from(new Set([...DEFAULT_EXPENSE_CATEGORIES, ...parsed])));
+          }
+        } catch {
+          // ignore
+        }
+      }
     } catch (err) {
       console.error("Error cargando cierre mensual:", err);
     } finally {
@@ -331,6 +370,8 @@ export default function CierreMensual() {
           concept: newConcept.trim(),
           amount: Number(newAmount),
           category: newCategory,
+          paymentMethod: newPaymentMethod,
+          payment_method: newPaymentMethod,
           date: dateToSave,
         }),
       });
@@ -338,6 +379,7 @@ export default function CierreMensual() {
         setShowAddExpenseModal(false);
         setNewConcept("");
         setNewAmount("");
+        setNewPaymentMethod("Efectivo");
         loadMonthData();
       }
     } catch (err) {
@@ -358,17 +400,17 @@ export default function CierreMensual() {
   };
 
   const exportCSV = () => {
-    const headers = ["Tipo", "Fecha", "Concepto / Servicio", "Categoría", "Monto"];
+    const headers = ["Tipo", "Fecha", "Concepto / Servicio", "Categoría", "Medio de Pago", "Monto"];
     const rows: string[][] = [];
 
     // Add Income
     completedApps.forEach((a) => {
-      rows.push(["Ingreso", a.date, `${a.clientName || "Cliente"} - ${a.serviceName || "Turno"}`, a.paymentMethod || "Cobro", `$${a.price}`]);
+      rows.push(["Ingreso", a.date, `${a.clientName || "Cliente"} - ${a.serviceName || "Turno"}`, "Cobro Turno", a.paymentMethod || "Efectivo", `$${a.price}`]);
     });
 
     // Add Expenses
     expenses.forEach((e) => {
-      rows.push(["Egreso", e.date, e.concept, e.category, `-$${e.amount}`]);
+      rows.push(["Egreso", e.date, e.concept, e.category, e.paymentMethod || (e as any).payment_method || "Efectivo", `-$${e.amount}`]);
     });
 
     const csvContent =
@@ -713,30 +755,47 @@ export default function CierreMensual() {
                   <th className="pb-2 font-medium">Fecha</th>
                   <th className="pb-2 font-medium">Concepto</th>
                   <th className="pb-2 font-medium">Categoría</th>
+                  <th className="pb-2 font-medium">Medio de Pago</th>
                   <th className="pb-2 font-medium text-right">Monto</th>
                   <th className="pb-2 font-medium text-right print:hidden">Acción</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/20">
-                {expenses.map((e) => (
-                  <tr key={e.id} className="hover:bg-muted/10">
-                    <td className="py-2.5 font-mono text-muted-foreground">{e.date}</td>
-                    <td className="py-2.5 font-medium text-foreground">{e.concept}</td>
-                    <td className="py-2.5 text-muted-foreground">{e.category}</td>
-                    <td className="py-2.5 text-right font-semibold text-rose-400">
-                      -${e.amount.toLocaleString("es-AR")}
-                    </td>
-                    <td className="py-2.5 text-right print:hidden">
-                      <button
-                        onClick={() => handleDeleteExpense(e.id)}
-                        className="text-muted-foreground hover:text-rose-400 transition-colors p-1"
-                        title="Eliminar registro"
-                      >
-                        <X size={13} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {expenses.map((e) => {
+                  const payMethod = e.paymentMethod || (e as any).payment_method || "Efectivo";
+                  const isTransf = payMethod.toLowerCase().includes("transf") || payMethod.toLowerCase().includes("mercado") || payMethod.toLowerCase().includes("banco");
+                  const isCard = payMethod.toLowerCase().includes("tarjeta");
+                  return (
+                    <tr key={e.id} className="hover:bg-muted/10">
+                      <td className="py-2.5 font-mono text-muted-foreground">{e.date}</td>
+                      <td className="py-2.5 font-medium text-foreground">{e.concept}</td>
+                      <td className="py-2.5 text-muted-foreground">{e.category}</td>
+                      <td className="py-2.5">
+                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                          isTransf
+                            ? "bg-sky-500/10 text-sky-400 border border-sky-500/20"
+                            : isCard
+                            ? "bg-purple-500/10 text-purple-400 border border-purple-500/20"
+                            : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                        }`}>
+                          {payMethod}
+                        </span>
+                      </td>
+                      <td className="py-2.5 text-right font-semibold text-rose-400">
+                        -${e.amount.toLocaleString("es-AR")}
+                      </td>
+                      <td className="py-2.5 text-right print:hidden">
+                        <button
+                          onClick={() => handleDeleteExpense(e.id)}
+                          className="text-muted-foreground hover:text-rose-400 transition-colors p-1"
+                          title="Eliminar registro"
+                        >
+                          <X size={13} />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -823,24 +882,39 @@ export default function CierreMensual() {
                       onChange={(e) => setNewCategory(e.target.value)}
                       className="w-full bg-background border border-border/60 rounded-sm p-2 text-xs focus:outline-none focus:border-primary"
                     >
-                      <option value="Insumos">Insumos</option>
-                      <option value="Alquiler">Alquiler / Servicios</option>
-                      <option value="Sueldos">Sueldos / Comisiones</option>
-                      <option value="Marketing">Marketing / Publicidad</option>
-                      <option value="Mantenimiento">Mantenimiento</option>
-                      <option value="Varios">Varios</option>
+                      {categories.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
                     </select>
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-medium text-muted-foreground mb-1">Fecha</label>
-                  <input
-                    type="date"
-                    value={newDate || `${periodPrefix}-01`}
-                    onChange={(e) => setNewDate(e.target.value)}
-                    className="w-full bg-background border border-border/60 rounded-sm p-2 text-xs focus:outline-none focus:border-primary"
-                  />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">Medio de Pago</label>
+                    <select
+                      value={newPaymentMethod}
+                      onChange={(e) => setNewPaymentMethod(e.target.value)}
+                      className="w-full bg-background border border-border/60 rounded-sm p-2 text-xs focus:outline-none focus:border-primary"
+                    >
+                      <option value="Efectivo">💵 Efectivo</option>
+                      <option value="Transferencia (Mercado Pago)">📱 Transferencia (Mercado Pago)</option>
+                      <option value="Transferencia (Banco de Córdoba)">🏦 Transferencia (Banco de Córdoba)</option>
+                      <option value="Tarjeta">💳 Tarjeta (Débito/Crédito)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">Fecha</label>
+                    <input
+                      type="date"
+                      value={newDate || `${periodPrefix}-01`}
+                      onChange={(e) => setNewDate(e.target.value)}
+                      className="w-full bg-background border border-border/60 rounded-sm p-2 text-xs focus:outline-none focus:border-primary"
+                    />
+                  </div>
                 </div>
 
                 <div className="flex gap-2 pt-2">

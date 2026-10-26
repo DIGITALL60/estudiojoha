@@ -22,7 +22,7 @@ interface ExpenseRow {
   id: string; concept: string; amount: number; category: string; paymentMethod?: string; date: string; professionalId?: string;
 }
 
-const EXPENSE_CATEGORIES = [
+const DEFAULT_EXPENSE_CATEGORIES = [
   "General", "Alquiler", "Luz", "Gas", "Agua", "WiFi",
   "Supermercado", "Insumos", "Sueldos", "Marketing", "Otros"
 ];
@@ -30,7 +30,8 @@ const EXPENSE_CATEGORIES = [
 const CATEGORY_ICONS: Record<string, string> = {
   "Alquiler": "🏠", "Luz": "💡", "Gas": "🔥", "Agua": "💧", "WiFi": "📶",
   "Supermercado": "🛒", "Insumos": "🧴", "Sueldos": "💼", "Marketing": "📢",
-  "General": "📋", "Otros": "📌"
+  "General": "📋", "Otros": "📌", "Limpieza": "🧹", "Publicidad": "📢",
+  "Carga de celular": "📱", "Mentorias": "🎓", "Mentorías": "🎓"
 };
 
 const VIRTUAL_WALLETS = [
@@ -68,6 +69,23 @@ export default function Caja() {
   const [selectedServicesWithQty, setSelectedServicesWithQty] = useState<SelectedServiceItem[]>([]);
   const [bankAccount, setBankAccount] = useState("Banco de Córdoba");
   const [viewReceipt, setViewReceipt] = useState<string | null>(null);
+
+  // Estados para Categorías personalizadas y dinámicas
+  const [customCategories, setCustomCategories] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem("estudiojoha_custom_expense_categories");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [savingCategory, setSavingCategory] = useState(false);
+
+  const allExpenseCategories = useMemo(() => {
+    return Array.from(new Set([...DEFAULT_EXPENSE_CATEGORIES, ...customCategories]));
+  }, [customCategories]);
 
   // Estados de edición (Lápiz para modificar sin borrar)
   const [editingExpense, setEditingExpense] = useState<{
@@ -151,20 +169,87 @@ export default function Caja() {
       fetchAPI("/api/data/clients").then(r => r.json()),
       fetchAPI("/api/data/services").then(r => r.json()),
       fetchAPI("/api/data/products").then(r => r.json()).catch(() => []),
+      fetchAPI("/api/data/settings").then(r => r.json()).catch(() => ({})),
     ])
-      .then(([apps, exps, profs, clis, srvs, prods]) => {
+      .then(([apps, exps, profs, clis, srvs, prods, settings]) => {
         setAppointments(apps);
         setExpenses(exps);
         setProfessionals(profs);
         setClients(clis);
         setServices(srvs);
         setProducts(Array.isArray(prods) ? prods : []);
+
+        if (settings && settings.custom_expense_categories) {
+          try {
+            const parsed = JSON.parse(settings.custom_expense_categories);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setCustomCategories(prev => {
+                const combined = Array.from(new Set([...prev, ...parsed]));
+                localStorage.setItem("estudiojoha_custom_expense_categories", JSON.stringify(combined));
+                return combined;
+              });
+            }
+          } catch (e) {}
+        }
       })
       .catch(console.error)
       .finally(() => setLoading(false));
   };
 
   useEffect(() => { loadData(); }, []);
+
+  const handleAddCustomCategory = async (nameToAdd?: string) => {
+    const raw = (nameToAdd || newCategoryName).trim();
+    if (!raw) return;
+    const formatted = raw.charAt(0).toUpperCase() + raw.slice(1);
+    
+    if (allExpenseCategories.map(c => c.toLowerCase()).includes(formatted.toLowerCase())) {
+      alert(`La categoría "${formatted}" ya existe.`);
+      setNewExpense(prev => ({ ...prev, category: formatted }));
+      setShowCategoryModal(false);
+      setNewCategoryName("");
+      return;
+    }
+
+    setSavingCategory(true);
+    const updated = Array.from(new Set([...customCategories, formatted]));
+    setCustomCategories(updated);
+    try {
+      localStorage.setItem("estudiojoha_custom_expense_categories", JSON.stringify(updated));
+      await fetchAPI("/api/data/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ custom_expense_categories: JSON.stringify(updated) }),
+      });
+    } catch (err) {
+      console.error("Error al guardar categoría en backend:", err);
+    } finally {
+      setSavingCategory(false);
+      setNewExpense(prev => ({ ...prev, category: formatted }));
+      if (editingExpense) {
+        setEditingExpense(prev => prev ? { ...prev, category: formatted } : null);
+      }
+      setShowCategoryModal(false);
+      setNewCategoryName("");
+    }
+  };
+
+  const handleDeleteCustomCategory = async (catToDelete: string) => {
+    if (!confirm(`¿Eliminar la categoría personalizada "${catToDelete}"?`)) return;
+    const updated = customCategories.filter(c => c !== catToDelete);
+    setCustomCategories(updated);
+    try {
+      localStorage.setItem("estudiojoha_custom_expense_categories", JSON.stringify(updated));
+      await fetchAPI("/api/data/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ custom_expense_categories: JSON.stringify(updated) }),
+      });
+    } catch (e) {}
+    if (newExpense.category === catToDelete) {
+      setNewExpense(prev => ({ ...prev, category: "General" }));
+    }
+  };
 
   // ── Day filter ──
   const todayApps = appointments.filter(a => a.date === selectedDate);
@@ -344,10 +429,11 @@ export default function Caja() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          concept: newExpense.concept,
+          concept: newExpense.concept.trim(),
           amount: Number(newExpense.amount),
           category: newExpense.category,
           paymentMethod: finalMethod,
+          payment_method: finalMethod,
           date: selectedDate,
         }),
       });
@@ -364,10 +450,6 @@ export default function Caja() {
       alert("Por favor seleccioná un cliente usando la lupita de búsqueda");
       return;
     }
-    if (!newQuickApp.professionalId) {
-      alert("Por favor seleccioná un profesional");
-      return;
-    }
 
     if (type === "cobro") {
       if (selectedServiceIds.length === 0) {
@@ -375,6 +457,10 @@ export default function Caja() {
         return;
       }
     } else {
+      if (!newQuickApp.professionalId) {
+        alert("Por favor seleccioná un profesional");
+        return;
+      }
       if (selectedProducts.length === 0 && (!newQuickApp.amount || Number(newQuickApp.amount) <= 0)) {
         alert("Por favor seleccioná al menos un producto o ingresá un monto para la venta shop");
         return;
@@ -450,10 +536,20 @@ export default function Caja() {
       return;
     }
 
-    // SI ES COBRO DE SERVICIOS (Con soporte para cantidad: ej: 2 soft gel)
-    const chosen = selectedServicesWithQty.length > 0
+    // SI ES COBRO DE SERVICIOS (Con soporte para cantidad y múltiples profesionales en simultáneo)
+    const chosen: SelectedServiceItem[] = selectedServicesWithQty.length > 0
       ? selectedServicesWithQty
       : services.filter(s => selectedServiceIds.includes(s.id)).map(s => ({ ...s, qty: 1 }));
+
+    // Validar que cada servicio tenga un profesional asignado
+    for (const srv of chosen) {
+      const assignedProf = srv.professionalId || newQuickApp.professionalId;
+      if (!assignedProf) {
+        alert(`Por favor asignale una profesional al servicio "${srv.name}" antes de guardar`);
+        return;
+      }
+    }
+
     const totalEntered = Number(newQuickApp.amount);
     const originalSum = chosen.reduce((acc, s) => acc + (s.price || 0) * (s.qty || 1), 0);
 
@@ -479,6 +575,7 @@ export default function Caja() {
     try {
       await Promise.all(
         chosen.map((srv, idx) => {
+          const srvProfId = srv.professionalId || newQuickApp.professionalId;
           const qtyNote = (srv.qty || 1) > 1 ? `[CANTIDAD: ${srv.qty}]` : "";
           const combinedNotes = [qtyNote, discountNote].filter(Boolean).join(" ");
 
@@ -487,7 +584,7 @@ export default function Caja() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               clientId: newQuickApp.clientId,
-              professionalId: newQuickApp.professionalId,
+              professionalId: srvProfId,
               serviceId: srv.id,
               date: selectedDate,
               time: newQuickApp.time,
@@ -521,8 +618,8 @@ export default function Caja() {
       setVoucherError("");
       setNewQuickApp({ clientId: "", professionalId: "", serviceId: "", amount: "", paymentMethod: "Efectivo", time: "10:00" });
       alert(
-        chosenServices.length > 1
-          ? `¡Se registraron ${chosenServices.length} servicios para el cliente con éxito!`
+        chosen.length > 1
+          ? `¡Se registraron ${chosen.length} servicios para la clienta con éxito!`
           : "Registro guardado exitosamente"
       );
       loadData();
@@ -561,6 +658,7 @@ export default function Caja() {
           amount: Number(editingExpense.amount),
           category: editingExpense.category,
           paymentMethod: finalMethod,
+          payment_method: finalMethod,
           date: editingExpense.date,
         }),
       });
@@ -783,15 +881,26 @@ export default function Caja() {
                           onChange={e => setNewExpense(f => ({ ...f, concept: e.target.value }))}
                           className="bg-card border border-border rounded-md px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none"
                         />
-                        <select
-                          value={newExpense.category}
-                          onChange={e => setNewExpense(f => ({ ...f, category: e.target.value }))}
-                          className="bg-card border border-border rounded-md px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none"
-                        >
-                          {EXPENSE_CATEGORIES.map(c => (
-                            <option key={c} value={c}>{CATEGORY_ICONS[c]} {c}</option>
-                          ))}
-                        </select>
+                        <div className="flex items-center gap-1.5">
+                          <select
+                            value={newExpense.category}
+                            onChange={e => setNewExpense(f => ({ ...f, category: e.target.value }))}
+                            className="flex-1 bg-card border border-border rounded-md px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none"
+                          >
+                            {allExpenseCategories.map(c => (
+                              <option key={c} value={c}>{CATEGORY_ICONS[c] || "🏷️"} {c}</option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => setShowCategoryModal(true)}
+                            className="px-2 py-2 text-xs font-semibold bg-primary/10 text-primary border border-primary/20 rounded-md hover:bg-primary/20 transition-colors flex items-center gap-1 shadow-2xs whitespace-nowrap"
+                            title="Agregar nueva categoría"
+                          >
+                            <Plus size={13} />
+                            <span>Nueva</span>
+                          </button>
+                        </div>
                         <div className="relative flex items-center">
                           <span className="absolute left-3 text-muted-foreground text-xs font-semibold">$</span>
                           <input
@@ -850,41 +959,51 @@ export default function Caja() {
               </AnimatePresence>
               {dayExpenses.length > 0 ? (
                 <div className="space-y-2">
-                  {dayExpenses.map(e => (
-                    <div key={e.id} className="flex items-center justify-between text-xs py-2 border-b border-border/20 last:border-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-base">{CATEGORY_ICONS[e.category] || "📋"}</span>
-                        <div>
-                          <span className="font-medium text-foreground">{e.concept}</span>
-                          <span className="text-muted-foreground ml-2 text-[10px] uppercase tracking-wider bg-border/30 px-1.5 py-0.5 rounded">{e.category}</span>
-                          <span className="ml-1.5 text-[10px] uppercase tracking-wider bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 rounded font-medium">
-                            {e.paymentMethod || "Efectivo"}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-red-400">$ {e.amount.toLocaleString("es-AR")}</span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const isTransfer = (e.paymentMethod || "").startsWith("Transferencia");
-                            const walletName = isTransfer && e.paymentMethod?.includes("(")
-                              ? e.paymentMethod.replace("Transferencia (", "").replace(")", "").trim()
-                              : "Mercado Pago";
-                            const mainMethod = isTransfer ? "Transferencia" : (e.paymentMethod || "Efectivo");
+                  {dayExpenses.map(e => {
+                    const rawMethod = e.paymentMethod || (e as any).payment_method || "Efectivo";
+                    const isTransfer = rawMethod.startsWith("Transferencia");
+                    const isCard = rawMethod.startsWith("Tarjeta");
+                    const badgeStyle = isTransfer
+                      ? "bg-blue-500/15 text-blue-500 border-blue-500/30"
+                      : isCard
+                      ? "bg-purple-500/15 text-purple-400 border-purple-500/30"
+                      : "bg-emerald-500/15 text-emerald-500 border-emerald-500/30";
 
-                            setEditingExpense({
-                              ...e,
-                              amount: String(e.amount),
-                              paymentMethod: mainMethod,
-                              wallet: walletName,
-                            });
-                          }}
-                          className="p-1.5 text-muted-foreground hover:text-primary transition-colors rounded hover:bg-accent/15"
-                          title="Editar egreso"
-                        >
-                          <Pencil size={13} />
-                        </button>
+                    return (
+                      <div key={e.id} className="flex items-center justify-between text-xs py-2 border-b border-border/20 last:border-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-base">{CATEGORY_ICONS[e.category] || "📋"}</span>
+                          <div>
+                            <span className="font-medium text-foreground">{e.concept}</span>
+                            <span className="text-muted-foreground ml-2 text-[10px] uppercase tracking-wider bg-border/30 px-1.5 py-0.5 rounded">{e.category}</span>
+                            <span className={`ml-1.5 text-[10px] uppercase tracking-wider border px-1.5 py-0.5 rounded font-semibold ${badgeStyle}`}>
+                              {rawMethod}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-red-400">$ {e.amount.toLocaleString("es-AR")}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const walletName = isTransfer && rawMethod.includes("(")
+                                ? rawMethod.replace("Transferencia (", "").replace(")", "").trim()
+                                : "Mercado Pago";
+                              const mainMethod = isTransfer ? "Transferencia" : (rawMethod.startsWith("Tarjeta") ? "Tarjeta" : "Efectivo");
+
+                              setEditingExpense({
+                                ...e,
+                                amount: String(e.amount),
+                                paymentMethod: mainMethod,
+                                wallet: walletName,
+                                date: e.date,
+                              });
+                            }}
+                            className="p-1.5 text-muted-foreground hover:text-primary transition-colors rounded hover:bg-accent/15"
+                            title="Editar egreso"
+                          >
+                            <Pencil size={13} />
+                          </button>
                         <button
                           type="button"
                           onClick={() => handleDeleteExpense(e.id)}
@@ -895,7 +1014,8 @@ export default function Caja() {
                         </button>
                       </div>
                     </div>
-                  ))}
+                  );
+                })}
                 </div>
               ) : (
                 <p className="text-xs text-muted-foreground">Sin egresos registrados para este día.</p>
@@ -1121,38 +1241,88 @@ export default function Caja() {
 
               {quickAction === "egreso" ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <input placeholder="Concepto (ej: Pago Gas, Insumos, Sueldo)" value={newExpense.concept} onChange={e => setNewExpense(f => ({ ...f, concept: e.target.value }))} className="bg-background border border-border rounded-md px-3 py-2 text-xs" />
-                  <select value={newExpense.category} onChange={e => setNewExpense(f => ({ ...f, category: e.target.value }))} className="bg-background border border-border rounded-md px-3 py-2 text-xs">
-                    {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{CATEGORY_ICONS[c]} {c}</option>)}
-                  </select>
-                  <div className="relative flex items-center">
-                    <span className="absolute left-3 text-muted-foreground text-xs font-semibold">$</span>
-                    <input type="number" placeholder="Monto" value={newExpense.amount} onChange={e => setNewExpense(f => ({ ...f, amount: e.target.value }))} className="w-full bg-background border border-border rounded-md pl-7 pr-3 py-2 text-xs focus:border-primary focus:outline-none" />
+                  <div>
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">
+                      Concepto del gasto
+                    </label>
+                    <input
+                      placeholder="Concepto (ej: Pago Gas, Insumos, Sueldo)"
+                      value={newExpense.concept}
+                      onChange={e => setNewExpense(f => ({ ...f, concept: e.target.value }))}
+                      className="w-full bg-background border border-border rounded-md px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">
+                      Categoría
+                    </label>
+                    <div className="flex items-center gap-1.5">
+                      <select
+                        value={newExpense.category}
+                        onChange={e => setNewExpense(f => ({ ...f, category: e.target.value }))}
+                        className="flex-1 bg-background border border-border rounded-md px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none"
+                      >
+                        {allExpenseCategories.map(c => (
+                          <option key={c} value={c}>{CATEGORY_ICONS[c] || "🏷️"} {c}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => setShowCategoryModal(true)}
+                        className="px-2 py-2 text-xs font-semibold bg-primary/10 text-primary border border-primary/20 rounded-md hover:bg-primary/20 transition-colors flex items-center gap-1 shadow-2xs whitespace-nowrap"
+                        title="Agregar nueva categoría (ej: Limpieza, Publicidad, Carga de celular, Mentorías...)"
+                      >
+                        <Plus size={13} />
+                        <span>Nueva</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">
+                      Monto a egresar
+                    </label>
+                    <div className="relative flex items-center">
+                      <span className="absolute left-3 text-muted-foreground text-xs font-semibold">$</span>
+                      <input
+                        type="number"
+                        placeholder="Monto"
+                        value={newExpense.amount}
+                        onChange={e => setNewExpense(f => ({ ...f, amount: e.target.value }))}
+                        className="w-full bg-background border border-border rounded-md pl-7 pr-3 py-2 text-xs font-semibold text-foreground focus:border-primary focus:outline-none"
+                      />
+                    </div>
                   </div>
 
                   {/* Selector Forma de Egreso / Billetera */}
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <select
-                      value={newExpense.paymentMethod}
-                      onChange={e => setNewExpense(f => ({ ...f, paymentMethod: e.target.value }))}
-                      className="flex-1 bg-background border border-border rounded-md px-3 py-2 text-xs"
-                    >
-                      <option value="Efectivo">💵 Efectivo</option>
-                      <option value="Transferencia">📱 Transferencia / Billetera</option>
-                      <option value="Tarjeta">💳 Tarjeta</option>
-                    </select>
-
-                    {newExpense.paymentMethod === "Transferencia" && (
+                  <div>
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">
+                      Forma de Pago del Egreso
+                    </label>
+                    <div className="flex flex-col sm:flex-row gap-2">
                       <select
-                        value={newExpense.wallet}
-                        onChange={e => setNewExpense(f => ({ ...f, wallet: e.target.value }))}
-                        className="flex-1 bg-background border border-primary/50 text-foreground font-medium rounded-md px-2.5 py-2 text-xs focus:border-primary focus:outline-none animate-in fade-in-50 duration-150"
+                        value={newExpense.paymentMethod}
+                        onChange={e => setNewExpense(f => ({ ...f, paymentMethod: e.target.value }))}
+                        className="flex-1 bg-background border border-border rounded-md px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none font-medium"
                       >
-                        {VIRTUAL_WALLETS.map(w => (
-                          <option key={w} value={w}>📱 {w}</option>
-                        ))}
+                        <option value="Efectivo">💵 Efectivo</option>
+                        <option value="Transferencia">📱 Transferencia / Billetera</option>
+                        <option value="Tarjeta">💳 Tarjeta</option>
                       </select>
-                    )}
+
+                      {newExpense.paymentMethod === "Transferencia" && (
+                        <select
+                          value={newExpense.wallet}
+                          onChange={e => setNewExpense(f => ({ ...f, wallet: e.target.value }))}
+                          className="flex-1 bg-background border border-primary/50 text-foreground font-semibold rounded-md px-2.5 py-2 text-xs focus:border-primary focus:outline-none animate-in fade-in-50 duration-150"
+                        >
+                          {VIRTUAL_WALLETS.map(w => (
+                            <option key={w} value={w}>📱 {w}</option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
                   </div>
 
                   <div className="sm:col-span-2 pt-1">
@@ -1164,17 +1334,40 @@ export default function Caja() {
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {/* Buscador de cliente con Lupita */}
-                  <ClientSearchSelect
-                    clients={clients}
-                    value={newQuickApp.clientId}
-                    onChange={(clientId) => setNewQuickApp(prev => ({ ...prev, clientId }))}
-                    placeholder="🔍 Buscar cliente por nombre o teléfono..."
-                  />
+                  <div>
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">
+                      Cliente
+                    </label>
+                    <ClientSearchSelect
+                      clients={clients}
+                      value={newQuickApp.clientId}
+                      onChange={(clientId) => setNewQuickApp(prev => ({ ...prev, clientId }))}
+                      placeholder="🔍 Buscar cliente por nombre o teléfono..."
+                    />
+                  </div>
                   
-                  <select value={newQuickApp.professionalId} onChange={e => setNewQuickApp(prev => ({ ...prev, professionalId: e.target.value }))} className="bg-background border border-border rounded-md px-3 py-2 text-xs">
-                    <option value="">-- Seleccionar Profesional --</option>
-                    {professionals.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
+                  <div>
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">
+                      Profesional Principal (o asigná abajo por servicio)
+                    </label>
+                    <select
+                      value={newQuickApp.professionalId}
+                      onChange={e => {
+                        const profId = e.target.value;
+                        setNewQuickApp(prev => ({ ...prev, professionalId: profId }));
+                        if (profId) {
+                          setSelectedServicesWithQty(prev => prev.map(s => ({
+                            ...s,
+                            professionalId: s.professionalId || profId,
+                          })));
+                        }
+                      }}
+                      className="w-full bg-background border border-border rounded-md px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none"
+                    >
+                      <option value="">-- Seleccionar Profesional Principal --</option>
+                      {professionals.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                  </div>
                   
                   {/* Buscador de servicio o selector de productos según la pestaña activa */}
                   {quickAction === "shop" ? (
@@ -1221,6 +1414,8 @@ export default function Caja() {
                     <div className="sm:col-span-2">
                       <ServiceSearchSelect
                         services={services}
+                        professionals={professionals}
+                        defaultProfessionalId={newQuickApp.professionalId}
                         selectedServiceIds={selectedServiceIds}
                         selectedServices={selectedServicesWithQty}
                         onChange={(ids, selectedSrvs) => {
@@ -1248,7 +1443,7 @@ export default function Caja() {
                             }));
                           }
                         }}
-                        placeholder="🔍 Buscar servicios con tildes (podés tildar varios y elegir cantidad)..."
+                        placeholder="🔍 Buscar servicios con tildes (podés tildar varios y asignar profesional)..."
                       />
                     </div>
                   )}
@@ -1492,10 +1687,27 @@ export default function Caja() {
                   {monthExpenses.sort((a, b) => b.date.localeCompare(a.date)).map(e => (
                     <div key={e.id} className="flex items-center justify-between px-5 py-3 hover:bg-accent/5">
                       <div className="flex items-center gap-3">
-                        <span>{CATEGORY_ICONS[e.category] || "📋"}</span>
+                        <span className="text-base">{CATEGORY_ICONS[e.category] || "📋"}</span>
                         <div>
                           <p className="text-xs font-medium text-foreground">{e.concept}</p>
-                          <p className="text-[10px] text-muted-foreground">{e.date} · {e.category}</p>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="text-[10px] text-muted-foreground">{e.date} · {e.category}</span>
+                            {(() => {
+                              const rawMethod = e.paymentMethod || (e as any).payment_method || "Efectivo";
+                              const isTransfer = rawMethod.startsWith("Transferencia");
+                              const isCard = rawMethod.startsWith("Tarjeta");
+                              const badgeStyle = isTransfer
+                                ? "bg-blue-500/15 text-blue-500 border-blue-500/30"
+                                : isCard
+                                ? "bg-purple-500/15 text-purple-400 border-purple-500/30"
+                                : "bg-emerald-500/15 text-emerald-500 border-emerald-500/30";
+                              return (
+                                <span className={`text-[9px] uppercase tracking-wider border px-1 py-0.2 rounded font-semibold ${badgeStyle}`}>
+                                  {rawMethod}
+                                </span>
+                              );
+                            })()}
+                          </div>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -1503,17 +1715,19 @@ export default function Caja() {
                         <button
                           type="button"
                           onClick={() => {
-                            const isTransfer = (e.paymentMethod || "").startsWith("Transferencia");
-                            const walletName = isTransfer && e.paymentMethod?.includes("(")
-                              ? e.paymentMethod.replace("Transferencia (", "").replace(")", "").trim()
+                            const rawMethod = e.paymentMethod || (e as any).payment_method || "Efectivo";
+                            const isTransfer = rawMethod.startsWith("Transferencia");
+                            const walletName = isTransfer && rawMethod.includes("(")
+                              ? rawMethod.replace("Transferencia (", "").replace(")", "").trim()
                               : "Mercado Pago";
-                            const mainMethod = isTransfer ? "Transferencia" : (e.paymentMethod || "Efectivo");
+                            const mainMethod = isTransfer ? "Transferencia" : (rawMethod.startsWith("Tarjeta") ? "Tarjeta" : "Efectivo");
 
                             setEditingExpense({
                               ...e,
                               amount: String(e.amount),
                               paymentMethod: mainMethod,
                               wallet: walletName,
+                              date: e.date,
                             });
                           }}
                           className="p-1.5 text-muted-foreground hover:text-primary transition-colors rounded hover:bg-accent/15"
@@ -1587,15 +1801,25 @@ export default function Caja() {
                     <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">
                       Categoría
                     </label>
-                    <select
-                      value={editingExpense.category}
-                      onChange={e => setEditingExpense(prev => prev ? { ...prev, category: e.target.value } : null)}
-                      className="w-full bg-background border border-border/80 rounded-lg px-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-primary transition-all"
-                    >
-                      {EXPENSE_CATEGORIES.map(c => (
-                        <option key={c} value={c}>{CATEGORY_ICONS[c]} {c}</option>
-                      ))}
-                    </select>
+                    <div className="flex items-center gap-1.5">
+                      <select
+                        value={editingExpense.category}
+                        onChange={e => setEditingExpense(prev => prev ? { ...prev, category: e.target.value } : null)}
+                        className="flex-1 bg-background border border-border/80 rounded-lg px-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-primary transition-all"
+                      >
+                        {allExpenseCategories.map(c => (
+                          <option key={c} value={c}>{CATEGORY_ICONS[c] || "🏷️"} {c}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => setShowCategoryModal(true)}
+                        className="p-2.5 text-xs font-semibold bg-primary/10 text-primary border border-primary/20 rounded-lg hover:bg-primary/20 transition-colors flex items-center justify-center shadow-2xs flex-shrink-0"
+                        title="Agregar nueva categoría"
+                      >
+                        <Plus size={13} />
+                      </button>
+                    </div>
                   </div>
 
                   <div>
@@ -1876,6 +2100,110 @@ export default function Caja() {
                 </button>
               </div>
               <img src={viewReceipt} alt="Comprobante" className="w-full max-h-[70vh] object-contain rounded-lg border border-border/50" />
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal Nueva Categoría de Egreso */}
+      <AnimatePresence>
+        {showCategoryModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs" onClick={() => setShowCategoryModal(false)}>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              onClick={e => e.stopPropagation()}
+              className="bg-card border border-border shadow-2xl rounded-2xl max-w-md w-full overflow-hidden"
+            >
+              <div className="flex items-center justify-between px-6 py-4 border-b border-border/50 bg-accent/5">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                    <Tag size={16} />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-foreground">Nueva Categoría de Egreso</h3>
+                    <p className="text-[11px] text-muted-foreground">Ej: Limpieza, Publicidad, Carga de celular, Mentorías...</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowCategoryModal(false)}
+                  className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent/20 transition-colors"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">
+                    Nombre de la Categoría
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      autoFocus
+                      value={newCategoryName}
+                      onChange={e => setNewCategoryName(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleAddCustomCategory();
+                        }
+                      }}
+                      placeholder="Ej: Limpieza, Publicidad, Carga de celular..."
+                      className="flex-1 bg-background border border-border rounded-lg px-3.5 py-2 text-xs text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                    />
+                    <button
+                      type="button"
+                      disabled={savingCategory || !newCategoryName.trim()}
+                      onClick={() => handleAddCustomCategory()}
+                      className="px-4 py-2 bg-primary text-primary-foreground text-xs font-semibold rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors shadow-xs"
+                    >
+                      {savingCategory ? "Guardando..." : "Agregar"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Categorías personalizadas existentes */}
+                {customCategories.length > 0 && (
+                  <div className="pt-2 border-t border-border/40">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-2">
+                      Tus categorías personalizadas ({customCategories.length})
+                    </span>
+                    <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto">
+                      {customCategories.map(cat => (
+                        <span
+                          key={cat}
+                          className="inline-flex items-center gap-1.5 bg-background border border-border px-2.5 py-1 rounded-md text-xs font-medium text-foreground"
+                        >
+                          <span>{CATEGORY_ICONS[cat] || "🏷️"}</span>
+                          <span>{cat}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteCustomCategory(cat)}
+                            className="p-0.5 text-muted-foreground hover:text-red-400 rounded transition-colors"
+                            title="Eliminar esta categoría"
+                          >
+                            <Trash2 size={11} />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-end px-6 py-3 border-t border-border/50 bg-accent/5">
+                <button
+                  type="button"
+                  onClick={() => setShowCategoryModal(false)}
+                  className="px-4 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent/20 transition-colors"
+                >
+                  Cerrar
+                </button>
+              </div>
             </motion.div>
           </div>
         )}

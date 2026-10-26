@@ -65,6 +65,7 @@ function initSchema() {
         \`concept\` text NOT NULL,
         \`amount\` integer NOT NULL,
         \`category\` text DEFAULT 'General' NOT NULL,
+        \`payment_method\` text DEFAULT 'Efectivo',
         \`date\` text NOT NULL,
         \`professional_id\` text,
         \`created_at\` integer NOT NULL,

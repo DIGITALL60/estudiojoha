@@ -16,10 +16,18 @@ export interface SelectedServiceItem {
   qty: number;
   category?: string;
   duration?: number;
+  professionalId?: string;
+}
+
+export interface ProfessionalOption {
+  id: string;
+  name: string;
 }
 
 interface ServiceSearchSelectProps {
   services: ServiceItem[];
+  professionals?: ProfessionalOption[];
+  defaultProfessionalId?: string;
   selectedServiceIds?: string[];
   selectedServices?: SelectedServiceItem[];
   onChange: (selectedIds: string[], selectedServices: SelectedServiceItem[]) => void;
@@ -29,6 +37,8 @@ interface ServiceSearchSelectProps {
 
 export default function ServiceSearchSelect({
   services,
+  professionals = [],
+  defaultProfessionalId = "",
   selectedServiceIds = [],
   selectedServices: propSelectedServices,
   onChange,
@@ -41,10 +51,13 @@ export default function ServiceSearchSelect({
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Servicios seleccionados normalizados con cantidad (qty >= 1)
+  // Servicios seleccionados normalizados con cantidad (qty >= 1) y profesional asignado
   const currentSelected = useMemo<SelectedServiceItem[]>(() => {
     if (propSelectedServices && propSelectedServices.length > 0) {
-      return propSelectedServices;
+      return propSelectedServices.map(s => ({
+        ...s,
+        professionalId: s.professionalId || defaultProfessionalId || undefined,
+      }));
     }
     // Reconstruir a partir de selectedServiceIds si no se pasó propSelectedServices
     return selectedServiceIds
@@ -58,10 +71,11 @@ export default function ServiceSearchSelect({
           qty: 1,
           category: s.category,
           duration: s.duration,
+          professionalId: defaultProfessionalId || undefined,
         };
       })
       .filter(Boolean) as SelectedServiceItem[];
-  }, [propSelectedServices, selectedServiceIds, services]);
+  }, [propSelectedServices, selectedServiceIds, services, defaultProfessionalId]);
 
   // Suma total calculada de los servicios seleccionados considerando cantidad (price * qty)
   const totalSelectedPrice = useMemo(() => {
@@ -151,9 +165,22 @@ export default function ServiceSearchSelect({
           qty: 1,
           category: s.category,
           duration: s.duration,
+          professionalId: defaultProfessionalId || undefined,
         },
       ];
     }
+    onChange(next.map((i) => i.id), next);
+  };
+
+  // Asignar profesional a un servicio específico
+  const handleUpdateProfessional = (sId: string, profId: string, e?: React.ChangeEvent<HTMLSelectElement>) => {
+    if (e) e.stopPropagation();
+    const next = currentSelected.map((item) => {
+      if (item.id === sId) {
+        return { ...item, professionalId: profId || undefined };
+      }
+      return item;
+    });
     onChange(next.map((i) => i.id), next);
   };
 
@@ -241,66 +268,101 @@ export default function ServiceSearchSelect({
         </div>
       </div>
 
-      {/* Chips de servicios seleccionados (con selector de cantidad + y - y botón para quitar) */}
+      {/* Servicios seleccionados con selector individual de profesional para servicios en simultáneo */}
       {currentSelected.length > 0 && (
-        <div className="bg-muted/30 border border-border/50 rounded-md p-2 space-y-1.5">
-          <div className="flex items-center justify-between text-[11px]">
-            <span className="font-semibold text-foreground flex items-center gap-1">
+        <div className="bg-muted/30 border border-border/60 rounded-xl p-3 space-y-2">
+          <div className="flex items-center justify-between text-xs pb-1 border-b border-border/40">
+            <span className="font-semibold text-foreground flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block animate-pulse" />
-              {currentSelected.length} servicio{currentSelected.length !== 1 ? "s" : ""} ({totalSelectedQty} unidades):
+              {currentSelected.length} servicio{currentSelected.length !== 1 ? "s" : ""} ({totalSelectedQty} unidades en simultáneo):
             </span>
             <span className="font-bold text-emerald-400 font-mono">
               Total: ${totalSelectedPrice.toLocaleString("es-AR")}
             </span>
           </div>
 
-          <div className="flex flex-wrap gap-1.5">
+          <div className="space-y-1.5">
             {currentSelected.map((s) => (
-              <span
+              <div
                 key={s.id}
-                className="inline-flex items-center gap-1.5 bg-background border border-primary/30 text-foreground text-xs px-2 py-1 rounded shadow-xs"
+                className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-background border border-border/80 text-foreground text-xs p-2.5 rounded-lg shadow-2xs hover:border-primary/50 transition-colors"
               >
-                <Check size={11} className="text-primary flex-shrink-0" />
-                <span className="font-medium truncate max-w-[170px]">{s.name}</span>
-
-                {/* Control de Cantidad (+ y -) */}
-                <div
-                  className="flex items-center gap-1 bg-muted/70 border border-border/60 rounded px-1 py-0.5"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <button
-                    type="button"
-                    onClick={(e) => handleUpdateQty(s.id, -1, e)}
-                    className="p-0.5 hover:bg-background rounded text-muted-foreground hover:text-foreground transition-colors"
-                    title="Restar cantidad"
-                  >
-                    <Minus size={10} />
-                  </button>
-                  <span className="text-[11px] font-bold text-foreground font-mono min-w-[14px] text-center">
-                    {s.qty || 1}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={(e) => handleUpdateQty(s.id, 1, e)}
-                    className="p-0.5 hover:bg-background rounded text-muted-foreground hover:text-foreground transition-colors"
-                    title="Sumar cantidad (ej: 2 soft gel)"
-                  >
-                    <Plus size={10} />
-                  </button>
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <div className="w-5 h-5 rounded-full bg-primary/15 text-primary flex items-center justify-center flex-shrink-0">
+                    <Check size={12} strokeWidth={3} />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="font-bold text-foreground block truncate">{s.name}</span>
+                    {s.duration && (
+                      <span className="text-[10px] text-muted-foreground">⏱️ {s.duration} min</span>
+                    )}
+                  </div>
                 </div>
 
-                <span className="text-[10px] text-emerald-400 font-mono font-bold">
-                  ${((s.price || 0) * (s.qty || 1)).toLocaleString("es-AR")}
-                </span>
-                <button
-                  type="button"
-                  onClick={(e) => handleRemoveService(s.id, e)}
-                  className="text-muted-foreground hover:text-red-400 p-0.5 rounded transition-colors"
-                  title="Quitar servicio"
-                >
-                  <X size={11} />
-                </button>
-              </span>
+                <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 flex-shrink-0">
+                  {/* Selector individual de Profesional (Servicios en simultáneo) */}
+                  {professionals && professionals.length > 0 && (
+                    <div
+                      className="flex items-center gap-1.5 bg-muted/40 border border-border rounded-md px-2 py-1"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <span className="text-[10px] text-muted-foreground whitespace-nowrap">👩‍🎨</span>
+                      <select
+                        value={s.professionalId || defaultProfessionalId || ""}
+                        onChange={(e) => handleUpdateProfessional(s.id, e.target.value, e)}
+                        className="bg-transparent text-foreground text-[11px] font-semibold focus:outline-none cursor-pointer"
+                        title="Profesional a cargo de este servicio"
+                      >
+                        <option value="">-- Asignar profesional --</option>
+                        {professionals.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Control de Cantidad (+ y -) */}
+                  <div
+                    className="flex items-center gap-1 bg-muted/60 border border-border rounded px-1.5 py-1"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <button
+                      type="button"
+                      onClick={(e) => handleUpdateQty(s.id, -1, e)}
+                      className="p-0.5 hover:bg-background rounded text-muted-foreground hover:text-foreground transition-colors"
+                      title="Restar cantidad"
+                    >
+                      <Minus size={11} />
+                    </button>
+                    <span className="text-xs font-bold text-foreground font-mono min-w-[16px] text-center">
+                      {s.qty || 1}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => handleUpdateQty(s.id, 1, e)}
+                      className="p-0.5 hover:bg-background rounded text-muted-foreground hover:text-foreground transition-colors"
+                      title="Sumar cantidad (ej: 2 soft gel)"
+                    >
+                      <Plus size={11} />
+                    </button>
+                  </div>
+
+                  <span className="text-xs text-emerald-400 font-mono font-bold min-w-[65px] text-right">
+                    ${((s.price || 0) * (s.qty || 1)).toLocaleString("es-AR")}
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={(e) => handleRemoveService(s.id, e)}
+                    className="text-muted-foreground hover:text-red-400 p-1 rounded hover:bg-red-500/10 transition-colors"
+                    title="Quitar servicio"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              </div>
             ))}
           </div>
         </div>
