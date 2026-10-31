@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, ChevronRight, ChevronDown, Download, Wallet, Plus, Trash2, Pencil, TrendingUp, TrendingDown, BarChart3, Tag, Check, X, Calendar as CalendarIcon, Package, Truck, MessageCircle } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronDown, Download, Wallet, Plus, Trash2, Pencil, TrendingUp, TrendingDown, BarChart3, Tag, Check, X, Calendar as CalendarIcon, Package, Truck, MessageCircle, Search } from "lucide-react";
 import AdminLayout from "./AdminLayout";
 import ClientSearchSelect from "@/components/ClientSearchSelect";
 import ServiceSearchSelect, { type SelectedServiceItem } from "@/components/ServiceSearchSelect";
@@ -140,6 +140,7 @@ export default function Caja() {
   const [selectedServicesWithQty, setSelectedServicesWithQty] = useState<SelectedServiceItem[]>([]);
   const [bankAccount, setBankAccount] = useState("Banco de Córdoba");
   const [viewReceipt, setViewReceipt] = useState<string | null>(null);
+  const [incomeSearchTerm, setIncomeSearchTerm] = useState("");
 
   // Estados para Categorías personalizadas y dinámicas
   const [customCategories, setCustomCategories] = useState<string[]>(() => {
@@ -433,6 +434,25 @@ export default function Caja() {
   const todayApps = appointments.filter(a => a.date === selectedDate);
   const completedApps = todayApps.filter(a => a.status === "completado");
   const pendingApps = todayApps.filter(a => a.status === "agendado" || a.status === "confirmado");
+
+  // Lupita para buscar rápido el ingreso del día (Solicitado por la dueña)
+  const filteredCompletedApps = useMemo(() => {
+    if (!incomeSearchTerm.trim()) return completedApps;
+    const q = incomeSearchTerm.toLowerCase().trim();
+    return completedApps.filter(a => {
+      const isPureShop = (a.shopSales || 0) > 0 && a.price === 0;
+      return (
+        (a.clientName && a.clientName.toLowerCase().includes(q)) ||
+        (a.serviceName && a.serviceName.toLowerCase().includes(q)) ||
+        (a.professionalName && a.professionalName.toLowerCase().includes(q)) ||
+        (a.paymentMethod && a.paymentMethod.toLowerCase().includes(q)) ||
+        (a.notes && a.notes.toLowerCase().includes(q)) ||
+        String(a.price).includes(q) ||
+        String(a.shopSales || "").includes(q) ||
+        (isPureShop && "shop venta producto".includes(q))
+      );
+    });
+  }, [completedApps, incomeSearchTerm]);
 
   const cobrado = completedApps.reduce((sum, a) => sum + a.price, 0);
   const shopToday = completedApps.reduce((sum, a) => sum + (a.shopSales || 0), 0);
@@ -1505,13 +1525,41 @@ export default function Caja() {
 
             {/* Detail table */}
             <div className="bg-card border border-border/50 rounded-xl overflow-hidden">
-              <div className="px-5 py-4 border-b border-border/50">
-                <span className="text-[10px] uppercase tracking-widest font-bold text-foreground">Detalle de cobros</span>
+              <div className="px-5 py-4 border-b border-border/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] uppercase tracking-widest font-bold text-foreground">Detalle de cobros</span>
+                  <span className="text-[10px] text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-full font-semibold">
+                    {filteredCompletedApps.length} {filteredCompletedApps.length === 1 ? "cobro" : "cobros"}
+                  </span>
+                </div>
+
+                {/* Lupita para buscar rápido el ingreso del día (Solicitada por la dueña) */}
+                <div className="relative flex items-center">
+                  <Search size={13} className="absolute left-3 text-muted-foreground pointer-events-none" />
+                  <input
+                    type="text"
+                    value={incomeSearchTerm}
+                    onChange={e => setIncomeSearchTerm(e.target.value)}
+                    placeholder="Buscar ingreso del día (cliente, servicio, medio)..."
+                    className="w-full sm:w-72 bg-background border border-border/70 rounded-lg pl-8 pr-8 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary transition-all"
+                  />
+                  {incomeSearchTerm && (
+                    <button
+                      type="button"
+                      onClick={() => setIncomeSearchTerm("")}
+                      className="absolute right-2.5 text-muted-foreground hover:text-foreground"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
               </div>
+
               {completedApps.length > 0 ? (
-                <table className="w-full">
-                  <tbody>
-                    {completedApps.map((a, i) => {
+                filteredCompletedApps.length > 0 ? (
+                  <table className="w-full">
+                    <tbody>
+                      {filteredCompletedApps.map((a, i) => {
                       const receiptMatch = a.notes?.includes("[COMPROBANTE]") ? a.notes.split("[COMPROBANTE]")[1] : null;
                       const discountMatch = a.notes?.match(/\[DESCUENTO\]\s*([^.]+?)(?:\.|$)/);
                       const shopMatch = a.notes?.match(/\[SHOP_SALES\](.*?)\[\/SHOP_SALES\]/);
@@ -1612,11 +1660,17 @@ export default function Caja() {
                   </tbody>
                 </table>
               ) : (
-                <div className="py-16 flex flex-col items-center justify-center text-muted-foreground">
-                  <Wallet size={24} className="mb-3 opacity-50" />
-                  <p className="text-xs">No hay ventas registradas para este día.</p>
+                <div className="py-12 flex flex-col items-center justify-center text-muted-foreground">
+                  <Search size={22} className="mb-2 opacity-50" />
+                  <p className="text-xs">No se encontraron cobros que coincidan con "{incomeSearchTerm}".</p>
                 </div>
-              )}
+              )
+            ) : (
+              <div className="py-16 flex flex-col items-center justify-center text-muted-foreground">
+                <Wallet size={24} className="mb-3 opacity-50" />
+                <p className="text-xs">No hay ventas registradas para este día.</p>
+              </div>
+            )}
             </div>
           </motion.div>
         ) : activeTab === "rapido" ? (

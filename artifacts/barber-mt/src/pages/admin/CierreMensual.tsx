@@ -106,6 +106,7 @@ export default function CierreMensual() {
   // Category Expense Detail Modal state
   const [selectedCategoryForDetail, setSelectedCategoryForDetail] = useState<string | null>(null);
   const [categoryDetailSearch, setCategoryDetailSearch] = useState("");
+  const [expenseQuickSearch, setExpenseQuickSearch] = useState("");
 
   // Edit Expense modal state
   const [editingExpenseItem, setEditingExpenseItem] = useState<Expense | null>(null);
@@ -189,6 +190,37 @@ export default function CierreMensual() {
   const netProfit = totalIncome - totalExpenses;
   const margin = totalIncome > 0 ? Math.round((netProfit / totalIncome) * 100) : 0;
   const ticketPromedio = completedApps.length > 0 ? (totalIncome / completedApps.length) : 0;
+
+  // Servicio estrella del mes (el más vendido y facturado según turnos completados)
+  const starService = (() => {
+    if (completedApps.length === 0) return null;
+    const map: Record<string, { name: string; count: number; totalRevenue: number }> = {};
+    completedApps.forEach(a => {
+      const isPureShop = (a.shopSales || 0) > 0 && a.price === 0;
+      const name = isPureShop ? "Venta Shop (Productos)" : (a.serviceName?.trim() || "Servicio General");
+      if (!map[name]) map[name] = { name, count: 0, totalRevenue: 0 };
+      map[name].count += 1;
+      map[name].totalRevenue += (a.price || 0) + (a.shopSales || 0);
+    });
+    const list = Object.values(map);
+    if (list.length === 0) return null;
+    list.sort((a, b) => b.totalRevenue - a.totalRevenue || b.count - a.count);
+    return list[0];
+  })();
+
+  // Gastos filtrados por la búsqueda rápida (Lupita)
+  const quickFilteredExpenses = expenses.filter(e => {
+    if (!expenseQuickSearch.trim()) return false;
+    const q = expenseQuickSearch.toLowerCase().trim();
+    const rawMethod = e.paymentMethod || (e as any).payment_method || "";
+    return (
+      (e.concept && e.concept.toLowerCase().includes(q)) ||
+      (e.category && e.category.toLowerCase().includes(q)) ||
+      (e.supplierName && e.supplierName.toLowerCase().includes(q)) ||
+      rawMethod.toLowerCase().includes(q) ||
+      String(e.amount).includes(q)
+    );
+  });
 
   // Payment methods breakdown (agrupación inteligente de transferencias, bancos y demás medios)
   const paymentBreakdown = completedApps.reduce((acc: Record<string, number>, a) => {
@@ -662,60 +694,183 @@ export default function CierreMensual() {
         </div>
       </div>
 
+      {/* Servicio Estrella del Mes (Solicitado por la dueña) */}
+      {starService && (
+        <div className="bg-gradient-to-r from-amber-500/15 via-primary/10 to-transparent border border-amber-500/30 rounded-sm p-4 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
+          <div className="flex items-center gap-3.5">
+            <div className="w-11 h-11 rounded-full bg-amber-500/20 text-amber-500 flex items-center justify-center text-xl flex-shrink-0 shadow-xs border border-amber-500/30">
+              ⭐
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold tracking-wider uppercase text-amber-500 bg-amber-500/15 border border-amber-500/20 px-2 py-0.5 rounded">
+                  SERVICIO ESTRELLA DEL MES
+                </span>
+                <span className="text-[11px] text-muted-foreground">Mayor facturación y ventas</span>
+              </div>
+              <h4 className="text-base font-bold text-foreground mt-0.5">
+                {starService.name}
+              </h4>
+            </div>
+          </div>
+          <div className="flex items-center gap-4 text-xs bg-background/50 border border-border/40 px-3.5 py-2 rounded-sm w-full sm:w-auto justify-between sm:justify-end">
+            <div className="text-right">
+              <span className="text-muted-foreground block text-[10px] uppercase tracking-wider">Facturado</span>
+              <span className="text-sm font-bold text-foreground">${starService.totalRevenue.toLocaleString("es-AR")}</span>
+            </div>
+            <div className="w-px h-7 bg-border/60" />
+            <div className="text-right">
+              <span className="text-muted-foreground block text-[10px] uppercase tracking-wider">Turnos</span>
+              <span className="text-sm font-bold text-primary">{starService.count} {starService.count === 1 ? "turno" : "turnos"}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Breakdowns & Detail Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-        {/* Gastos por Categoría con Detalle al Clic */}
+        {/* Gastos por Categoría con Detalle al Clic y Búsqueda Rápida (Lupita) */}
         <div className="bg-card border border-border/50 rounded-sm p-5 flex flex-col">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <FileText size={15} className="text-primary" /> Gastos por Rubro / Categoría
-            </h3>
-            <span className="text-[10px] text-muted-foreground/80 bg-muted/60 px-2 py-0.5 rounded-sm">
-              Clic para ver detalle
-            </span>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 pb-2 border-b border-border/30">
+            <div>
+              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <FileText size={15} className="text-primary" /> Gastos por Rubro / Categoría
+              </h3>
+              {!expenseQuickSearch && (
+                <span className="text-[10px] text-muted-foreground">
+                  Hacé clic en cualquier rubro para ver su desglose
+                </span>
+              )}
+            </div>
+
+            {/* Lupita para búsqueda rápida de un gasto (Ej: librería) */}
+            <div className="relative flex items-center">
+              <Search size={13} className="absolute left-2.5 text-muted-foreground pointer-events-none" />
+              <input
+                type="text"
+                value={expenseQuickSearch}
+                onChange={e => setExpenseQuickSearch(e.target.value)}
+                placeholder="Buscar gasto (ej: librería)..."
+                className="bg-background border border-border rounded-sm pl-7 pr-7 py-1 text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary w-full sm:w-44 transition-all"
+              />
+              {expenseQuickSearch && (
+                <button
+                  type="button"
+                  onClick={() => setExpenseQuickSearch("")}
+                  className="absolute right-2 text-muted-foreground hover:text-foreground"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
           </div>
 
-          {Object.keys(expenseCategoryBreakdown).length === 0 ? (
-            <p className="text-xs text-muted-foreground py-6 text-center">No hay gastos registrados en este mes.</p>
-          ) : (
+          {expenseQuickSearch.trim() ? (
+            /* Vista de resultados de la búsqueda rápida */
             <div className="space-y-2 flex-1">
-              {Object.entries(expenseCategoryBreakdown).map(([cat, data]) => {
-                const percentage = totalExpenses > 0 ? Math.round((data.total / totalExpenses) * 100) : 0;
-                return (
-                  <button
-                    key={cat}
-                    type="button"
-                    onClick={() => {
-                      setSelectedCategoryForDetail(cat);
-                      setCategoryDetailSearch("");
-                    }}
-                    className="w-full text-left p-2 rounded-sm border border-border/40 hover:border-primary/40 hover:bg-muted/30 transition-all group cursor-pointer block"
-                    title={`Ver detalle de gastos en ${cat}`}
-                  >
-                    <div className="flex items-center justify-between text-xs mb-1">
-                      <span className="text-foreground font-medium group-hover:text-primary transition-colors flex items-center gap-1.5">
-                        <Eye size={12} className="text-primary opacity-60 group-hover:opacity-100" />
-                        {cat}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] text-muted-foreground font-normal">
-                          {data.count} {data.count === 1 ? "gasto" : "gastos"}
-                        </span>
-                        <span className="text-muted-foreground group-hover:text-foreground font-mono font-semibold">
-                          ${data.total.toLocaleString("es-AR")} ({percentage}%)
-                        </span>
-                      </div>
-                    </div>
-                    <div className="w-full bg-muted/60 h-1.5 rounded-full overflow-hidden">
+              <div className="flex items-center justify-between text-[11px] text-muted-foreground pb-1">
+                <span>
+                  {quickFilteredExpenses.length} {quickFilteredExpenses.length === 1 ? "gasto encontrado" : "gastos encontrados"}
+                </span>
+                <span className="font-semibold text-rose-400">
+                  Total: ${quickFilteredExpenses.reduce((s, e) => s + e.amount, 0).toLocaleString("es-AR")}
+                </span>
+              </div>
+
+              {quickFilteredExpenses.length === 0 ? (
+                <div className="text-center py-8 text-xs text-muted-foreground">
+                  No se encontraron gastos que coincidan con "{expenseQuickSearch}".
+                </div>
+              ) : (
+                <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+                  {quickFilteredExpenses.map(e => {
+                    const rawMethod = e.paymentMethod || (e as any).payment_method || "Efectivo";
+                    return (
                       <div
-                        className="bg-rose-400 h-full rounded-full transition-all duration-300"
-                        style={{ width: `${percentage}%` }}
-                      />
-                    </div>
-                  </button>
-                );
-              })}
+                        key={e.id}
+                        className="p-2 rounded-sm border border-border/40 bg-background/50 flex items-center justify-between gap-2 text-xs hover:border-primary/40 transition-colors"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-medium text-foreground truncate">{e.concept}</span>
+                            {e.supplierName && (
+                              <span className="inline-flex items-center gap-0.5 text-[9px] bg-amber-500/10 text-amber-500 border border-amber-500/25 px-1 py-0.2 rounded font-semibold">
+                                <Truck size={9} /> {e.supplierName}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mt-0.5">
+                            <span>{e.date}</span>
+                            <span>·</span>
+                            <span className="bg-border/30 px-1 py-0.2 rounded">{e.category}</span>
+                            <span>·</span>
+                            <span>{rawMethod}</span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <span className="font-bold text-rose-400 font-mono">
+                            ${e.amount.toLocaleString("es-AR")}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleStartEditExpense(e)}
+                            className="p-1 text-muted-foreground hover:text-primary transition-colors"
+                            title="Editar gasto"
+                          >
+                            <Edit2 size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
+          ) : (
+            /* Vista estándar de rubros / categorías */
+            Object.keys(expenseCategoryBreakdown).length === 0 ? (
+              <p className="text-xs text-muted-foreground py-6 text-center">No hay gastos registrados en este mes.</p>
+            ) : (
+              <div className="space-y-2 flex-1">
+                {Object.entries(expenseCategoryBreakdown).map(([cat, data]) => {
+                  const percentage = totalExpenses > 0 ? Math.round((data.total / totalExpenses) * 100) : 0;
+                  return (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => {
+                        setSelectedCategoryForDetail(cat);
+                        setCategoryDetailSearch("");
+                      }}
+                      className="w-full text-left p-2 rounded-sm border border-border/40 hover:border-primary/40 hover:bg-muted/30 transition-all group cursor-pointer block"
+                      title={`Ver detalle de gastos en ${cat}`}
+                    >
+                      <div className="flex items-center justify-between text-xs mb-1">
+                        <span className="text-foreground font-medium group-hover:text-primary transition-colors flex items-center gap-1.5">
+                          <Eye size={12} className="text-primary opacity-60 group-hover:opacity-100" />
+                          {cat}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-muted-foreground font-normal">
+                            {data.count} {data.count === 1 ? "gasto" : "gastos"}
+                          </span>
+                          <span className="text-muted-foreground group-hover:text-foreground font-mono font-semibold">
+                            ${data.total.toLocaleString("es-AR")} ({percentage}%)
+                          </span>
+                        </div>
+                      </div>
+                      <div className="w-full bg-muted/60 h-1.5 rounded-full overflow-hidden">
+                        <div
+                          className="bg-rose-400 h-full rounded-full transition-all duration-300"
+                          style={{ width: `${percentage}%` }}
+                        />
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )
           )}
         </div>
 

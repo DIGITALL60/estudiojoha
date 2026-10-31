@@ -198,6 +198,20 @@ export default function Salarios() {
   const totalCommissionEarned = staffPayroll.reduce((s, e) => s + e.commissionEarned, 0);
   const totalAppointments = staffPayroll.reduce((s, e) => s + e.appointments, 0);
 
+  // Colaborador estrella del mes / período (el que más facturó / vendió)
+  const starEmployee = (() => {
+    if (staffPayroll.length === 0) return null;
+    const activeStaff = staffPayroll.filter(s => (s.revenue + s.shopSales) > 0 || s.appointments > 0);
+    if (activeStaff.length === 0) return null;
+    const sorted = [...activeStaff].sort((a, b) => {
+      const aTotal = a.revenue + a.shopSales;
+      const bTotal = b.revenue + b.shopSales;
+      if (bTotal !== aTotal) return bTotal - aTotal;
+      return b.appointments - a.appointments;
+    });
+    return sorted[0];
+  })();
+
   return (
     <AdminLayout
       title="Salarios"
@@ -303,6 +317,43 @@ export default function Salarios() {
         </motion.div>
       </div>
 
+      {/* Colaborador Estrella del Mes / Período (Solicitado por la dueña) */}
+      {starEmployee && (
+        <div className="bg-gradient-to-r from-amber-500/15 via-primary/10 to-transparent border border-amber-500/30 rounded-xl p-4 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-full bg-amber-500/20 text-amber-500 flex items-center justify-center text-2xl flex-shrink-0 shadow-xs border border-amber-500/30">
+              ⭐
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold tracking-wider uppercase text-amber-500 bg-amber-500/15 border border-amber-500/20 px-2 py-0.5 rounded">
+                  COLABORADOR ESTRELLA DEL PERÍODO
+                </span>
+                <span className="text-xs text-muted-foreground">{starEmployee.role || "Profesional"}</span>
+              </div>
+              <h3 className="text-base font-bold text-foreground mt-0.5 flex items-center gap-2">
+                {starEmployee.name}
+              </h3>
+            </div>
+          </div>
+          <div className="flex items-center gap-4 text-xs bg-card/80 border border-border/50 px-4 py-2.5 rounded-lg w-full sm:w-auto justify-between sm:justify-end">
+            <div className="text-right">
+              <span className="text-muted-foreground block text-[10px] uppercase tracking-wider">Total Facturado</span>
+              <span className="text-base font-bold text-emerald-400">
+                ${(starEmployee.revenue + starEmployee.shopSales).toLocaleString("es-AR")}
+              </span>
+            </div>
+            <div className="w-px h-8 bg-border/60" />
+            <div className="text-right">
+              <span className="text-muted-foreground block text-[10px] uppercase tracking-wider">Servicios Realizados</span>
+              <span className="text-base font-bold text-primary">
+                {starEmployee.appointments} {starEmployee.appointments === 1 ? "turno" : "turnos"}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Payroll table */}
       <div className="bg-card border border-border/80 rounded-xl overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
@@ -357,7 +408,14 @@ export default function Salarios() {
                           {emp.initial}
                         </div>
                         <div>
-                          <p className="text-xs font-semibold text-foreground">{emp.name}</p>
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-xs font-semibold text-foreground">{emp.name}</p>
+                            {emp.id === starEmployee?.id && (
+                              <span className="inline-flex items-center gap-1 text-[9px] font-bold text-amber-400 bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.2 rounded">
+                                ⭐ Estrella
+                              </span>
+                            )}
+                          </div>
                           <p className="text-[10px] text-muted-foreground capitalize">{emp.role || "Profesional"}</p>
                         </div>
                       </div>

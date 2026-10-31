@@ -1,7 +1,10 @@
 import { fetchAPI } from "@/lib/api";
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { TrendingUp, DollarSign, Users, Briefcase, Calendar, ArrowUpRight } from "lucide-react";
+import {
+  TrendingUp, DollarSign, Users, Briefcase, Calendar as CalendarIcon,
+  ChevronLeft, ChevronRight, Wallet, CreditCard, Banknote, Landmark, ArrowUpRight
+} from "lucide-react";
 import AdminLayout from "./AdminLayout";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
@@ -14,7 +17,12 @@ export default function Rentabilidad() {
   const [loading, setLoading] = useState(true);
   const [appointments, setAppointments] = useState<AppointmentRow[]>([]);
   const [expenses, setExpenses] = useState<{ id: string; amount: number; date: string; concept: string }[]>([]);
-  const [filter, setFilter] = useState<"Semana" | "Mes" | "Trimestre" | "Año">("Mes");
+  const [filter, setFilter] = useState<"Semana" | "Mes" | "Trimestre" | "Año">("Semana");
+
+  // Selector de semana con calendario (Solicitado por la dueña)
+  const [selectedWeekDate, setSelectedWeekDate] = useState<string>(() => {
+    return new Date().toISOString().split("T")[0];
+  });
 
   useEffect(() => {
     Promise.all([
@@ -29,6 +37,37 @@ export default function Rentabilidad() {
       .finally(() => setLoading(false));
   }, []);
 
+  // Helper para calcular inicio (lunes) y fin (domingo) de cualquier fecha seleccionada
+  const getWeekBounds = (dateStr: string) => {
+    const base = new Date(dateStr + "T00:00:00");
+    const day = base.getDay(); // 0 domingo, 1 lunes, ...
+    const diffToMonday = day === 0 ? -6 : 1 - day;
+    const monday = new Date(base);
+    monday.setDate(base.getDate() + diffToMonday);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const startStr = `${monday.getFullYear()}-${pad(monday.getMonth() + 1)}-${pad(monday.getDate())}`;
+    const endStr = `${sunday.getFullYear()}-${pad(sunday.getMonth() + 1)}-${pad(sunday.getDate())}`;
+
+    return { monday, sunday, startStr, endStr };
+  };
+
+  const { monday, sunday, startStr: weekStart, endStr: weekEnd } = getWeekBounds(selectedWeekDate);
+
+  const handlePrevWeek = () => {
+    const d = new Date(selectedWeekDate + "T00:00:00");
+    d.setDate(d.getDate() - 7);
+    setSelectedWeekDate(d.toISOString().split("T")[0]);
+  };
+
+  const handleNextWeek = () => {
+    const d = new Date(selectedWeekDate + "T00:00:00");
+    d.setDate(d.getDate() + 7);
+    setSelectedWeekDate(d.toISOString().split("T")[0]);
+  };
+
   const getFilteredApps = () => {
     const now = new Date();
     return appointments.filter(a => {
@@ -36,11 +75,7 @@ export default function Rentabilidad() {
       if (filter === "Año") return d.getFullYear() === now.getFullYear();
       if (filter === "Mes") return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
       if (filter === "Semana") {
-        const start = new Date(now);
-        start.setDate(now.getDate() - now.getDay()); // Sunday
-        const end = new Date(start);
-        end.setDate(start.getDate() + 6); // Saturday
-        return d >= start && d <= end;
+        return a.date >= weekStart && a.date <= weekEnd;
       }
       if (filter === "Trimestre") {
         const quarter = Math.floor(now.getMonth() / 3);
@@ -59,11 +94,7 @@ export default function Rentabilidad() {
     if (filter === "Año") return d.getFullYear() === now.getFullYear();
     if (filter === "Mes") return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
     if (filter === "Semana") {
-      const start = new Date(now);
-      start.setDate(now.getDate() - now.getDay());
-      const end = new Date(start);
-      end.setDate(start.getDate() + 6);
-      return d >= start && d <= end;
+      return dateStr >= weekStart && dateStr <= weekEnd;
     }
     if (filter === "Trimestre") {
       const quarter = Math.floor(now.getMonth() / 3);
@@ -75,11 +106,61 @@ export default function Rentabilidad() {
 
   const filteredExpenses = expenses.filter(e => filterByPeriod(e.date));
 
-  const ingresos = filteredApps.reduce((sum, a) => sum + a.price, 0);
-  const egresos = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
+  const ingresos = filteredApps.reduce((sum, a) => sum + (Number(a.price) || 0), 0);
+  const egresos = filteredExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
   const utilidad = ingresos - egresos;
   const ventas = filteredApps.length;
   const ticketPromedio = ventas > 0 ? ingresos / ventas : 0;
+
+  // Desglose detallado por Efectivo, Transferencia y Cuentas Corrientes (Solicitado por la dueña)
+  const methodTotals = filteredApps.reduce(
+    (acc, a) => {
+      const raw = (a.paymentMethod || "Efectivo").trim();
+      const lower = raw.toLowerCase();
+      const amount = Number(a.price) || 0;
+
+      if (
+        lower.includes("transferencia") ||
+        lower.includes("mercado") ||
+        lower.includes("banco") ||
+        lower.includes("lemon") ||
+        lower.includes("modo") ||
+        lower.includes("naranja") ||
+        lower.includes("personal") ||
+        lower.includes("uala") ||
+        lower.includes("ualá") ||
+        lower.includes("prex") ||
+        lower.includes("cuenta dni")
+      ) {
+        acc.transferencia += amount;
+        let walletKey = "Mercado Pago";
+        if (lower.includes("córdoba") || lower.includes("cordoba")) walletKey = "Banco de Córdoba";
+        else if (lower.includes("naranja")) walletKey = "Naranja X";
+        else if (lower.includes("personal")) walletKey = "Personal Pay";
+        else if (lower.includes("lemon")) walletKey = "Lemon Cash";
+        else if (lower.includes("modo")) walletKey = "Modo";
+        else if (lower.includes("prex")) walletKey = "Prex";
+        else if (lower.includes("uala") || lower.includes("ualá")) walletKey = "Ualá";
+        else if (lower.includes("(")) {
+          const m = raw.match(/\((.*?)\)/);
+          if (m) walletKey = m[1];
+        }
+        acc.wallets[walletKey] = (acc.wallets[walletKey] || 0) + amount;
+      } else if (
+        lower.includes("corriente") ||
+        lower.includes("cta") ||
+        lower.includes("tarjeta") ||
+        lower.includes("debito") ||
+        lower.includes("credito")
+      ) {
+        acc.ctasCorrientes += amount;
+      } else {
+        acc.efectivo += amount;
+      }
+      return acc;
+    },
+    { efectivo: 0, transferencia: 0, ctasCorrientes: 0, wallets: {} as Record<string, number> }
+  );
 
   const byService = filteredApps.reduce((acc, a) => {
     acc[a.serviceName] = (acc[a.serviceName] || 0) + a.price;
@@ -109,40 +190,220 @@ export default function Rentabilidad() {
     ingresos: tendencia[k]
   }));
 
+  const eftPercent = ingresos > 0 ? Math.round((methodTotals.efectivo / ingresos) * 100) : 0;
+  const transPercent = ingresos > 0 ? Math.round((methodTotals.transferencia / ingresos) * 100) : 0;
+  const ctasPercent = ingresos > 0 ? Math.round((methodTotals.ctasCorrientes / ingresos) * 100) : 0;
+
   return (
-    <AdminLayout title="Rentabilidad" subtitle="Análisis financiero detallado">
-      <div className="flex items-center gap-2 mb-6">
-        {["Semana", "Mes", "Trimestre", "Año"].map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f as any)}
-            className={`px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${filter === f ? "bg-primary text-primary-foreground" : "bg-card border border-border/50 text-muted-foreground hover:bg-accent/10"}`}
-          >
-            {f}
-          </button>
-        ))}
+    <AdminLayout title="Rentabilidad" subtitle="Análisis financiero detallado y desglose de medios">
+      {/* Selector de Período y Selector de Semana con Calendario */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 bg-card border border-border/50 rounded-xl p-3">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {(["Semana", "Mes", "Trimestre", "Año"] as const).map((f) => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                filter === f
+                  ? "bg-primary text-primary-foreground shadow-xs"
+                  : "bg-background border border-border/50 text-muted-foreground hover:bg-accent/10"
+              }`}
+            >
+              {f}
+            </button>
+          ))}
+        </div>
+
+        {/* Desplegable de calendario para elegir qué semana ver */}
+        {filter === "Semana" && (
+          <div className="flex items-center gap-2 bg-background border border-border rounded-lg px-2.5 py-1.5 shadow-xs">
+            <button
+              type="button"
+              onClick={handlePrevWeek}
+              className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+              title="Semana anterior"
+            >
+              <ChevronLeft size={16} />
+            </button>
+
+            <div className="flex items-center gap-2">
+              <CalendarIcon size={14} className="text-primary" />
+              <span className="text-xs font-semibold text-foreground whitespace-nowrap">
+                Semana: {monday.toLocaleDateString("es-AR", { day: "numeric", month: "short" })} al {sunday.toLocaleDateString("es-AR", { day: "numeric", month: "short" })}
+              </span>
+
+              {/* Calendario nativo desplegable para seleccionar cualquier fecha */}
+              <input
+                type="date"
+                value={selectedWeekDate}
+                onChange={e => e.target.value && setSelectedWeekDate(e.target.value)}
+                className="bg-card border border-border/60 rounded px-1.5 py-0.5 text-[11px] text-foreground focus:outline-none focus:border-primary cursor-pointer hover:border-primary/50 transition-colors"
+                title="Hacé clic para abrir el calendario y elegir cualquier día de la semana"
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={handleNextWeek}
+              className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+              title="Semana siguiente"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <div className="bg-card border border-border/50 rounded-xl p-5 relative overflow-hidden">
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div className="bg-card border border-border/50 rounded-xl p-5 relative overflow-hidden shadow-xs">
           <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 to-transparent pointer-events-none" />
           <span className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground block mb-2 relative z-10">Ingresos</span>
           <span className="text-3xl font-light text-foreground relative z-10">$ {ingresos.toLocaleString("es-AR")}</span>
+          <span className="text-[11px] text-muted-foreground block mt-1">{ventas} turnos completados</span>
         </div>
-        <div className="bg-card border border-border/50 rounded-xl p-5">
+        <div className="bg-card border border-border/50 rounded-xl p-5 shadow-xs">
           <span className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground block mb-2">Egresos</span>
-          <span className="text-3xl font-light text-red-400">$ {egresos.toLocaleString("es-AR")}</span>
+          <span className="text-3xl font-light text-rose-400">$ {egresos.toLocaleString("es-AR")}</span>
+          <span className="text-[11px] text-muted-foreground block mt-1">{filteredExpenses.length} egresos</span>
         </div>
-        <div className="bg-card border border-border/50 rounded-xl p-5">
+        <div className="bg-card border border-border/50 rounded-xl p-5 shadow-xs">
           <span className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground block mb-2">Utilidad neta</span>
-          <span className={`text-3xl font-light ${utilidad >= 0 ? "text-emerald-400" : "text-red-400"}`}>$ {utilidad.toLocaleString("es-AR")}</span>
+          <span className={`text-3xl font-light ${utilidad >= 0 ? "text-emerald-400" : "text-rose-400"}`}>$ {utilidad.toLocaleString("es-AR")}</span>
+          <span className="text-[11px] text-muted-foreground block mt-1">Margen: {ingresos > 0 ? Math.round((utilidad / ingresos) * 100) : 0}%</span>
         </div>
-        <div className="bg-card border border-border/50 rounded-xl p-5">
+        <div className="bg-card border border-border/50 rounded-xl p-5 shadow-xs">
           <span className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground block mb-2">Ticket Promedio</span>
           <span className="text-3xl font-light text-foreground">$ {Math.round(ticketPromedio).toLocaleString("es-AR")}</span>
+          <span className="text-[11px] text-muted-foreground block mt-1">Por turno cobrado</span>
         </div>
       </div>
 
+      {/* Desglose Detallado por Efectivo, Transferencia y Cuentas Corrientes (Solicitado por la dueña) */}
+      <div className="bg-card border border-border/60 rounded-xl p-5 mb-8 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 pb-3 border-b border-border/40">
+          <div>
+            <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+              <Landmark size={16} className="text-primary" />
+              Desglose de Dinero Recaudado por Medio de Pago
+            </h3>
+            <p className="text-[11px] text-muted-foreground">
+              Total detallado de plata ingresada por Efectivo, Transferencias/Billeteras y Cuentas Corrientes/Tarjetas
+            </p>
+          </div>
+          <div className="text-right">
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground block">Total Recaudado</span>
+            <span className="text-base font-bold text-foreground font-mono">$ {ingresos.toLocaleString("es-AR")}</span>
+          </div>
+        </div>
+
+        {/* Barra de progreso de distribución */}
+        <div className="w-full h-3 rounded-full overflow-hidden bg-muted/40 flex mb-5 border border-border/40">
+          {eftPercent > 0 && (
+            <div
+              style={{ width: `${eftPercent}%` }}
+              className="bg-emerald-500 transition-all duration-500"
+              title={`Efectivo: ${eftPercent}%`}
+            />
+          )}
+          {transPercent > 0 && (
+            <div
+              style={{ width: `${transPercent}%` }}
+              className="bg-blue-500 transition-all duration-500"
+              title={`Transferencias: ${transPercent}%`}
+            />
+          )}
+          {ctasPercent > 0 && (
+            <div
+              style={{ width: `${ctasPercent}%` }}
+              className="bg-purple-500 transition-all duration-500"
+              title={`Ctas Corrientes / Tarjetas: ${ctasPercent}%`}
+            />
+          )}
+        </div>
+
+        {/* Tarjetas de Medios Desglosados */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* 1. Efectivo */}
+          <div className="bg-background border border-emerald-500/25 rounded-xl p-4 flex flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                <Banknote size={15} /> Efectivo (EFT)
+              </span>
+              <span className="text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">
+                {eftPercent}%
+              </span>
+            </div>
+            <div className="mt-3">
+              <p className="text-2xl font-light text-foreground font-mono">
+                $ {methodTotals.efectivo.toLocaleString("es-AR")}
+              </p>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                Dinero en mano en caja física
+              </p>
+            </div>
+          </div>
+
+          {/* 2. Transferencia / Billeteras Virtuales */}
+          <div className="bg-background border border-blue-500/25 rounded-xl p-4 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-blue-400 flex items-center gap-1.5">
+                  <Wallet size={15} /> Transferencias / Billeteras
+                </span>
+                <span className="text-[11px] font-bold text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full">
+                  {transPercent}%
+                </span>
+              </div>
+              <p className="text-2xl font-light text-foreground font-mono mt-3">
+                $ {methodTotals.transferencia.toLocaleString("es-AR")}
+              </p>
+            </div>
+
+            {/* Sub-desglose por banco / billetera */}
+            {Object.keys(methodTotals.wallets).length > 0 && (
+              <div className="mt-3 pt-2.5 border-t border-border/40 space-y-1">
+                <span className="text-[9px] uppercase tracking-wider font-bold text-muted-foreground block">
+                  Por cuenta / billetera:
+                </span>
+                <div className="flex flex-wrap gap-1">
+                  {Object.entries(methodTotals.wallets).map(([w, amt]) => (
+                    <span
+                      key={w}
+                      className="inline-flex items-center gap-1 text-[10px] bg-blue-500/10 text-blue-300 border border-blue-500/20 px-2 py-0.5 rounded"
+                    >
+                      <span>📱 {w}:</span>
+                      <strong className="font-mono">${amt.toLocaleString("es-AR")}</strong>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 3. Cuentas Corrientes y Tarjetas */}
+          <div className="bg-background border border-purple-500/25 rounded-xl p-4 flex flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-purple-400 flex items-center gap-1.5">
+                <CreditCard size={15} /> Ctas Corrientes / Tarjetas
+              </span>
+              <span className="text-[11px] font-bold text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded-full">
+                {ctasPercent}%
+              </span>
+            </div>
+            <div className="mt-3">
+              <p className="text-2xl font-light text-foreground font-mono">
+                $ {methodTotals.ctasCorrientes.toLocaleString("es-AR")}
+              </p>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                Pagos en cuenta corriente y posnet
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Gráfico y Desglose por Servicio */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         <div className="bg-card border border-border/50 rounded-xl p-5">
           <span className="text-[10px] uppercase tracking-widest font-bold text-foreground mb-4 block">Tendencia diaria</span>
@@ -180,6 +441,7 @@ export default function Rentabilidad() {
         </div>
       </div>
 
+      {/* Por Profesional y Por Método de Pago */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-card border border-border/50 rounded-xl p-5">
           <span className="text-[10px] uppercase tracking-widest font-bold text-foreground mb-4 block">Por Profesional</span>
@@ -198,7 +460,7 @@ export default function Rentabilidad() {
         </div>
 
         <div className="bg-card border border-border/50 rounded-xl p-5">
-          <span className="text-[10px] uppercase tracking-widest font-bold text-foreground mb-4 block">Por Método de Pago</span>
+          <span className="text-[10px] uppercase tracking-widest font-bold text-foreground mb-4 block">Detalle de Medios Registrados</span>
           {Object.keys(byMethod).length > 0 ? (
             <div className="space-y-3">
               {Object.entries(byMethod)
