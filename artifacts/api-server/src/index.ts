@@ -1,6 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
-import { db, sqlite, professionals, services, app_settings, professional_schedules, appointments, clients, expenses, vouchers, blocked_dates, products } from "@workspace/db";
+import { db, sqlite, professionals, services, app_settings, professional_schedules, appointments, clients, expenses, vouchers, blocked_dates, products, suppliers } from "@workspace/db";
 import { randomUUID } from "crypto";
 import { DEFAULT_SETTINGS } from "./lib/settings.js";
 
@@ -128,6 +128,16 @@ function initSchema() {
         \`key\` text PRIMARY KEY NOT NULL,
         \`value\` text NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS \`suppliers\` (
+        \`id\` text PRIMARY KEY NOT NULL,
+        \`name\` text NOT NULL,
+        \`phone\` text,
+        \`email\` text,
+        \`category\` text,
+        \`contact_name\` text,
+        \`notes\` text,
+        \`created_at\` integer NOT NULL
+      );
       
       -- Fix potential encoding issues in DB
       UPDATE \`services\` SET \`category\` = 'Catálogo Eventos' WHERE \`category\` LIKE 'Cat%logo Eventos';
@@ -148,6 +158,8 @@ function initSchema() {
     try { sqlite.exec("ALTER TABLE vouchers ADD COLUMN used_at integer"); } catch (e) {}
     try { sqlite.exec("ALTER TABLE products ADD COLUMN image_url text"); } catch (e) {}
     try { sqlite.exec("ALTER TABLE expenses ADD COLUMN payment_method text DEFAULT 'Efectivo'"); } catch (e) {}
+    try { sqlite.exec("ALTER TABLE expenses ADD COLUMN supplier_id text"); } catch (e) {}
+    try { sqlite.exec("ALTER TABLE expenses ADD COLUMN supplier_name text"); } catch (e) {}
 
 
     logger.info("Database schema initialized successfully");

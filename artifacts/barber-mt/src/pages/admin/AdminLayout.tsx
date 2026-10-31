@@ -6,7 +6,7 @@ import {
   GraduationCap, Wallet, TrendingUp, BadgeDollarSign,
   Gift, History, RotateCw, Ticket, Settings, LogOut,
   ChevronLeft, ChevronRight, Menu, AlertTriangle, Bell,
-  MessageSquare, Clock, Image as ImageIcon
+  MessageSquare, Clock, Image as ImageIcon, Truck
 } from "lucide-react";
 import LogoIcon from "@/components/LogoIcon";
 import AdminQRModal from "@/components/AdminQRModal";
@@ -34,6 +34,7 @@ const iconMap: Record<string, React.ReactNode> = {
   image: <ImageIcon size={16} />,
   qrcode: <QrCode size={16} />,
   "message-square": <MessageSquare size={16} />,
+  truck: <Truck size={16} />,
 };
 
 const navConfig = {
@@ -47,6 +48,7 @@ const navConfig = {
         { id: "horarios", label: "Mis Horarios", icon: "clock", path: "/admin/horarios" },
         { id: "mi-resumen", label: "Mi Resumen", icon: "chart-line", path: "/admin/mi-resumen" },
         { id: "clientes", label: "Clientes", icon: "users", path: "/admin/clientes" },
+        { id: "proveedores", label: "Proveedores", icon: "truck", path: "/admin/proveedores" },
         { id: "servicios", label: "Servicios", icon: "briefcase", path: "/admin/servicios" },
         { id: "stock", label: "Stock", icon: "package", path: "/admin/stock" },
         { id: "staff", label: "Staff", icon: "user-cog", path: "/admin/staff" },

@@ -15,6 +15,7 @@ import Agenda from "@/pages/admin/Agenda";
 import Horarios from "@/pages/admin/Horarios";
 import MiResumen from "@/pages/admin/MiResumen";
 import Clientes from "@/pages/admin/Clientes";
+import Proveedores from "@/pages/admin/Proveedores";
 import Servicios from "@/pages/admin/Servicios";
 import Stock from "@/pages/admin/Stock";
 import Staff from "@/pages/admin/Staff";
@@ -83,6 +84,7 @@ function Router() {
       <Route path="/admin/horarios">{(params) => <AuthRoute component={Horarios} />}</Route>
       <Route path="/admin/mi-resumen">{(params) => <AuthRoute component={MiResumen} />}</Route>
       <Route path="/admin/clientes">{(params) => <AuthRoute component={Clientes} adminOnly />}</Route>
+      <Route path="/admin/proveedores">{(params) => <AuthRoute component={Proveedores} adminOnly />}</Route>
       <Route path="/admin/servicios">{(params) => <AuthRoute component={Servicios} adminOnly />}</Route>
       <Route path="/admin/stock">{(params) => <AuthRoute component={Stock} adminOnly />}</Route>
       <Route path="/admin/staff">{(params) => <AuthRoute component={Staff} adminOnly />}</Route>

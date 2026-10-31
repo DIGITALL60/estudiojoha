@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, professionals, services, clients, appointments, professional_schedules, professional_services, products, service_products, expenses, app_settings, blocked_dates, vouchers } from "@workspace/db";
+import { db, professionals, services, clients, appointments, professional_schedules, professional_services, products, service_products, expenses, app_settings, blocked_dates, vouchers, suppliers } from "@workspace/db";
 
 import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
@@ -1086,6 +1086,75 @@ router.delete("/service-products/:id", requireAuth, async (req, res) => {
   }
 });
 
+// ─── SUPPLIERS (PROVEEDORES) ──────────────────────────────
+router.get("/suppliers", requireAuth, async (req, res) => {
+  try {
+    const data = await db.select().from(suppliers);
+    const sorted = (data || []).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+    return res.json(sorted);
+  } catch (err) {
+    logger.error({ err }, "Error fetching suppliers");
+    return res.status(500).json({ error: "Failed to fetch suppliers" });
+  }
+});
+
+router.post("/suppliers", requireAuth, async (req, res) => {
+  try {
+    const { name, phone, email, category, contactName, notes } = req.body;
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: "El nombre del proveedor es obligatorio" });
+    }
+    const id = randomUUID();
+    await db.insert(suppliers).values({
+      id,
+      name: name.trim(),
+      phone: phone ? phone.trim() : null,
+      email: email ? email.trim() : null,
+      category: category ? category.trim() : "Insumos",
+      contactName: contactName ? contactName.trim() : null,
+      notes: notes ? notes.trim() : null,
+      createdAt: new Date(),
+    });
+    const [created] = await db.select().from(suppliers).where(eq(suppliers.id, id)).limit(1);
+    return res.status(201).json(created);
+  } catch (err) {
+    logger.error({ err }, "Error creating supplier");
+    return res.status(500).json({ error: "Failed to create supplier" });
+  }
+});
+
+router.patch("/suppliers/:id", requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params as { id: string };
+    const { name, phone, email, category, contactName, notes } = req.body;
+    await db.update(suppliers).set({
+      name: name !== undefined ? name.trim() : undefined,
+      phone: phone !== undefined ? phone.trim() : undefined,
+      email: email !== undefined ? email.trim() : undefined,
+      category: category !== undefined ? category.trim() : undefined,
+      contactName: contactName !== undefined ? contactName.trim() : undefined,
+      notes: notes !== undefined ? notes.trim() : undefined,
+    }).where(eq(suppliers.id, id));
+
+    const [updated] = await db.select().from(suppliers).where(eq(suppliers.id, id)).limit(1);
+    return res.json(updated);
+  } catch (err) {
+    logger.error({ err }, "Error updating supplier");
+    return res.status(500).json({ error: "Failed to update supplier" });
+  }
+});
+
+router.delete("/suppliers/:id", requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params as { id: string };
+    await db.delete(suppliers).where(eq(suppliers.id, id));
+    return res.json({ success: true });
+  } catch (err) {
+    logger.error({ err }, "Error deleting supplier");
+    return res.status(500).json({ error: "Failed to delete supplier" });
+  }
+});
+
 // ─── EXPENSES (CAJA - EGRESOS) ─────────────────────────────
 router.get("/expenses", requireAuth, async (req, res) => {
   try {
@@ -1094,6 +1163,8 @@ router.get("/expenses", requireAuth, async (req, res) => {
       ...e,
       paymentMethod: e.paymentMethod || e.payment_method || "Efectivo",
       payment_method: e.paymentMethod || e.payment_method || "Efectivo",
+      supplierId: e.supplierId || e.supplier_id || null,
+      supplierName: e.supplierName || e.supplier_name || null,
     }));
     res.json(normalized);
   } catch (err) {
@@ -1103,11 +1174,19 @@ router.get("/expenses", requireAuth, async (req, res) => {
 
 router.post("/expenses", requireAuth, async (req, res) => {
   try {
-    const { concept, amount, category, paymentMethod, payment_method, date, professionalId } = req.body;
+    const { concept, amount, category, paymentMethod, payment_method, date, professionalId, supplierId, supplierName } = req.body;
     if (!concept || amount === undefined || !date) {
       return res.status(400).json({ error: "Missing required fields" });
     }
     const resolvedMethod = paymentMethod || payment_method || "Efectivo";
+    
+    // Resolve supplier name if ID provided but not name
+    let resolvedSupplierName = supplierName;
+    if (supplierId && !resolvedSupplierName) {
+      const [found] = await db.select().from(suppliers).where(eq(suppliers.id, supplierId)).limit(1);
+      if (found) resolvedSupplierName = found.name;
+    }
+
     const id = randomUUID();
     await db.insert(expenses).values({
       id,
@@ -1117,6 +1196,8 @@ router.post("/expenses", requireAuth, async (req, res) => {
       paymentMethod: resolvedMethod,
       date,
       professionalId,
+      supplierId: supplierId || null,
+      supplierName: resolvedSupplierName || null,
       createdAt: new Date(),
     });
     const [created] = await db.select().from(expenses).where(eq(expenses.id, id)).limit(1);
@@ -1127,6 +1208,7 @@ router.post("/expenses", requireAuth, async (req, res) => {
     } : created;
     return res.status(201).json(result);
   } catch (err) {
+    logger.error({ err }, "Error creating expense");
     return res.status(500).json({ error: "Failed to create expense" });
   }
 });
@@ -1144,8 +1226,15 @@ router.delete("/expenses/:id", requireAuth, async (req, res) => {
 router.put("/expenses/:id", requireAuth, async (req, res) => {
   try {
     const { id } = req.params as { id: string };
-    const { concept, amount, category, paymentMethod, payment_method, date, professionalId } = req.body;
+    const { concept, amount, category, paymentMethod, payment_method, date, professionalId, supplierId, supplierName } = req.body;
     const resolvedMethod = paymentMethod !== undefined ? paymentMethod : (payment_method !== undefined ? payment_method : undefined);
+    
+    let resolvedSupplierName = supplierName;
+    if (supplierId && !resolvedSupplierName) {
+      const [found] = await db.select().from(suppliers).where(eq(suppliers.id, supplierId)).limit(1);
+      if (found) resolvedSupplierName = found.name;
+    }
+
     await db.update(expenses).set({
       concept: concept !== undefined ? concept : undefined,
       amount: amount !== undefined ? Number(amount) : undefined,
@@ -1153,6 +1242,8 @@ router.put("/expenses/:id", requireAuth, async (req, res) => {
       paymentMethod: resolvedMethod,
       date: date !== undefined ? date : undefined,
       professionalId: professionalId !== undefined ? professionalId : undefined,
+      supplierId: supplierId !== undefined ? (supplierId || null) : undefined,
+      supplierName: resolvedSupplierName !== undefined ? (resolvedSupplierName || null) : undefined,
     }).where(eq(expenses.id, id));
     const [updated] = await db.select().from(expenses).where(eq(expenses.id, id)).limit(1);
     const result = updated ? {
@@ -1169,8 +1260,15 @@ router.put("/expenses/:id", requireAuth, async (req, res) => {
 router.patch("/expenses/:id", requireAuth, async (req, res) => {
   try {
     const { id } = req.params as { id: string };
-    const { concept, amount, category, paymentMethod, payment_method, date, professionalId } = req.body;
+    const { concept, amount, category, paymentMethod, payment_method, date, professionalId, supplierId, supplierName } = req.body;
     const resolvedMethod = paymentMethod !== undefined ? paymentMethod : (payment_method !== undefined ? payment_method : undefined);
+    
+    let resolvedSupplierName = supplierName;
+    if (supplierId && !resolvedSupplierName) {
+      const [found] = await db.select().from(suppliers).where(eq(suppliers.id, supplierId)).limit(1);
+      if (found) resolvedSupplierName = found.name;
+    }
+
     await db.update(expenses).set({
       concept: concept !== undefined ? concept : undefined,
       amount: amount !== undefined ? Number(amount) : undefined,
@@ -1178,6 +1276,8 @@ router.patch("/expenses/:id", requireAuth, async (req, res) => {
       paymentMethod: resolvedMethod,
       date: date !== undefined ? date : undefined,
       professionalId: professionalId !== undefined ? professionalId : undefined,
+      supplierId: supplierId !== undefined ? (supplierId || null) : undefined,
+      supplierName: resolvedSupplierName !== undefined ? (resolvedSupplierName || null) : undefined,
     }).where(eq(expenses.id, id));
     const [updated] = await db.select().from(expenses).where(eq(expenses.id, id)).limit(1);
     const result = updated ? {

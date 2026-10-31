@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, ChevronRight, ChevronDown, Download, Wallet, Plus, Trash2, Pencil, TrendingUp, TrendingDown, BarChart3, Tag, Check, X, Calendar as CalendarIcon, Package } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronDown, Download, Wallet, Plus, Trash2, Pencil, TrendingUp, TrendingDown, BarChart3, Tag, Check, X, Calendar as CalendarIcon, Package, Truck, MessageCircle } from "lucide-react";
 import AdminLayout from "./AdminLayout";
 import ClientSearchSelect from "@/components/ClientSearchSelect";
 import ServiceSearchSelect, { type SelectedServiceItem } from "@/components/ServiceSearchSelect";
@@ -19,7 +19,32 @@ interface Client { id: string; name: string; phone: string; }
 interface Service { id: string; name: string; price: number; category?: string; duration?: number; }
 
 interface ExpenseRow {
-  id: string; concept: string; amount: number; category: string; paymentMethod?: string; date: string; professionalId?: string;
+  id: string;
+  concept: string;
+  amount: number;
+  category: string;
+  paymentMethod?: string;
+  date: string;
+  professionalId?: string;
+  supplierId?: string | null;
+  supplierName?: string | null;
+}
+
+export interface SupplierItem {
+  id: string;
+  name: string;
+  phone?: string | null;
+  email?: string | null;
+  category?: string | null;
+  contactName?: string | null;
+  notes?: string | null;
+}
+
+export interface PaymentSplitItem {
+  id: string;
+  method: string;
+  wallet?: string;
+  amount: string;
 }
 
 const DEFAULT_EXPENSE_CATEGORIES = [
@@ -34,13 +59,14 @@ const CATEGORY_ICONS: Record<string, string> = {
   "Carga de celular": "📱", "Mentorias": "🎓", "Mentorías": "🎓"
 };
 
-const VIRTUAL_WALLETS = [
+const DEFAULT_VIRTUAL_WALLETS = [
   "Mercado Pago",
   "Banco de Córdoba",
   "Naranja X",
   "Ualá",
   "Personal Pay",
   "Cuenta DNI",
+  "Modo",
   "Otra Billetera"
 ];
 
@@ -55,9 +81,54 @@ export default function Caja() {
   const [appointments, setAppointments] = useState<AppointmentRow[]>([]);
   const [expenses, setExpenses] = useState<ExpenseRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [newExpense, setNewExpense] = useState({ concept: "", amount: "", category: "General", paymentMethod: "Efectivo", wallet: "Mercado Pago" });
+  const [newExpense, setNewExpense] = useState({
+    concept: "",
+    amount: "",
+    category: "General",
+    paymentMethod: "Efectivo",
+    wallet: "Mercado Pago",
+    supplierId: "",
+    supplierName: "",
+  });
   const [showExpenseForm, setShowExpenseForm] = useState(false);
   const [professionals, setProfessionals] = useState<Professional[]>([]);
+  const [suppliers, setSuppliers] = useState<SupplierItem[]>([]);
+  const [showNewSupplierInlineModal, setShowNewSupplierInlineModal] = useState(false);
+  const [inlineSupplierName, setInlineSupplierName] = useState("");
+  const [inlineSupplierPhone, setInlineSupplierPhone] = useState("");
+  const [inlineSupplierContact, setInlineSupplierContact] = useState("");
+  const [inlineSupplierCategory, setInlineSupplierCategory] = useState("Insumos");
+  const [savingInlineSupplier, setSavingInlineSupplier] = useState(false);
+
+  // Estados de Billeteras Virtuales dinámicas y personalizadas
+  const [customWallets, setCustomWallets] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem("estudiojoha_custom_wallets");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [showWalletModal, setShowWalletModal] = useState(false);
+  const [newWalletName, setNewWalletName] = useState("");
+  const [savingWallet, setSavingWallet] = useState(false);
+
+  const allWallets = useMemo(() => {
+    return Array.from(new Set([...DEFAULT_VIRTUAL_WALLETS, ...customWallets]));
+  }, [customWallets]);
+
+  // Estados para Múltiples Medios de Pago (Split Payment)
+  const [isSplitPayment, setIsSplitPayment] = useState(false);
+  const [paymentSplits, setPaymentSplits] = useState<PaymentSplitItem[]>([
+    { id: "1", method: "Efectivo", wallet: "Mercado Pago", amount: "" },
+    { id: "2", method: "Transferencia", wallet: "Banco de Córdoba", amount: "" },
+  ]);
+
+  const [isExpenseSplitPayment, setIsExpenseSplitPayment] = useState(false);
+  const [expensePaymentSplits, setExpensePaymentSplits] = useState<PaymentSplitItem[]>([
+    { id: "1", method: "Efectivo", wallet: "Mercado Pago", amount: "" },
+    { id: "2", method: "Transferencia", wallet: "Mercado Pago", amount: "" },
+  ]);
   const [clients, setClients] = useState<Client[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [products, setProducts] = useState<ProductItem[]>([]);
@@ -96,6 +167,8 @@ export default function Caja() {
     paymentMethod: string;
     wallet: string;
     date: string;
+    supplierId?: string | null;
+    supplierName?: string | null;
   } | null>(null);
 
   const [editingAppointment, setEditingAppointment] = useState<{
@@ -170,14 +243,16 @@ export default function Caja() {
       fetchAPI("/api/data/services").then(r => r.json()),
       fetchAPI("/api/data/products").then(r => r.json()).catch(() => []),
       fetchAPI("/api/data/settings").then(r => r.json()).catch(() => ({})),
+      fetchAPI("/api/data/suppliers").then(r => r.json()).catch(() => []),
     ])
-      .then(([apps, exps, profs, clis, srvs, prods, settings]) => {
+      .then(([apps, exps, profs, clis, srvs, prods, settings, sups]) => {
         setAppointments(apps);
         setExpenses(exps);
         setProfessionals(profs);
         setClients(clis);
         setServices(srvs);
         setProducts(Array.isArray(prods) ? prods : []);
+        setSuppliers(Array.isArray(sups) ? sups : []);
 
         if (settings && settings.custom_expense_categories) {
           try {
@@ -191,9 +266,112 @@ export default function Caja() {
             }
           } catch (e) {}
         }
+
+        if (settings && settings.custom_payment_wallets) {
+          try {
+            const parsed = JSON.parse(settings.custom_payment_wallets);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setCustomWallets(prev => {
+                const combined = Array.from(new Set([...prev, ...parsed]));
+                localStorage.setItem("estudiojoha_custom_wallets", JSON.stringify(combined));
+                return combined;
+              });
+            }
+          } catch (e) {}
+        }
       })
       .catch(console.error)
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { loadData(); }, []);
+
+  const handleAddCustomWallet = async (nameToAdd?: string) => {
+    const raw = (nameToAdd || newWalletName).trim();
+    if (!raw) return;
+    const formatted = raw.charAt(0).toUpperCase() + raw.slice(1);
+
+    if (allWallets.map(w => w.toLowerCase()).includes(formatted.toLowerCase())) {
+      alert(`El medio / billetera "${formatted}" ya existe.`);
+      setNewExpense(prev => ({ ...prev, wallet: formatted }));
+      setBankAccount(formatted);
+      setShowWalletModal(false);
+      setNewWalletName("");
+      return;
+    }
+
+    setSavingWallet(true);
+    const updated = Array.from(new Set([...customWallets, formatted]));
+    setCustomWallets(updated);
+    try {
+      localStorage.setItem("estudiojoha_custom_wallets", JSON.stringify(updated));
+      await fetchAPI("/api/data/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ custom_payment_wallets: JSON.stringify(updated) }),
+      });
+    } catch (err) {
+      console.error("Error guardando billetera personalizada:", err);
+    } finally {
+      setSavingWallet(false);
+      setNewExpense(prev => ({ ...prev, wallet: formatted }));
+      setBankAccount(formatted);
+      setShowWalletModal(false);
+      setNewWalletName("");
+    }
+  };
+
+  const handleDeleteCustomWallet = async (walletToDelete: string) => {
+    if (!confirm(`¿Eliminar la billetera "${walletToDelete}"?`)) return;
+    const updated = customWallets.filter(w => w !== walletToDelete);
+    setCustomWallets(updated);
+    try {
+      localStorage.setItem("estudiojoha_custom_wallets", JSON.stringify(updated));
+      await fetchAPI("/api/data/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ custom_payment_wallets: JSON.stringify(updated) }),
+      });
+    } catch (e) {}
+  };
+
+  const handleCreateInlineSupplier = async () => {
+    if (!inlineSupplierName.trim()) {
+      alert("Por favor ingresá el nombre del proveedor.");
+      return;
+    }
+    setSavingInlineSupplier(true);
+    try {
+      const res = await fetchAPI("/api/data/suppliers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: inlineSupplierName.trim(),
+          phone: inlineSupplierPhone.trim() || undefined,
+          contactName: inlineSupplierContact.trim() || undefined,
+          category: inlineSupplierCategory || "Insumos",
+        }),
+      });
+      if (res.ok) {
+        const created = await res.json();
+        setSuppliers(prev => [created, ...prev]);
+        setNewExpense(prev => ({
+          ...prev,
+          supplierId: created.id,
+          supplierName: created.name,
+        }));
+        setShowNewSupplierInlineModal(false);
+        setInlineSupplierName("");
+        setInlineSupplierPhone("");
+        setInlineSupplierContact("");
+      } else {
+        alert("Error al guardar proveedor.");
+      }
+    } catch {
+      alert("Error al conectar con el servidor.");
+    } finally {
+      setSavingInlineSupplier(false);
+    }
   };
 
   useEffect(() => { loadData(); }, []);
@@ -419,7 +597,74 @@ export default function Caja() {
   };
 
   const handleAddExpense = async () => {
-    if (!newExpense.concept || !newExpense.amount) return;
+    if (!newExpense.concept.trim() || !newExpense.amount || Number(newExpense.amount) <= 0) {
+      alert("Por favor ingresá un concepto y un monto válido para el egreso.");
+      return;
+    }
+
+    const totalExpenseAmount = Number(newExpense.amount);
+    const selectedSup = suppliers.find(s => s.id === newExpense.supplierId);
+
+    // Múltiples formas de pago de egreso
+    if (isExpenseSplitPayment) {
+      const activeSplits = expensePaymentSplits.filter(s => Number(s.amount) > 0);
+      if (activeSplits.length === 0) {
+        alert("Por favor ingresá los montos de cada medio de pago del egreso.");
+        return;
+      }
+      const sumSplits = activeSplits.reduce((acc, s) => acc + (Number(s.amount) || 0), 0);
+      if (sumSplits !== totalExpenseAmount) {
+        alert(`La suma de los medios de pago ($${sumSplits.toLocaleString("es-AR")}) no coincide con el total del egreso ($${totalExpenseAmount.toLocaleString("es-AR")}). Faltan o sobran $${Math.abs(totalExpenseAmount - sumSplits).toLocaleString("es-AR")}.`);
+        return;
+      }
+
+      try {
+        await Promise.all(
+          activeSplits.map((split, idx) => {
+            const splitMethod = split.method === "Transferencia"
+              ? `Transferencia (${split.wallet || "Mercado Pago"})`
+              : split.method;
+            const splitConcept = activeSplits.length > 1
+              ? `${newExpense.concept.trim()} (${idx + 1}/${activeSplits.length}: ${split.method})`
+              : newExpense.concept.trim();
+
+            return fetchAPI("/api/data/expenses", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                concept: splitConcept,
+                amount: Number(split.amount),
+                category: newExpense.category,
+                paymentMethod: splitMethod,
+                payment_method: splitMethod,
+                supplierId: newExpense.supplierId || undefined,
+                supplierName: selectedSup ? selectedSup.name : undefined,
+                date: selectedDate,
+              }),
+            });
+          })
+        );
+
+        setNewExpense({
+          concept: "",
+          amount: "",
+          category: "General",
+          paymentMethod: "Efectivo",
+          wallet: "Mercado Pago",
+          supplierId: "",
+          supplierName: "",
+        });
+        setIsExpenseSplitPayment(false);
+        setShowExpenseForm(false);
+        loadData();
+        alert("¡Egreso registrado exitosamente con múltiples formas de pago!");
+      } catch {
+        alert("Error al registrar egreso");
+      }
+      return;
+    }
+
+    // Forma única de egreso
     const finalMethod = newExpense.paymentMethod === "Transferencia"
       ? `Transferencia (${newExpense.wallet || "Mercado Pago"})`
       : newExpense.paymentMethod;
@@ -430,14 +675,24 @@ export default function Caja() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           concept: newExpense.concept.trim(),
-          amount: Number(newExpense.amount),
+          amount: totalExpenseAmount,
           category: newExpense.category,
           paymentMethod: finalMethod,
           payment_method: finalMethod,
+          supplierId: newExpense.supplierId || undefined,
+          supplierName: selectedSup ? selectedSup.name : undefined,
           date: selectedDate,
         }),
       });
-      setNewExpense({ concept: "", amount: "", category: "General", paymentMethod: "Efectivo", wallet: "Mercado Pago" });
+      setNewExpense({
+        concept: "",
+        amount: "",
+        category: "General",
+        paymentMethod: "Efectivo",
+        wallet: "Mercado Pago",
+        supplierId: "",
+        supplierName: "",
+      });
       setShowExpenseForm(false);
       loadData();
     } catch {
@@ -493,6 +748,74 @@ export default function Caja() {
         s.name.toLowerCase().includes("producto")
       )?.id || services[0]?.id || "";
 
+      // Venta Shop con Pago Dividido (Múltiples Medios)
+      if (isSplitPayment) {
+        const activeSplits = paymentSplits.filter(s => Number(s.amount) > 0);
+        if (activeSplits.length === 0) {
+          alert("Por favor ingresá los montos de cada medio de pago.");
+          return;
+        }
+        const splitsSum = activeSplits.reduce((acc, s) => acc + (Number(s.amount) || 0), 0);
+        if (splitsSum !== totalEntered) {
+          alert(`La suma de las formas de pago ($${splitsSum.toLocaleString("es-AR")}) no coincide con el total a cobrar ($${totalEntered.toLocaleString("es-AR")}). Faltan o sobran $${Math.abs(totalEntered - splitsSum).toLocaleString("es-AR")}.`);
+          return;
+        }
+
+        try {
+          await Promise.all(
+            activeSplits.map((split, idx) => {
+              const splitMethod = split.method === "Transferencia"
+                ? `Transferencia (${split.wallet || bankAccount})`
+                : split.method;
+              const splitNote = `[PAGO MIXTO ${idx + 1}/${activeSplits.length}: ${split.method} $${split.amount} de $${totalEntered}]`;
+              const fullNotes = [shopNotes, splitNote].filter(Boolean).join(" ");
+
+              return fetchAPI("/api/data/appointments", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  clientId: newQuickApp.clientId,
+                  professionalId: newQuickApp.professionalId,
+                  serviceId: shopServiceId,
+                  date: selectedDate,
+                  time: newQuickApp.time,
+                  duration: 15,
+                  price: 0,
+                  shopSales: Number(split.amount),
+                  status: "completado",
+                  paymentMethod: splitMethod,
+                  notes: fullNotes || undefined,
+                }),
+              });
+            })
+          );
+
+          if (appliedDiscount?.code) {
+            await fetchAPI("/api/vouchers/redeem", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                code: appliedDiscount.code,
+                clientId: newQuickApp.clientId,
+              }),
+            }).catch(console.error);
+          }
+
+          setSelectedProducts([]);
+          setAppliedDiscount(null);
+          setDiscountInput("");
+          setVoucherError("");
+          setIsSplitPayment(false);
+          setNewQuickApp({ clientId: "", professionalId: "", serviceId: "", amount: "", paymentMethod: "Efectivo", time: "10:00" });
+          alert("¡Venta de shop registrada exitosamente con múltiples formas de pago!");
+          loadData();
+        } catch {
+          alert("Error al guardar la venta de shop");
+        }
+        return;
+      }
+
+      // Venta Shop con pago único
       try {
         await fetchAPI("/api/data/appointments", {
           method: "POST",
@@ -572,6 +895,114 @@ export default function Caja() {
       discountNote = `[DESCUENTO] ${appliedDiscount.label} (-$${appliedDiscount.amountSaved.toLocaleString("es-AR")}). Original: $${originalSum.toLocaleString("es-AR")} -> Cobrado: $${totalEntered.toLocaleString("es-AR")}`;
     }
 
+    // Cobro de Servicios con Pago Dividido (Múltiples Medios)
+    if (isSplitPayment) {
+      const activeSplits = paymentSplits.filter(s => Number(s.amount) > 0);
+      if (activeSplits.length === 0) {
+        alert("Por favor ingresá los montos de cada medio de pago.");
+        return;
+      }
+      const splitsSum = activeSplits.reduce((acc, s) => acc + (Number(s.amount) || 0), 0);
+      if (splitsSum !== totalEntered) {
+        alert(`La suma de las formas de pago ($${splitsSum.toLocaleString("es-AR")}) no coincide con el total a cobrar ($${totalEntered.toLocaleString("es-AR")}). Faltan o sobran $${Math.abs(totalEntered - splitsSum).toLocaleString("es-AR")}.`);
+        return;
+      }
+
+      try {
+        if (chosen.length === 1) {
+          const srv = chosen[0];
+          const srvProfId = srv.professionalId || newQuickApp.professionalId;
+          const qtyNote = (srv.qty || 1) > 1 ? `[CANTIDAD: ${srv.qty}]` : "";
+
+          await Promise.all(
+            activeSplits.map((split, idx) => {
+              const splitMethod = split.method === "Transferencia"
+                ? `Transferencia (${split.wallet || bankAccount})`
+                : split.method;
+              const splitNote = `[PAGO MIXTO ${idx + 1}/${activeSplits.length}: ${split.method} $${split.amount} de $${totalEntered}]`;
+              const fullNotes = [qtyNote, discountNote, splitNote].filter(Boolean).join(" ");
+
+              return fetchAPI("/api/data/appointments", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  clientId: newQuickApp.clientId,
+                  professionalId: srvProfId,
+                  serviceId: srv.id,
+                  date: selectedDate,
+                  time: newQuickApp.time,
+                  duration: (srv.duration || 30) * (srv.qty || 1),
+                  price: Number(split.amount),
+                  shopSales: 0,
+                  status: "completado",
+                  paymentMethod: splitMethod,
+                  notes: fullNotes || undefined,
+                }),
+              });
+            })
+          );
+        } else {
+          const splitSummary = activeSplits.map(s => `${s.method}: $${Number(s.amount).toLocaleString("es-AR")}`).join(" + ");
+          const combinedNote = `[PAGO MIXTO: ${splitSummary}]`;
+
+          await Promise.all(
+            chosen.map((srv, idx) => {
+              const srvProfId = srv.professionalId || newQuickApp.professionalId;
+              const qtyNote = (srv.qty || 1) > 1 ? `[CANTIDAD: ${srv.qty}]` : "";
+              const fullNotes = [qtyNote, discountNote, combinedNote].filter(Boolean).join(" ");
+              const primaryMethod = activeSplits[idx % activeSplits.length];
+              const srvMethod = primaryMethod.method === "Transferencia"
+                ? `Transferencia (${primaryMethod.wallet || bankAccount})`
+                : primaryMethod.method;
+
+              return fetchAPI("/api/data/appointments", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  clientId: newQuickApp.clientId,
+                  professionalId: srvProfId,
+                  serviceId: srv.id,
+                  date: selectedDate,
+                  time: newQuickApp.time,
+                  duration: (srv.duration || 30) * (srv.qty || 1),
+                  price: prices[idx],
+                  shopSales: 0,
+                  status: "completado",
+                  paymentMethod: srvMethod,
+                  notes: fullNotes || undefined,
+                }),
+              });
+            })
+          );
+        }
+
+        if (appliedDiscount?.code) {
+          await fetchAPI("/api/vouchers/redeem", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              code: appliedDiscount.code,
+              clientId: newQuickApp.clientId,
+            }),
+          }).catch(console.error);
+        }
+
+        setSelectedServiceIds([]);
+        setSelectedServicesWithQty([]);
+        setAppliedDiscount(null);
+        setDiscountInput("");
+        setVoucherError("");
+        setIsSplitPayment(false);
+        setNewQuickApp({ clientId: "", professionalId: "", serviceId: "", amount: "", paymentMethod: "Efectivo", time: "10:00" });
+        alert(`¡Registro guardado exitosamente con ${activeSplits.length} formas de pago!`);
+        loadData();
+      } catch {
+        alert("Error al guardar el registro");
+      }
+      return;
+    }
+
+    // Cobro de Servicios con pago único
     try {
       await Promise.all(
         chosen.map((srv, idx) => {
@@ -649,6 +1080,9 @@ export default function Caja() {
       ? `Transferencia (${editingExpense.wallet || "Mercado Pago"})`
       : editingExpense.paymentMethod;
 
+    const matchedSupplier = suppliers.find(s => s.id === editingExpense.supplierId);
+    const finalSupplierName = editingExpense.supplierId ? (matchedSupplier?.name || editingExpense.supplierName || null) : null;
+
     try {
       await fetchAPI(`/api/data/expenses/${editingExpense.id}`, {
         method: "PUT",
@@ -660,6 +1094,8 @@ export default function Caja() {
           paymentMethod: finalMethod,
           payment_method: finalMethod,
           date: editingExpense.date,
+          supplierId: editingExpense.supplierId || null,
+          supplierName: finalSupplierName,
         }),
       });
       setEditingExpense(null);
@@ -927,16 +1363,24 @@ export default function Caja() {
                         </div>
 
                         {newExpense.paymentMethod === "Transferencia" ? (
-                          <div>
+                          <div className="flex items-center gap-1.5">
                             <select
                               value={newExpense.wallet}
                               onChange={e => setNewExpense(f => ({ ...f, wallet: e.target.value }))}
                               className="w-full bg-card border border-primary/50 text-foreground font-medium rounded-md px-3 py-2 text-xs focus:border-primary focus:outline-none"
                             >
-                              {VIRTUAL_WALLETS.map(w => (
+                              {allWallets.map(w => (
                                 <option key={w} value={w}>📱 {w}</option>
                               ))}
                             </select>
+                            <button
+                              type="button"
+                              onClick={() => setShowWalletModal(true)}
+                              className="p-2 text-xs font-semibold bg-primary/10 text-primary border border-primary/20 rounded-md hover:bg-primary/20 transition-colors flex items-center justify-center flex-shrink-0"
+                              title="Agregar o gestionar billeteras virtuales"
+                            >
+                              <Plus size={13} />
+                            </button>
                           </div>
                         ) : (
                           <div className="text-[11px] text-muted-foreground px-1 hidden sm:block">
@@ -975,6 +1419,11 @@ export default function Caja() {
                           <span className="text-base">{CATEGORY_ICONS[e.category] || "📋"}</span>
                           <div>
                             <span className="font-medium text-foreground">{e.concept}</span>
+                            {e.supplierName && (
+                              <span className="inline-flex items-center gap-1 ml-1.5 text-[10px] font-semibold bg-amber-500/10 text-amber-500 border border-amber-500/25 px-1.5 py-0.5 rounded">
+                                <Truck size={10} /> {e.supplierName}
+                              </span>
+                            )}
                             <span className="text-muted-foreground ml-2 text-[10px] uppercase tracking-wider bg-border/30 px-1.5 py-0.5 rounded">{e.category}</span>
                             <span className={`ml-1.5 text-[10px] uppercase tracking-wider border px-1.5 py-0.5 rounded font-semibold ${badgeStyle}`}>
                               {rawMethod}
@@ -997,6 +1446,8 @@ export default function Caja() {
                                 paymentMethod: mainMethod,
                                 wallet: walletName,
                                 date: e.date,
+                                supplierId: e.supplierId || "",
+                                supplierName: e.supplierName || "",
                               });
                             }}
                             className="p-1.5 text-muted-foreground hover:text-primary transition-colors rounded hover:bg-accent/15"
@@ -1243,7 +1694,7 @@ export default function Caja() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">
-                      Concepto del gasto
+                      Concepto del gasto *
                     </label>
                     <input
                       placeholder="Concepto (ej: Pago Gas, Insumos, Sueldo)"
@@ -1271,7 +1722,7 @@ export default function Caja() {
                         type="button"
                         onClick={() => setShowCategoryModal(true)}
                         className="px-2 py-2 text-xs font-semibold bg-primary/10 text-primary border border-primary/20 rounded-md hover:bg-primary/20 transition-colors flex items-center gap-1 shadow-2xs whitespace-nowrap"
-                        title="Agregar nueva categoría (ej: Limpieza, Publicidad, Carga de celular, Mentorías...)"
+                        title="Agregar nueva categoría"
                       >
                         <Plus size={13} />
                         <span>Nueva</span>
@@ -1279,9 +1730,67 @@ export default function Caja() {
                     </div>
                   </div>
 
+                  {/* Selector de Proveedor con Buscador y botón + Nuevo */}
                   <div>
                     <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">
-                      Monto a egresar
+                      Proveedor (Opcional)
+                    </label>
+                    <div className="flex items-center gap-1.5">
+                      <select
+                        value={newExpense.supplierId}
+                        onChange={e => {
+                          const id = e.target.value;
+                          const found = suppliers.find(s => s.id === id);
+                          setNewExpense(f => ({ ...f, supplierId: id, supplierName: found ? found.name : "" }));
+                        }}
+                        className="flex-1 bg-background border border-border rounded-md px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none"
+                      >
+                        <option value="">-- Sin proveedor / Varios --</option>
+                        {suppliers.map(s => (
+                          <option key={s.id} value={s.id}>
+                            🚚 {s.name} {s.contactName ? `(${s.contactName})` : ""}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => setShowNewSupplierInlineModal(true)}
+                        className="px-2 py-2 text-xs font-semibold bg-primary/10 text-primary border border-primary/20 rounded-md hover:bg-primary/20 transition-colors flex items-center gap-1 shadow-2xs whitespace-nowrap"
+                        title="Registrar nuevo proveedor para tener sus datos a mano"
+                      >
+                        <Plus size={13} />
+                        <span>Nuevo</span>
+                      </button>
+                    </div>
+                    {(() => {
+                      const selectedSup = suppliers.find(s => s.id === newExpense.supplierId);
+                      if (!selectedSup) return null;
+                      return (
+                        <div className="mt-1 flex items-center justify-between text-[11px] bg-muted/40 p-1.5 rounded border border-border/40 text-muted-foreground">
+                          <span>
+                            {selectedSup.contactName && <strong className="text-foreground mr-1">{selectedSup.contactName} ·</strong>}
+                            {selectedSup.phone || "Sin teléfono"}
+                          </span>
+                          {selectedSup.phone && (
+                            <a
+                              href={`https://wa.me/${selectedSup.phone.replace(/\D/g, "")}?text=${encodeURIComponent(
+                                `¡Hola ${selectedSup.contactName || selectedSup.name}! Te escribo de Estudio Joha para consultar sobre insumos.`
+                              )}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-emerald-400 font-semibold hover:underline flex items-center gap-1 text-[10px]"
+                            >
+                              <MessageCircle size={11} /> WhatsApp
+                            </a>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">
+                      Monto total a egresar *
                     </label>
                     <div className="relative flex items-center">
                       <span className="absolute left-3 text-muted-foreground text-xs font-semibold">$</span>
@@ -1295,34 +1804,195 @@ export default function Caja() {
                     </div>
                   </div>
 
-                  {/* Selector Forma de Egreso / Billetera */}
-                  <div>
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">
-                      Forma de Pago del Egreso
-                    </label>
-                    <div className="flex flex-col sm:flex-row gap-2">
-                      <select
-                        value={newExpense.paymentMethod}
-                        onChange={e => setNewExpense(f => ({ ...f, paymentMethod: e.target.value }))}
-                        className="flex-1 bg-background border border-border rounded-md px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none font-medium"
-                      >
-                        <option value="Efectivo">💵 Efectivo</option>
-                        <option value="Transferencia">📱 Transferencia / Billetera</option>
-                        <option value="Tarjeta">💳 Tarjeta</option>
-                      </select>
-
-                      {newExpense.paymentMethod === "Transferencia" && (
-                        <select
-                          value={newExpense.wallet}
-                          onChange={e => setNewExpense(f => ({ ...f, wallet: e.target.value }))}
-                          className="flex-1 bg-background border border-primary/50 text-foreground font-semibold rounded-md px-2.5 py-2 text-xs focus:border-primary focus:outline-none animate-in fade-in-50 duration-150"
+                  {/* Selector Forma de Egreso: Forma única o Pago Dividido */}
+                  <div className="sm:col-span-2">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                        Forma de Pago del Egreso
+                      </label>
+                      <div className="flex items-center gap-1 bg-muted/40 p-0.5 rounded border border-border/50 text-[10px]">
+                        <button
+                          type="button"
+                          onClick={() => setIsExpenseSplitPayment(false)}
+                          className={`px-2 py-0.5 rounded transition-colors ${!isExpenseSplitPayment ? "bg-primary text-primary-foreground font-semibold" : "text-muted-foreground hover:text-foreground"}`}
                         >
-                          {VIRTUAL_WALLETS.map(w => (
-                            <option key={w} value={w}>📱 {w}</option>
-                          ))}
-                        </select>
-                      )}
+                          Forma única
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsExpenseSplitPayment(true);
+                            if (newExpense.amount) {
+                              const half = Math.round(Number(newExpense.amount) / 2);
+                              setExpensePaymentSplits([
+                                { id: "1", method: "Efectivo", wallet: "Mercado Pago", amount: String(half) },
+                                { id: "2", method: "Transferencia", wallet: "Mercado Pago", amount: String(Number(newExpense.amount) - half) },
+                              ]);
+                            }
+                          }}
+                          className={`px-2 py-0.5 rounded transition-colors ${isExpenseSplitPayment ? "bg-primary text-primary-foreground font-semibold" : "text-muted-foreground hover:text-foreground"}`}
+                        >
+                          🔀 Pago dividido (varios medios)
+                        </button>
+                      </div>
                     </div>
+
+                    {!isExpenseSplitPayment ? (
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <select
+                          value={newExpense.paymentMethod}
+                          onChange={e => setNewExpense(f => ({ ...f, paymentMethod: e.target.value }))}
+                          className="flex-1 bg-background border border-border rounded-md px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none font-medium"
+                        >
+                          <option value="Efectivo">💵 Efectivo</option>
+                          <option value="Transferencia">📱 Transferencia / Billetera</option>
+                          <option value="Tarjeta">💳 Tarjeta</option>
+                        </select>
+
+                        {newExpense.paymentMethod === "Transferencia" && (
+                          <div className="flex-1 flex items-center gap-1.5">
+                            <select
+                              value={newExpense.wallet}
+                              onChange={e => setNewExpense(f => ({ ...f, wallet: e.target.value }))}
+                              className="flex-1 bg-background border border-primary/50 text-foreground font-semibold rounded-md px-2.5 py-2 text-xs focus:border-primary focus:outline-none animate-in fade-in-50 duration-150"
+                            >
+                              {allWallets.map(w => (
+                                <option key={w} value={w}>📱 {w}</option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              onClick={() => setShowWalletModal(true)}
+                              className="px-2 py-2 text-xs font-semibold bg-primary/10 text-primary border border-primary/20 rounded-md hover:bg-primary/20 transition-colors flex items-center gap-1 shadow-2xs whitespace-nowrap"
+                              title="Agregar nuevo medio de pago o billetera virtual"
+                            >
+                              <Plus size={13} />
+                              <span>Nuevo medio</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      /* Desglose de múltiples medios de pago de egreso */
+                      <div className="space-y-2 bg-muted/20 p-3 rounded-lg border border-border/50">
+                        {expensePaymentSplits.map((split, sIdx) => (
+                          <div key={split.id} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                            <div className="w-6 text-center text-xs font-bold text-muted-foreground">{sIdx + 1}.</div>
+                            <select
+                              value={split.method}
+                              onChange={e => {
+                                const m = e.target.value;
+                                setExpensePaymentSplits(prev => prev.map(item => item.id === split.id ? { ...item, method: m } : item));
+                              }}
+                              className="flex-1 bg-background border border-border rounded-md px-3 py-1.5 text-xs text-foreground focus:border-primary focus:outline-none font-medium"
+                            >
+                              <option value="Efectivo">💵 Efectivo</option>
+                              <option value="Transferencia">📱 Transferencia / Billetera</option>
+                              <option value="Tarjeta">💳 Tarjeta</option>
+                            </select>
+
+                            {split.method === "Transferencia" && (
+                              <div className="flex-1 flex items-center gap-1">
+                                <select
+                                  value={split.wallet || "Mercado Pago"}
+                                  onChange={e => {
+                                    const w = e.target.value;
+                                    setExpensePaymentSplits(prev => prev.map(item => item.id === split.id ? { ...item, wallet: w } : item));
+                                  }}
+                                  className="flex-1 bg-background border border-primary/50 text-foreground font-medium rounded-md px-2 py-1.5 text-xs focus:border-primary focus:outline-none"
+                                >
+                                  {allWallets.map(w => (
+                                    <option key={w} value={w}>📱 {w}</option>
+                                  ))}
+                                </select>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowWalletModal(true)}
+                                  className="p-1.5 bg-primary/10 text-primary border border-primary/20 rounded-md hover:bg-primary/20"
+                                  title="Agregar nuevo medio"
+                                >
+                                  <Plus size={12} />
+                                </button>
+                              </div>
+                            )}
+
+                            <div className="relative w-full sm:w-36 flex items-center">
+                              <span className="absolute left-2.5 text-muted-foreground text-xs font-semibold">$</span>
+                              <input
+                                type="number"
+                                placeholder="Monto"
+                                value={split.amount}
+                                onChange={e => {
+                                  const val = e.target.value;
+                                  setExpensePaymentSplits(prev => prev.map(item => item.id === split.id ? { ...item, amount: val } : item));
+                                }}
+                                className="w-full bg-background border border-border rounded-md pl-6 pr-2 py-1.5 text-xs font-semibold text-foreground focus:border-primary focus:outline-none"
+                              />
+                            </div>
+
+                            {expensePaymentSplits.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => setExpensePaymentSplits(prev => prev.filter(item => item.id !== split.id))}
+                                className="p-1.5 text-muted-foreground hover:text-red-400 transition-colors self-center"
+                                title="Quitar medio de pago"
+                              >
+                                <X size={14} />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+
+                        <div className="flex items-center justify-between pt-2 border-t border-border/40 text-xs">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setExpensePaymentSplits(prev => [
+                                ...prev,
+                                { id: String(Date.now()), method: "Transferencia", wallet: "Mercado Pago", amount: "" }
+                              ]);
+                            }}
+                            className="text-primary hover:underline font-semibold flex items-center gap-1 text-[11px]"
+                          >
+                            <Plus size={13} />
+                            <span>Agregar otro medio de pago</span>
+                          </button>
+
+                          {(() => {
+                            const totalEgreso = Number(newExpense.amount) || 0;
+                            const assigned = expensePaymentSplits.reduce((acc, s) => acc + (Number(s.amount) || 0), 0);
+                            const diff = totalEgreso - assigned;
+
+                            if (totalEgreso <= 0) return null;
+                            if (diff === 0) {
+                              return <span className="text-emerald-400 font-bold text-[11px]">✅ Monto exacto cubierto (${totalEgreso.toLocaleString("es-AR")})</span>;
+                            }
+                            if (diff > 0) {
+                              return (
+                                <div className="flex items-center gap-2 text-[11px]">
+                                  <span className="text-amber-400 font-semibold">Faltan ${diff.toLocaleString("es-AR")}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const emptySplit = expensePaymentSplits.find(s => !s.amount || Number(s.amount) === 0);
+                                      if (emptySplit) {
+                                        setExpensePaymentSplits(prev => prev.map(s => s.id === emptySplit.id ? { ...s, amount: String(diff) } : s));
+                                      } else {
+                                        setExpensePaymentSplits(prev => [...prev, { id: String(Date.now()), method: "Transferencia", wallet: "Mercado Pago", amount: String(diff) }]);
+                                      }
+                                    }}
+                                    className="bg-primary/10 text-primary hover:bg-primary/20 px-2 py-0.5 rounded text-[10px] font-bold transition-colors"
+                                  >
+                                    Asignar restante
+                                  </button>
+                                </div>
+                              );
+                            }
+                            return <span className="text-red-400 font-semibold text-[11px]">Sobran ${Math.abs(diff).toLocaleString("es-AR")}</span>;
+                          })()}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="sm:col-span-2 pt-1">
@@ -1448,30 +2118,198 @@ export default function Caja() {
                     </div>
                   )}
 
-                  <div className="sm:col-span-2 flex flex-col sm:flex-row gap-2">
-                    <select
-                      value={newQuickApp.paymentMethod}
-                      onChange={e => setNewQuickApp(prev => ({ ...prev, paymentMethod: e.target.value }))}
-                      className="flex-1 bg-background border border-border rounded-md px-3 py-2 text-xs"
-                    >
-                      <option value="Efectivo">Efectivo</option>
-                      <option value="Transferencia">Transferencia</option>
-                      <option value="Tarjeta">Tarjeta</option>
-                      <option value="Mercado Pago">Mercado Pago</option>
-                      <option value="Cuenta Corriente">Cuenta Corriente</option>
-                    </select>
+                  <div className="sm:col-span-2">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                        Forma de Pago del Cobro
+                      </label>
+                      <div className="flex items-center gap-1 bg-muted/40 p-0.5 rounded border border-border/50 text-[10px]">
+                        <button
+                          type="button"
+                          onClick={() => setIsSplitPayment(false)}
+                          className={`px-2 py-0.5 rounded transition-colors ${!isSplitPayment ? "bg-primary text-primary-foreground font-semibold" : "text-muted-foreground hover:text-foreground"}`}
+                        >
+                          Forma única
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsSplitPayment(true);
+                            const totalVal = Number(newQuickApp.amount) || 0;
+                            if (totalVal > 0) {
+                              const half = Math.round(totalVal / 2);
+                              setPaymentSplits([
+                                { id: "1", method: "Efectivo", wallet: "Mercado Pago", amount: String(half) },
+                                { id: "2", method: "Transferencia", wallet: bankAccount || "Banco de Córdoba", amount: String(totalVal - half) },
+                              ]);
+                            }
+                          }}
+                          className={`px-2 py-0.5 rounded transition-colors ${isSplitPayment ? "bg-primary text-primary-foreground font-semibold" : "text-muted-foreground hover:text-foreground"}`}
+                        >
+                          🔀 Dividir pago (varios medios)
+                        </button>
+                      </div>
+                    </div>
 
-                    {newQuickApp.paymentMethod === "Transferencia" && (
-                      <select
-                        value={bankAccount}
-                        onChange={e => setBankAccount(e.target.value)}
-                        className="flex-1 bg-background border border-primary/50 text-foreground font-medium rounded-md px-2.5 py-2 text-xs focus:border-primary focus:outline-none animate-in fade-in-50 duration-150"
-                      >
-                        <option value="Banco de Córdoba">🏦 Banco de Córdoba</option>
-                        <option value="Naranja X">🍊 Naranja X</option>
-                        <option value="Ualá">💳 Ualá</option>
-                        <option value="Personal Pay">📱 Personal Pay</option>
-                      </select>
+                    {!isSplitPayment ? (
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <select
+                          value={newQuickApp.paymentMethod}
+                          onChange={e => setNewQuickApp(prev => ({ ...prev, paymentMethod: e.target.value }))}
+                          className="flex-1 bg-background border border-border rounded-md px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none"
+                        >
+                          <option value="Efectivo">💵 Efectivo</option>
+                          <option value="Transferencia">📱 Transferencia / Billetera</option>
+                          <option value="Tarjeta">💳 Tarjeta (Débito/Crédito)</option>
+                          <option value="Mercado Pago">📱 Mercado Pago (Directo)</option>
+                          <option value="Cuenta Corriente">📋 Cuenta Corriente</option>
+                        </select>
+
+                        {newQuickApp.paymentMethod === "Transferencia" && (
+                          <div className="flex-1 flex items-center gap-1.5">
+                            <select
+                              value={bankAccount}
+                              onChange={e => setBankAccount(e.target.value)}
+                              className="flex-1 bg-background border border-primary/50 text-foreground font-semibold rounded-md px-2.5 py-2 text-xs focus:border-primary focus:outline-none animate-in fade-in-50 duration-150"
+                            >
+                              {allWallets.map(w => (
+                                <option key={w} value={w}>📱 {w}</option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              onClick={() => setShowWalletModal(true)}
+                              className="px-2 py-2 text-xs font-semibold bg-primary/10 text-primary border border-primary/20 rounded-md hover:bg-primary/20 transition-colors flex items-center gap-1 shadow-2xs whitespace-nowrap"
+                              title="Agregar nuevo medio de pago o billetera virtual"
+                            >
+                              <Plus size={13} />
+                              <span>Nuevo medio</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      /* Desglose de múltiples medios de pago de cobro */
+                      <div className="space-y-2 bg-muted/20 p-3 rounded-lg border border-border/50">
+                        {paymentSplits.map((split, sIdx) => (
+                          <div key={split.id} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                            <div className="w-6 text-center text-xs font-bold text-muted-foreground">{sIdx + 1}.</div>
+                            <select
+                              value={split.method}
+                              onChange={e => {
+                                const m = e.target.value;
+                                setPaymentSplits(prev => prev.map(item => item.id === split.id ? { ...item, method: m } : item));
+                              }}
+                              className="flex-1 bg-background border border-border rounded-md px-3 py-1.5 text-xs text-foreground focus:border-primary focus:outline-none font-medium"
+                            >
+                              <option value="Efectivo">💵 Efectivo</option>
+                              <option value="Transferencia">📱 Transferencia / Billetera</option>
+                              <option value="Tarjeta">💳 Tarjeta</option>
+                              <option value="Mercado Pago">📱 Mercado Pago</option>
+                              <option value="Cuenta Corriente">📋 Cuenta Corriente</option>
+                            </select>
+
+                            {split.method === "Transferencia" && (
+                              <div className="flex-1 flex items-center gap-1">
+                                <select
+                                  value={split.wallet || bankAccount || "Banco de Córdoba"}
+                                  onChange={e => {
+                                    const w = e.target.value;
+                                    setPaymentSplits(prev => prev.map(item => item.id === split.id ? { ...item, wallet: w } : item));
+                                  }}
+                                  className="flex-1 bg-background border border-primary/50 text-foreground font-medium rounded-md px-2 py-1.5 text-xs focus:border-primary focus:outline-none"
+                                >
+                                  {allWallets.map(w => (
+                                    <option key={w} value={w}>📱 {w}</option>
+                                  ))}
+                                </select>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowWalletModal(true)}
+                                  className="p-1.5 bg-primary/10 text-primary border border-primary/20 rounded-md hover:bg-primary/20"
+                                  title="Agregar nuevo medio de pago"
+                                >
+                                  <Plus size={12} />
+                                </button>
+                              </div>
+                            )}
+
+                            <div className="relative w-full sm:w-36 flex items-center">
+                              <span className="absolute left-2.5 text-muted-foreground text-xs font-semibold">$</span>
+                              <input
+                                type="number"
+                                placeholder="Monto"
+                                value={split.amount}
+                                onChange={e => {
+                                  const val = e.target.value;
+                                  setPaymentSplits(prev => prev.map(item => item.id === split.id ? { ...item, amount: val } : item));
+                                }}
+                                className="w-full bg-background border border-border rounded-md pl-6 pr-2 py-1.5 text-xs font-semibold text-foreground focus:border-primary focus:outline-none"
+                              />
+                            </div>
+
+                            {paymentSplits.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => setPaymentSplits(prev => prev.filter(item => item.id !== split.id))}
+                                className="p-1.5 text-muted-foreground hover:text-red-400 transition-colors self-center"
+                                title="Quitar medio de pago"
+                              >
+                                <X size={14} />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+
+                        <div className="flex items-center justify-between pt-2 border-t border-border/40 text-xs">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPaymentSplits(prev => [
+                                ...prev,
+                                { id: String(Date.now()), method: "Transferencia", wallet: bankAccount || "Banco de Córdoba", amount: "" }
+                              ]);
+                            }}
+                            className="text-primary hover:underline font-semibold flex items-center gap-1 text-[11px]"
+                          >
+                            <Plus size={13} />
+                            <span>Agregar otro medio de pago</span>
+                          </button>
+
+                          {(() => {
+                            const totalCobro = Number(newQuickApp.amount) || 0;
+                            const assigned = paymentSplits.reduce((acc, s) => acc + (Number(s.amount) || 0), 0);
+                            const diff = totalCobro - assigned;
+
+                            if (totalCobro <= 0) return null;
+                            if (diff === 0) {
+                              return <span className="text-emerald-400 font-bold text-[11px]">✅ Total exacto cubierto (${totalCobro.toLocaleString("es-AR")})</span>;
+                            }
+                            if (diff > 0) {
+                              return (
+                                <div className="flex items-center gap-2 text-[11px]">
+                                  <span className="text-amber-400 font-semibold">Faltan ${diff.toLocaleString("es-AR")}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const emptySplit = paymentSplits.find(s => !s.amount || Number(s.amount) === 0);
+                                      if (emptySplit) {
+                                        setPaymentSplits(prev => prev.map(s => s.id === emptySplit.id ? { ...s, amount: String(diff) } : s));
+                                      } else {
+                                        setPaymentSplits(prev => [...prev, { id: String(Date.now()), method: "Transferencia", wallet: bankAccount || "Banco de Córdoba", amount: String(diff) }]);
+                                      }
+                                    }}
+                                    className="bg-primary/10 text-primary hover:bg-primary/20 px-2 py-0.5 rounded text-[10px] font-bold transition-colors"
+                                  >
+                                    Asignar restante
+                                  </button>
+                                </div>
+                              );
+                            }
+                            return <span className="text-red-400 font-semibold text-[11px]">Sobran ${Math.abs(diff).toLocaleString("es-AR")}</span>;
+                          })()}
+                        </div>
+                      </div>
                     )}
                   </div>
 
@@ -1689,7 +2527,14 @@ export default function Caja() {
                       <div className="flex items-center gap-3">
                         <span className="text-base">{CATEGORY_ICONS[e.category] || "📋"}</span>
                         <div>
-                          <p className="text-xs font-medium text-foreground">{e.concept}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-xs font-medium text-foreground">{e.concept}</p>
+                            {e.supplierName && (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-amber-500/10 text-amber-500 border border-amber-500/25 px-1.5 py-0.5 rounded">
+                                <Truck size={10} /> {e.supplierName}
+                              </span>
+                            )}
+                          </div>
                           <div className="flex items-center gap-1.5 mt-0.5">
                             <span className="text-[10px] text-muted-foreground">{e.date} · {e.category}</span>
                             {(() => {
@@ -1728,6 +2573,8 @@ export default function Caja() {
                               paymentMethod: mainMethod,
                               wallet: walletName,
                               date: e.date,
+                              supplierId: e.supplierId || "",
+                              supplierName: e.supplierName || "",
                             });
                           }}
                           className="p-1.5 text-muted-foreground hover:text-primary transition-colors rounded hover:bg-accent/15"
@@ -1796,6 +2643,49 @@ export default function Caja() {
                   />
                 </div>
 
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                      <Truck size={12} className="text-amber-500" /> Proveedor Asociado (Opcional)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setShowNewSupplierInlineModal(true)}
+                      className="text-[11px] font-semibold text-primary hover:underline flex items-center gap-1"
+                    >
+                      <Plus size={12} /> Nuevo Proveedor
+                    </button>
+                  </div>
+                  <div className="flex gap-2">
+                    <select
+                      value={editingExpense.supplierId || ""}
+                      onChange={e => {
+                        const sid = e.target.value;
+                        const sname = suppliers.find(s => s.id === sid)?.name || "";
+                        setEditingExpense(prev => prev ? { ...prev, supplierId: sid || null, supplierName: sname || null } : null);
+                      }}
+                      className="flex-1 bg-background border border-border/80 rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:border-primary transition-all"
+                    >
+                      <option value="">-- Sin proveedor asociado --</option>
+                      {suppliers.map(s => (
+                        <option key={s.id} value={s.id}>
+                          📦 {s.name} {s.contactName ? `(${s.contactName})` : ""} {s.category ? `[${s.category}]` : ""}
+                        </option>
+                      ))}
+                    </select>
+                    {editingExpense.supplierId && (
+                      <button
+                        type="button"
+                        onClick={() => setEditingExpense(prev => prev ? { ...prev, supplierId: null, supplierName: null } : null)}
+                        className="px-2.5 py-2 text-xs text-muted-foreground hover:text-red-400 border border-border/60 rounded-lg transition-colors"
+                        title="Quitar proveedor"
+                      >
+                        Quitar
+                      </button>
+                    )}
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">
@@ -1860,15 +2750,25 @@ export default function Caja() {
                       <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">
                         Billetera Virtual / Banco
                       </label>
-                      <select
-                        value={editingExpense.wallet}
-                        onChange={e => setEditingExpense(prev => prev ? { ...prev, wallet: e.target.value } : null)}
-                        className="w-full bg-background border border-primary/50 text-foreground font-medium rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-primary transition-all"
-                      >
-                        {VIRTUAL_WALLETS.map(w => (
-                          <option key={w} value={w}>📱 {w}</option>
-                        ))}
-                      </select>
+                      <div className="flex items-center gap-1.5">
+                        <select
+                          value={editingExpense.wallet}
+                          onChange={e => setEditingExpense(prev => prev ? { ...prev, wallet: e.target.value } : null)}
+                          className="flex-1 bg-background border border-primary/50 text-foreground font-medium rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-primary transition-all"
+                        >
+                          {allWallets.map(w => (
+                            <option key={w} value={w}>📱 {w}</option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => setShowWalletModal(true)}
+                          className="p-2 text-xs font-semibold bg-primary/10 text-primary border border-primary/20 rounded-lg hover:bg-primary/20 transition-colors flex items-center justify-center flex-shrink-0"
+                          title="Gestionar billeteras virtuales"
+                        >
+                          <Plus size={13} />
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     <div>
@@ -2202,6 +3102,228 @@ export default function Caja() {
                   className="px-4 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent/20 transition-colors"
                 >
                   Cerrar
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal Gestionar Medios de Pago / Billeteras Virtuales */}
+      <AnimatePresence>
+        {showWalletModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs" onClick={() => setShowWalletModal(false)}>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              onClick={e => e.stopPropagation()}
+              className="bg-card border border-border shadow-2xl rounded-2xl max-w-md w-full overflow-hidden"
+            >
+              <div className="flex items-center justify-between px-6 py-4 border-b border-border/50 bg-accent/5">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                    <Wallet size={16} />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-foreground">Gestionar Medios de Pago y Billeteras</h3>
+                    <p className="text-[11px] text-muted-foreground">Agregá nuevas billeteras (Modo, Lemon, Prex, Brubank, etc.)</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowWalletModal(false)}
+                  className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent/20 transition-colors"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">
+                    Nombre del Medio / Billetera
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      autoFocus
+                      value={newWalletName}
+                      onChange={e => setNewWalletName(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleAddCustomWallet();
+                        }
+                      }}
+                      placeholder="Ej: Modo, Lemon Cash, Prex, Personal Pay..."
+                      className="flex-1 bg-background border border-border rounded-lg px-3.5 py-2 text-xs text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                    />
+                    <button
+                      type="button"
+                      disabled={savingWallet || !newWalletName.trim()}
+                      onClick={() => handleAddCustomWallet()}
+                      className="px-4 py-2 bg-primary text-primary-foreground text-xs font-semibold rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors shadow-xs"
+                    >
+                      {savingWallet ? "Guardando..." : "Agregar"}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-border/40">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-2">
+                    Billeteras y Cuentas Disponibles ({allWallets.length})
+                  </span>
+                  <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto">
+                    {allWallets.map(w => {
+                      const isCustom = customWallets.includes(w);
+                      return (
+                        <span
+                          key={w}
+                          className="inline-flex items-center gap-1.5 bg-background border border-border px-2.5 py-1 rounded-md text-xs font-medium text-foreground"
+                        >
+                          <span>📱</span>
+                          <span>{w}</span>
+                          {isCustom && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteCustomWallet(w)}
+                              className="p-0.5 text-muted-foreground hover:text-red-400 rounded transition-colors"
+                              title="Eliminar esta billetera"
+                            >
+                              <Trash2 size={11} />
+                            </button>
+                          )}
+                        </span>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-2">
+                    💡 Las billeteras agregadas acá estarán disponibles al instante en Cobro de Servicios, Venta Shop y Registro de Egresos.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end px-6 py-3 border-t border-border/50 bg-accent/5">
+                <button
+                  type="button"
+                  onClick={() => setShowWalletModal(false)}
+                  className="px-4 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent/20 transition-colors"
+                >
+                  Cerrar
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal Crear Proveedor Rápido */}
+      <AnimatePresence>
+        {showNewSupplierInlineModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs" onClick={() => setShowNewSupplierInlineModal(false)}>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              onClick={e => e.stopPropagation()}
+              className="bg-card border border-border shadow-2xl rounded-2xl max-w-md w-full overflow-hidden"
+            >
+              <div className="flex items-center justify-between px-6 py-4 border-b border-border/50 bg-accent/5">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-lg bg-amber-500/10 text-amber-500">
+                    <Truck size={16} />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-foreground">Nuevo Proveedor</h3>
+                    <p className="text-[11px] text-muted-foreground">Cargalo una sola vez para seleccionarlo en tus compras y pedidos</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowNewSupplierInlineModal(false)}
+                  className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent/20 transition-colors"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-3.5">
+                <div>
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
+                    Nombre o Empresa del Proveedor *
+                  </label>
+                  <input
+                    type="text"
+                    autoFocus
+                    value={inlineSupplierName}
+                    onChange={e => setInlineSupplierName(e.target.value)}
+                    placeholder="Ej: Distribuidora Bella, Laboratorios X..."
+                    className="w-full bg-background border border-border rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:border-primary transition-all"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
+                      Teléfono / WhatsApp
+                    </label>
+                    <input
+                      type="text"
+                      value={inlineSupplierPhone}
+                      onChange={e => setInlineSupplierPhone(e.target.value)}
+                      placeholder="Ej: 3512345678"
+                      className="w-full bg-background border border-border rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:border-primary transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
+                      Persona de Contacto
+                    </label>
+                    <input
+                      type="text"
+                      value={inlineSupplierContact}
+                      onChange={e => setInlineSupplierContact(e.target.value)}
+                      placeholder="Ej: Juan Vendedor"
+                      className="w-full bg-background border border-border rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:border-primary transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
+                    Rubro / Categoría
+                  </label>
+                  <select
+                    value={inlineSupplierCategory}
+                    onChange={e => setInlineSupplierCategory(e.target.value)}
+                    className="w-full bg-background border border-border rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:border-primary transition-all"
+                  >
+                    <option value="Insumos">Insumos y Productos</option>
+                    <option value="Servicios">Servicios (Luz, Agua, Internet...)</option>
+                    <option value="Equipamiento">Equipamiento y Muebles</option>
+                    <option value="Publicidad">Publicidad y Marketing</option>
+                    <option value="Limpieza">Limpieza y Mantenimiento</option>
+                    <option value="General">General / Otros</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 px-6 py-3 border-t border-border/50 bg-accent/5">
+                <button
+                  type="button"
+                  onClick={() => setShowNewSupplierInlineModal(false)}
+                  className="px-4 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent/20 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={savingInlineSupplier || !inlineSupplierName.trim()}
+                  onClick={handleCreateInlineSupplier}
+                  className="px-4 py-1.5 bg-primary text-primary-foreground text-xs font-semibold rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors shadow-xs flex items-center gap-1.5"
+                >
+                  <Check size={14} /> {savingInlineSupplier ? "Guardando..." : "Guardar Proveedor"}
                 </button>
               </div>
             </motion.div>

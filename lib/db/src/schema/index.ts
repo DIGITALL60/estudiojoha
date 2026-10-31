@@ -18,6 +18,23 @@ export const selectClientSchema = createSelectSchema(clients);
 export type InsertClient = z.infer<typeof insertClientSchema>;
 export type Client = z.infer<typeof selectClientSchema>;
 
+// Suppliers Table (Proveedores)
+export const suppliers = sqliteTable("suppliers", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  phone: text("phone"),
+  email: text("email"),
+  category: text("category"), // e.g. Insumos, Coloración, Equipamiento, etc.
+  contactName: text("contact_name"),
+  notes: text("notes"), // CBU/Alias, pedidos, días de entrega, etc.
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(new Date()),
+});
+
+export const insertSupplierSchema = createInsertSchema(suppliers);
+export const selectSupplierSchema = createSelectSchema(suppliers);
+export type InsertSupplier = z.infer<typeof insertSupplierSchema>;
+export type Supplier = z.infer<typeof selectSupplierSchema>;
+
 // Professionals Table
 export const professionals = sqliteTable("professionals", {
   id: text("id").primaryKey(),
@@ -131,7 +148,6 @@ export const insertBlockedDateSchema = createInsertSchema(blocked_dates);
 export const selectBlockedDateSchema = createSelectSchema(blocked_dates);
 export type BlockedDate = z.infer<typeof selectBlockedDateSchema>;
 
-
 // Professional <-> Service assignment Table
 export const professional_services = sqliteTable("professional_services", {
   id: text("id").primaryKey(),
@@ -152,6 +168,8 @@ export const expenses = sqliteTable("expenses", {
   paymentMethod: text("payment_method").default("Efectivo"), // Efectivo, Transferencia (billetera), etc.
   date: text("date").notNull(), // YYYY-MM-DD
   professionalId: text("professional_id").references(() => professionals.id), // If expense is tied to a professional
+  supplierId: text("supplier_id").references(() => suppliers.id),
+  supplierName: text("supplier_name"),
   createdAt: integer("created_at", { mode: 'timestamp' }).notNull(),
 });
 

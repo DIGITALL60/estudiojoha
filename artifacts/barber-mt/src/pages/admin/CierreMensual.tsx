@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Calendar, DollarSign, TrendingUp, TrendingDown,
   Printer, Download, Plus, CheckCircle, ShieldCheck,
-  CreditCard, Wallet, Landmark, AlertCircle, FileText, ChevronLeft, ChevronRight, X, Search, User
+  CreditCard, Wallet, Landmark, AlertCircle, FileText, ChevronLeft, ChevronRight, X, Search, User,
+  Ticket, Eye, Edit2, Trash2, Truck, MessageCircle
 } from "lucide-react";
 import AdminLayout from "./AdminLayout";
 import { fetchAPI } from "@/lib/api";
@@ -17,6 +18,8 @@ interface Expense {
   paymentMethod?: string;
   payment_method?: string;
   date: string;
+  supplierId?: string | null;
+  supplierName?: string | null;
 }
 
 interface Appointment {
@@ -96,6 +99,24 @@ export default function CierreMensual() {
   const [clientForHistoryModal, setClientForHistoryModal] = useState<any | null>(null);
   const [clientHistoryApps, setClientHistoryApps] = useState<any[]>([]);
 
+  // Suppliers
+  const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [newSupplierId, setNewSupplierId] = useState("");
+
+  // Category Expense Detail Modal state
+  const [selectedCategoryForDetail, setSelectedCategoryForDetail] = useState<string | null>(null);
+  const [categoryDetailSearch, setCategoryDetailSearch] = useState("");
+
+  // Edit Expense modal state
+  const [editingExpenseItem, setEditingExpenseItem] = useState<Expense | null>(null);
+  const [editConcept, setEditConcept] = useState("");
+  const [editAmount, setEditAmount] = useState("");
+  const [editCategory, setEditCategory] = useState("Insumos");
+  const [editPaymentMethod, setEditPaymentMethod] = useState("Efectivo");
+  const [editSupplierId, setEditSupplierId] = useState("");
+  const [editDate, setEditDate] = useState("");
+  const [savingEditExpense, setSavingEditExpense] = useState(false);
+
   // New expense form
   const [newConcept, setNewConcept] = useState("");
   const [newAmount, setNewAmount] = useState("");
@@ -110,17 +131,19 @@ export default function CierreMensual() {
   const loadMonthData = async () => {
     setLoading(true);
     try {
-      const [appsRes, expRes, profsRes, settingsRes] = await Promise.all([
+      const [appsRes, expRes, profsRes, settingsRes, supRes] = await Promise.all([
         fetchAPI("/api/data/appointments"),
         fetchAPI("/api/data/expenses"),
         fetchAPI("/api/data/professionals"),
         fetchAPI("/api/data/settings"),
+        fetchAPI("/api/data/suppliers"),
       ]);
 
       const allApps: Appointment[] = await appsRes.json().catch(() => []);
       const allExps: Expense[] = await expRes.json().catch(() => []);
       const allProfs: Professional[] = await profsRes.json().catch(() => []);
       const settings = await settingsRes.json().catch(() => ({}));
+      const allSups = await supRes.json().catch(() => []);
 
       // Filter for selected year and month
       const monthApps = allApps.filter((a) => a.date && a.date.startsWith(periodPrefix));
@@ -129,6 +152,7 @@ export default function CierreMensual() {
       setAppointments(monthApps);
       setExpenses(monthExps);
       setProfessionals(allProfs.filter(p => p.role?.toLowerCase() !== "admin"));
+      setSuppliers(Array.isArray(allSups) ? allSups : []);
 
       // Check saved closure state
       const closureKey = `cierre_${periodPrefix}`;
@@ -164,6 +188,7 @@ export default function CierreMensual() {
   const totalExpenses = expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
   const netProfit = totalIncome - totalExpenses;
   const margin = totalIncome > 0 ? Math.round((netProfit / totalIncome) * 100) : 0;
+  const ticketPromedio = completedApps.length > 0 ? (totalIncome / completedApps.length) : 0;
 
   // Payment methods breakdown (agrupación inteligente de transferencias, bancos y demás medios)
   const paymentBreakdown = completedApps.reduce((acc: Record<string, number>, a) => {
@@ -363,6 +388,7 @@ export default function CierreMensual() {
     setSavingExpense(true);
     try {
       const dateToSave = newDate || `${periodPrefix}-15`;
+      const selectedSup = suppliers.find(s => s.id === newSupplierId);
       const res = await fetchAPI("/api/data/expenses", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -372,6 +398,8 @@ export default function CierreMensual() {
           category: newCategory,
           paymentMethod: newPaymentMethod,
           payment_method: newPaymentMethod,
+          supplierId: newSupplierId || undefined,
+          supplierName: selectedSup ? selectedSup.name : undefined,
           date: dateToSave,
         }),
       });
@@ -379,6 +407,7 @@ export default function CierreMensual() {
         setShowAddExpenseModal(false);
         setNewConcept("");
         setNewAmount("");
+        setNewSupplierId("");
         setNewPaymentMethod("Efectivo");
         loadMonthData();
       }
@@ -386,6 +415,46 @@ export default function CierreMensual() {
       console.error("Error agregando gasto:", err);
     } finally {
       setSavingExpense(false);
+    }
+  };
+
+  const handleStartEditExpense = (e: Expense) => {
+    setEditingExpenseItem(e);
+    setEditConcept(e.concept);
+    setEditAmount(String(e.amount));
+    setEditCategory(e.category || "Insumos");
+    setEditPaymentMethod(e.paymentMethod || (e as any).payment_method || "Efectivo");
+    setEditSupplierId(e.supplierId || "");
+    setEditDate(e.date || `${periodPrefix}-15`);
+  };
+
+  const handleSaveEditExpense = async () => {
+    if (!editingExpenseItem || !editConcept.trim() || !editAmount || Number(editAmount) <= 0) return;
+    setSavingEditExpense(true);
+    try {
+      const selectedSup = suppliers.find(s => s.id === editSupplierId);
+      const res = await fetchAPI(`/api/data/expenses/${editingExpenseItem.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          concept: editConcept.trim(),
+          amount: Number(editAmount),
+          category: editCategory,
+          paymentMethod: editPaymentMethod,
+          payment_method: editPaymentMethod,
+          supplierId: editSupplierId || null,
+          supplierName: selectedSup ? selectedSup.name : null,
+          date: editDate,
+        }),
+      });
+      if (res.ok) {
+        setEditingExpenseItem(null);
+        loadMonthData();
+      }
+    } catch (err) {
+      console.error("Error editando gasto:", err);
+    } finally {
+      setSavingEditExpense(false);
     }
   };
 
@@ -497,8 +566,8 @@ export default function CierreMensual() {
         </div>
       </div>
 
-      {/* Main KPI Dashboard Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      {/* Main KPI Dashboard Grid (5 Métricas clave incluyendo Ticket Promedio) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
         {/* Total Income */}
         <div className="bg-card border border-border/50 rounded-sm p-4 flex flex-col justify-between">
           <div className="flex items-center justify-between">
@@ -573,37 +642,77 @@ export default function CierreMensual() {
             </div>
           </div>
         </div>
+
+        {/* Ticket Promedio (Unificado en Cierre Mensual) */}
+        <div className="bg-card border border-border/50 rounded-sm p-4 flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-bold tracking-[0.15em] text-muted-foreground uppercase">TICKET PROMEDIO</span>
+            <div className="w-8 h-8 rounded-sm bg-amber-500/10 text-amber-400 flex items-center justify-center">
+              <Ticket size={16} />
+            </div>
+          </div>
+          <div className="mt-3">
+            <p className="text-2xl font-light text-foreground">
+              ${Math.round(ticketPromedio).toLocaleString("es-AR")}
+            </p>
+            <p className="text-[11px] text-muted-foreground mt-1">
+              {completedApps.length > 0 ? `Por turno (${completedApps.length} turnos)` : "Sin turnos completados"}
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Breakdowns & Detail Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-        {/* Gastos por Categoría */}
+        {/* Gastos por Categoría con Detalle al Clic */}
         <div className="bg-card border border-border/50 rounded-sm p-5 flex flex-col">
-          <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
-            <FileText size={15} className="text-primary" /> Gastos por Rubro / Categoría
-          </h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <FileText size={15} className="text-primary" /> Gastos por Rubro / Categoría
+            </h3>
+            <span className="text-[10px] text-muted-foreground/80 bg-muted/60 px-2 py-0.5 rounded-sm">
+              Clic para ver detalle
+            </span>
+          </div>
 
           {Object.keys(expenseCategoryBreakdown).length === 0 ? (
             <p className="text-xs text-muted-foreground py-6 text-center">No hay gastos registrados en este mes.</p>
           ) : (
-            <div className="space-y-3 flex-1">
+            <div className="space-y-2 flex-1">
               {Object.entries(expenseCategoryBreakdown).map(([cat, data]) => {
                 const percentage = totalExpenses > 0 ? Math.round((data.total / totalExpenses) * 100) : 0;
                 return (
-                  <div key={cat} className="space-y-1">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-foreground font-medium">{cat}</span>
-                      <span className="text-muted-foreground font-mono">
-                        ${data.total.toLocaleString("es-AR")} ({percentage}%)
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => {
+                      setSelectedCategoryForDetail(cat);
+                      setCategoryDetailSearch("");
+                    }}
+                    className="w-full text-left p-2 rounded-sm border border-border/40 hover:border-primary/40 hover:bg-muted/30 transition-all group cursor-pointer block"
+                    title={`Ver detalle de gastos en ${cat}`}
+                  >
+                    <div className="flex items-center justify-between text-xs mb-1">
+                      <span className="text-foreground font-medium group-hover:text-primary transition-colors flex items-center gap-1.5">
+                        <Eye size={12} className="text-primary opacity-60 group-hover:opacity-100" />
+                        {cat}
                       </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-muted-foreground font-normal">
+                          {data.count} {data.count === 1 ? "gasto" : "gastos"}
+                        </span>
+                        <span className="text-muted-foreground group-hover:text-foreground font-mono font-semibold">
+                          ${data.total.toLocaleString("es-AR")} ({percentage}%)
+                        </span>
+                      </div>
                     </div>
                     <div className="w-full bg-muted/60 h-1.5 rounded-full overflow-hidden">
                       <div
-                        className="bg-rose-400 h-full rounded-full"
+                        className="bg-rose-400 h-full rounded-full transition-all duration-300"
                         style={{ width: `${percentage}%` }}
                       />
                     </div>
-                  </div>
+                  </button>
                 );
               })}
             </div>
@@ -863,18 +972,18 @@ export default function CierreMensual() {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">Monto ($)</label>
-                    <input
-                      type="number"
-                      value={newAmount}
-                      onChange={(e) => setNewAmount(e.target.value)}
-                      placeholder="Ej: 15000"
-                      className="w-full bg-background border border-border/60 rounded-sm p-2 text-xs focus:outline-none focus:border-primary"
-                    />
-                  </div>
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Monto ($)</label>
+                  <input
+                    type="number"
+                    value={newAmount}
+                    onChange={(e) => setNewAmount(e.target.value)}
+                    placeholder="Ej: 15000"
+                    className="w-full bg-background border border-border/60 rounded-sm p-2 text-xs focus:outline-none focus:border-primary"
+                  />
+                </div>
 
+                <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-muted-foreground mb-1">Categoría</label>
                     <select
@@ -885,6 +994,22 @@ export default function CierreMensual() {
                       {categories.map((c) => (
                         <option key={c} value={c}>
                           {c}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">Proveedor (Opcional)</label>
+                    <select
+                      value={newSupplierId}
+                      onChange={(e) => setNewSupplierId(e.target.value)}
+                      className="w-full bg-background border border-border/60 rounded-sm p-2 text-xs focus:outline-none focus:border-primary"
+                    >
+                      <option value="">-- Sin proveedor --</option>
+                      {suppliers.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          🚚 {s.name} {s.contactName ? `(${s.contactName})` : ""}
                         </option>
                       ))}
                     </select>
@@ -936,6 +1061,267 @@ export default function CierreMensual() {
             </motion.div>
           </div>
         )}
+        {/* Modal Detalle de Gastos por Categoría */}
+        {selectedCategoryForDetail && (() => {
+          const catExpenses = expenses.filter(e => (e.category || "General") === selectedCategoryForDetail);
+          const filtered = catExpenses.filter(e => {
+            if (!categoryDetailSearch.trim()) return true;
+            const q = categoryDetailSearch.toLowerCase();
+            return (
+              (e.concept || "").toLowerCase().includes(q) ||
+              (e.supplierName || "").toLowerCase().includes(q) ||
+              (e.paymentMethod || "").toLowerCase().includes(q) ||
+              String(e.amount).includes(q)
+            );
+          });
+          const totalCat = catExpenses.reduce((s, e) => s + (e.amount || 0), 0);
+
+          const handleExportCategoryCSV = () => {
+            const headers = ["Fecha", "Concepto", "Proveedor", "Medio de Pago", "Monto"];
+            const rows = filtered.map(e => [
+              e.date,
+              e.concept,
+              e.supplierName || "—",
+              e.paymentMethod || "Efectivo",
+              e.amount
+            ]);
+            const csvContent = "\uFEFF" + [headers.join(","), ...rows.map(r => r.map(c => `"${c}"`).join(","))].join("\n");
+            const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = `Gastos_${selectedCategoryForDetail}_${periodPrefix}.csv`;
+            link.click();
+            URL.revokeObjectURL(url);
+          };
+
+          return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-3 sm:p-4">
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                className="bg-card border border-border rounded-xl max-w-3xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden text-foreground"
+              >
+                <div className="flex items-center justify-between p-4 border-b border-border bg-muted/20 flex-shrink-0">
+                  <div>
+                    <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                      <FileText size={16} className="text-primary" />
+                      Detalle de Gastos: <span className="text-primary">{selectedCategoryForDetail}</span>
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {catExpenses.length} {catExpenses.length === 1 ? "egreso registrado" : "egresos registrados"} · Total en {MONTH_NAMES[selectedMonth]}: <strong className="text-rose-400 font-mono">-${totalCat.toLocaleString("es-AR")}</strong>
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setSelectedCategoryForDetail(null)}
+                    className="text-muted-foreground hover:text-foreground p-1 rounded-sm"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                {/* Toolbar: Search and Export */}
+                <div className="p-3 border-b border-border/40 bg-background/50 flex items-center justify-between gap-2 flex-shrink-0">
+                  <div className="relative flex-1">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                      type="text"
+                      placeholder="Buscar por concepto, proveedor o medio de pago..."
+                      value={categoryDetailSearch}
+                      onChange={(e) => setCategoryDetailSearch(e.target.value)}
+                      className="w-full bg-background border border-border pl-8 pr-3 py-1.5 rounded-lg text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary"
+                    />
+                  </div>
+                  <button
+                    onClick={handleExportCategoryCSV}
+                    className="flex items-center gap-1.5 px-3 py-1.5 border border-border bg-card text-foreground rounded-md text-xs hover:bg-muted font-medium"
+                  >
+                    <Download size={13} />
+                    <span className="hidden sm:inline">Exportar CSV</span>
+                  </button>
+                </div>
+
+                {/* List of individual expenses */}
+                <div className="p-4 flex-1 overflow-y-auto space-y-2">
+                  {filtered.length === 0 ? (
+                    <div className="text-center py-10 text-muted-foreground text-xs">
+                      No se encontraron egresos en esta categoría.
+                    </div>
+                  ) : (
+                    filtered.map((e) => (
+                      <div
+                        key={e.id}
+                        className="bg-background border border-border/60 hover:border-border rounded-lg p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs transition-colors"
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold text-foreground text-sm">{e.concept}</span>
+                            {e.supplierName && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-medium border border-primary/20">
+                                <Truck size={10} /> {e.supplierName}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                            <span className="font-mono">{e.date}</span>
+                            <span>·</span>
+                            <span className="bg-muted px-1.5 py-0.5 rounded text-[10px]">{e.paymentMethod || "Efectivo"}</span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-border/30">
+                          <span className="font-mono font-bold text-rose-400 text-sm">
+                            -${e.amount.toLocaleString("es-AR")}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => handleStartEditExpense(e)}
+                              className="p-1.5 text-muted-foreground hover:text-primary hover:bg-muted rounded transition-colors"
+                              title="Editar este gasto"
+                            >
+                              <Edit2 size={13} />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteExpense(e.id)}
+                              className="p-1.5 text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 rounded transition-colors"
+                              title="Eliminar este gasto"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* Footer */}
+                <div className="p-3 border-t border-border bg-muted/20 flex items-center justify-between text-xs text-muted-foreground flex-shrink-0">
+                  <span>Total en {selectedCategoryForDetail}: <strong className="text-foreground">${totalCat.toLocaleString("es-AR")}</strong></span>
+                  <button
+                    onClick={() => setSelectedCategoryForDetail(null)}
+                    className="px-4 py-1.5 bg-primary text-primary-foreground font-semibold rounded-md hover:bg-primary/90 text-xs"
+                  >
+                    Cerrar
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          );
+        })()}
+
+        {/* Modal Editar Gasto */}
+        {editingExpenseItem && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-card border border-border rounded-lg max-w-md w-full p-5 text-foreground shadow-2xl space-y-4"
+            >
+              <div className="flex items-center justify-between border-b border-border/60 pb-3">
+                <h3 className="text-sm font-semibold">Editar Registro de Gasto</h3>
+                <button onClick={() => setEditingExpenseItem(null)} className="text-muted-foreground hover:text-foreground">
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="space-y-3 text-xs">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-muted-foreground mb-1">Concepto</label>
+                  <input
+                    type="text"
+                    value={editConcept}
+                    onChange={(e) => setEditConcept(e.target.value)}
+                    className="w-full bg-background border border-border rounded-md px-3 py-2 text-foreground focus:outline-none focus:border-primary"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-muted-foreground mb-1">Monto ($)</label>
+                    <input
+                      type="number"
+                      value={editAmount}
+                      onChange={(e) => setEditAmount(e.target.value)}
+                      className="w-full bg-background border border-border rounded-md px-3 py-2 text-foreground focus:outline-none focus:border-primary font-semibold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-muted-foreground mb-1">Categoría</label>
+                    <select
+                      value={editCategory}
+                      onChange={(e) => setEditCategory(e.target.value)}
+                      className="w-full bg-background border border-border rounded-md px-3 py-2 text-foreground focus:outline-none focus:border-primary"
+                    >
+                      {categories.map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-muted-foreground mb-1">Medio de Pago</label>
+                    <input
+                      type="text"
+                      value={editPaymentMethod}
+                      onChange={(e) => setEditPaymentMethod(e.target.value)}
+                      placeholder="Efectivo / Transferencia..."
+                      className="w-full bg-background border border-border rounded-md px-3 py-2 text-foreground focus:outline-none focus:border-primary"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-muted-foreground mb-1">Fecha</label>
+                    <input
+                      type="date"
+                      value={editDate}
+                      onChange={(e) => setEditDate(e.target.value)}
+                      className="w-full bg-background border border-border rounded-md px-3 py-2 text-foreground focus:outline-none focus:border-primary"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-muted-foreground mb-1">Proveedor (Opcional)</label>
+                  <select
+                    value={editSupplierId}
+                    onChange={(e) => setEditSupplierId(e.target.value)}
+                    className="w-full bg-background border border-border rounded-md px-3 py-2 text-foreground focus:outline-none focus:border-primary"
+                  >
+                    <option value="">-- Sin proveedor --</option>
+                    {suppliers.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        🚚 {s.name} {s.contactName ? `(${s.contactName})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/40">
+                <button
+                  onClick={() => setEditingExpenseItem(null)}
+                  className="px-3 py-1.5 border border-border rounded-md text-xs hover:bg-muted"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleSaveEditExpense}
+                  disabled={savingEditExpense}
+                  className="px-4 py-1.5 bg-primary text-primary-foreground font-semibold rounded-md text-xs hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {savingEditExpense ? "Guardando..." : "Guardar Cambios"}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
         {/* Modal para Modificar / Corregir Medios de Pago del Mes */}
         {showAuditPaymentsModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-3 sm:p-4">
