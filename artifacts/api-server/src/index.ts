@@ -135,6 +135,8 @@ function initSchema() {
         \`email\` text,
         \`category\` text,
         \`contact_name\` text,
+        \`address\` text,
+        \`payment_method\` text,
         \`notes\` text,
         \`created_at\` integer NOT NULL
       );
@@ -160,6 +162,8 @@ function initSchema() {
     try { sqlite.exec("ALTER TABLE expenses ADD COLUMN payment_method text DEFAULT 'Efectivo'"); } catch (e) {}
     try { sqlite.exec("ALTER TABLE expenses ADD COLUMN supplier_id text"); } catch (e) {}
     try { sqlite.exec("ALTER TABLE expenses ADD COLUMN supplier_name text"); } catch (e) {}
+    try { sqlite.exec("ALTER TABLE suppliers ADD COLUMN address text"); } catch (e) {}
+    try { sqlite.exec("ALTER TABLE suppliers ADD COLUMN payment_method text"); } catch (e) {}
 
 
     logger.info("Database schema initialized successfully");

@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus, Search, X, Edit2, Download, Phone, Trash2, Truck,
   MessageCircle, Mail, User, FileText, ShoppingBag, ExternalLink,
-  Building, DollarSign, Calendar
+  Building, DollarSign, Calendar, MapPin, CreditCard
 } from "lucide-react";
 import AdminLayout from "./AdminLayout";
 
@@ -15,6 +15,8 @@ export interface Supplier {
   email?: string | null;
   category?: string | null;
   contactName?: string | null;
+  address?: string | null;
+  paymentMethod?: string | null;
   notes?: string | null;
   createdAt?: string | null;
 }
@@ -65,6 +67,8 @@ function SupplierModal({
     email: supplier?.email ?? "",
     category: supplier?.category ?? "Insumos",
     contactName: supplier?.contactName ?? "",
+    address: supplier?.address ?? "",
+    paymentMethod: supplier?.paymentMethod ?? "A consignación",
     notes: supplier?.notes ?? "",
   });
   const [saving, setSaving] = useState(false);
@@ -203,6 +207,37 @@ function SupplierModal({
                   onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))}
                   className="w-full bg-background border border-border rounded-md px-3 py-2 text-xs text-foreground focus:outline-none focus:border-primary"
                 />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="text-[10px] font-bold tracking-wider uppercase text-muted-foreground block mb-1">
+                  Dirección
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ej. Av. Colón 1234, B° Alberdi"
+                  value={form.address}
+                  onChange={(e) => setForm((p) => ({ ...p, address: e.target.value }))}
+                  className="w-full bg-background border border-border rounded-md px-3 py-2 text-xs text-foreground focus:outline-none focus:border-primary"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold tracking-wider uppercase text-muted-foreground block mb-1">
+                  Forma de Pago
+                </label>
+                <select
+                  value={form.paymentMethod}
+                  onChange={(e) => setForm((p) => ({ ...p, paymentMethod: e.target.value }))}
+                  className="w-full bg-background border border-border rounded-md px-3 py-2 text-xs text-foreground focus:outline-none focus:border-primary font-medium"
+                >
+                  <option value="A consignación">A consignación</option>
+                  <option value="Efectivo">Efectivo</option>
+                  <option value="Cuenta corriente">Cuenta corriente</option>
+                  <option value="Cheque">Cheque</option>
+                </select>
               </div>
             </div>
 
@@ -607,6 +642,20 @@ export default function Proveedores() {
                         >
                           {supplier.email}
                         </a>
+                      </div>
+                    )}
+
+                    {supplier.address && (
+                      <div className="flex items-center gap-1.5 text-muted-foreground py-0.5">
+                        <MapPin size={12} className="text-amber-500 shrink-0" />
+                        <span className="truncate">{supplier.address}</span>
+                      </div>
+                    )}
+
+                    {supplier.paymentMethod && (
+                      <div className="flex items-center gap-1.5 text-muted-foreground py-0.5">
+                        <CreditCard size={12} className="text-primary shrink-0" />
+                        <span>Pago habitual: <strong className="text-foreground font-semibold">{supplier.paymentMethod}</strong></span>
                       </div>
                     )}
 

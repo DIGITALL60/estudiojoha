@@ -6,7 +6,7 @@ import {
   GraduationCap, Wallet, TrendingUp, BadgeDollarSign,
   Gift, History, RotateCw, Ticket, Settings, LogOut,
   ChevronLeft, ChevronRight, Menu, AlertTriangle, Bell,
-  MessageSquare, Clock, Image as ImageIcon, Truck
+  MessageSquare, Clock, Image as ImageIcon, Truck, X
 } from "lucide-react";
 import LogoIcon from "@/components/LogoIcon";
 import AdminQRModal from "@/components/AdminQRModal";
@@ -94,9 +94,11 @@ const navConfig = {
 function NavItem({
   item,
   collapsed,
+  onNavigate,
 }: {
   item: typeof navConfig.sections[0]["items"][0] & { badge?: { type: string; value?: number } };
   collapsed: boolean;
+  onNavigate?: () => void;
 }) {
   const [location, setLocation] = useLocation();
   const isActive = location === item.path || location.startsWith(item.path + "/");
@@ -107,6 +109,9 @@ function NavItem({
       localStorage.removeItem("user");
       localStorage.removeItem("token");
       setLocation("/");
+    }
+    if (onNavigate) {
+      onNavigate();
     }
   };
 
@@ -170,7 +175,11 @@ export default function AdminLayout({ children, title, subtitle, actions }: Admi
   const [isHovered, setIsHovered] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [showQR, setShowQR] = useState(false);
-  const [, navigate] = useLocation();
+  const [currentPath, navigate] = useLocation();
+
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [currentPath]);
 
   const isEffectiveCollapsed = collapsed && !isHovered;
 
@@ -243,13 +252,17 @@ export default function AdminLayout({ children, title, subtitle, actions }: Admi
           flex flex-col bg-sidebar border-r border-sidebar-border
           ${mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}
           transition-transform md:transition-none
+          h-full max-h-[100dvh]
         `}
         style={{ minWidth: isEffectiveCollapsed ? 64 : 220 }}
       >
         {/* Logo header */}
         <div className={`flex items-center gap-3 px-3 py-4 border-b border-sidebar-border ${isEffectiveCollapsed ? "justify-center" : ""}`}>
           <button
-            onClick={() => navigate("/")}
+            onClick={() => {
+              setMobileOpen(false);
+              navigate("/");
+            }}
             className="flex-shrink-0 hover:opacity-80 transition-opacity"
             title="Volver al sitio"
           >
@@ -279,12 +292,19 @@ export default function AdminLayout({ children, title, subtitle, actions }: Admi
           >
             {collapsed ? <ChevronRight size={12} /> : <ChevronLeft size={12} />}
           </button>
+          <button
+            type="button"
+            onClick={() => setMobileOpen(false)}
+            className="md:hidden ml-auto flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-all"
+            title="Cerrar menú"
+            aria-label="Cerrar menú"
+          >
+            <X size={18} />
+          </button>
         </div>
 
-
-
         {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto overflow-x-hidden px-2 py-2 space-y-0.5 scrollbar-thin">
+        <nav className="flex-1 overflow-y-auto overflow-x-hidden px-2 py-2 space-y-0.5 scrollbar-thin touch-pan-y overscroll-contain">
           {navConfig.sections.map((section) => {
             const visibleItems = section.items.filter(item => {
               if (isAdmin) return true;
@@ -303,7 +323,12 @@ export default function AdminLayout({ children, title, subtitle, actions }: Admi
                 {section.title && isEffectiveCollapsed && <div className="h-px bg-sidebar-border/50 mx-2 my-2" />}
                 <div className="space-y-0.5">
                   {visibleItems.map((item) => (
-                    <NavItem key={item.id} item={{ ...item, badge: getItemBadge(item.id) }} collapsed={isEffectiveCollapsed} />
+                    <NavItem
+                      key={item.id}
+                      item={{ ...item, badge: getItemBadge(item.id) }}
+                      collapsed={isEffectiveCollapsed}
+                      onNavigate={() => setMobileOpen(false)}
+                    />
                   ))}
                 </div>
               </div>
@@ -317,7 +342,10 @@ export default function AdminLayout({ children, title, subtitle, actions }: Admi
             <div key={item.id}>
               {item.id === "logout" ? (
                 <button
-                  onClick={handleLogout}
+                  onClick={() => {
+                    setMobileOpen(false);
+                    handleLogout();
+                  }}
                   className="w-full flex items-center gap-3 px-3 py-2.5 rounded-sm transition-all duration-200 text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/60"
                 >
                   <span className="flex-shrink-0">{iconMap[item.icon]}</span>
@@ -337,7 +365,10 @@ export default function AdminLayout({ children, title, subtitle, actions }: Admi
                 </button>
               ) : item.id === "qr" ? (
                 <button
-                  onClick={() => setShowQR(true)}
+                  onClick={() => {
+                    setMobileOpen(false);
+                    setShowQR(true);
+                  }}
                   className="w-full flex items-center gap-3 px-3 py-2.5 rounded-sm transition-all duration-200 text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/60"
                 >
                   <span className="flex-shrink-0">{iconMap[item.icon]}</span>
@@ -356,7 +387,11 @@ export default function AdminLayout({ children, title, subtitle, actions }: Admi
                   </AnimatePresence>
                 </button>
               ) : (
-                <NavItem item={item as any} collapsed={isEffectiveCollapsed} />
+                <NavItem
+                  item={item as any}
+                  collapsed={isEffectiveCollapsed}
+                  onNavigate={() => setMobileOpen(false)}
+                />
               )}
             </div>
           ))}

@@ -30,6 +30,7 @@ export interface Product {
   id: string;
   name: string;
   unit: string;
+  price?: number;
 }
 
 // Removed hardcoded categories
@@ -133,16 +134,40 @@ function ServiceModal({
     } finally { setSaving(false); }
   };
 
+  // Cálculo del costo total de insumos y rentabilidad neta para este servicio
+  const totalInsumosCost = (form.recipes || []).reduce((sum, r) => {
+    const prod = products.find(p => p.id === r.productId);
+    return sum + ((prod?.price || 0) * (Number(r.amount) || 0));
+  }, 0);
+
+  const servicePrice = Number(form.price) || 0;
+  const netProfit = servicePrice - totalInsumosCost;
+  const profitMargin = servicePrice > 0 ? Math.round((netProfit / servicePrice) * 100) : 0;
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
+      className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 bg-background/80 backdrop-blur-sm">
       <motion.div initial={{ scale: 0.96, y: 8 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.96, y: 8 }}
-        className="bg-card border border-border shadow-2xl rounded-sm w-full max-w-md">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border/40">
-          <h3 className="text-sm font-semibold text-foreground">{service.id ? "Editar servicio" : "Nuevo servicio"}</h3>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors"><X size={16} /></button>
+        className="bg-card border border-border shadow-2xl rounded-xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
+        
+        {/* Header fijo con botón de cerrar */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border/40 shrink-0 bg-card">
+          <div>
+            <h3 className="text-sm font-semibold text-foreground">{service.id ? "Editar servicio" : "Nuevo servicio"}</h3>
+            <p className="text-[11px] text-muted-foreground">Configurá datos, insumos descontados y rentabilidad</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+            title="Cerrar ventana"
+          >
+            <X size={16} />
+          </button>
         </div>
-        <div className="p-5 space-y-4">
+
+        {/* Cuerpo scrolleable para evitar que se desborde en tablets y móviles */}
+        <div className="p-5 space-y-4 flex-1 overflow-y-auto overscroll-contain touch-pan-y scrollbar-thin">
           <div>
             <label className="text-[9px] font-bold tracking-widest text-muted-foreground uppercase block mb-1.5">Nombre *</label>
             <input type="text" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
@@ -212,7 +237,7 @@ function ServiceModal({
                 className="w-full bg-background border border-border rounded-sm px-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-primary" />
             </div>
             <div>
-              <label className="text-[9px] font-bold tracking-widest text-muted-foreground uppercase block mb-1.5">Precio ($)</label>
+              <label className="text-[9px] font-bold tracking-widest text-muted-foreground uppercase block mb-1.5">Precio de Venta ($)</label>
               <div className="relative flex items-center">
                 <span className="absolute left-3 text-muted-foreground text-xs font-semibold">$</span>
                 <input type="number" value={form.price} onChange={e => setForm(f => ({ ...f, price: Number(e.target.value) }))}
@@ -222,29 +247,106 @@ function ServiceModal({
           </div>
 
           {/* Recetas / Insumos */}
-          <div className="pt-2 border-t border-border/40">
+          <div className="pt-3 border-t border-border/40">
             <div className="flex justify-between items-center mb-2">
-              <label className="text-[9px] font-bold tracking-widest text-muted-foreground uppercase">Insumos a descontar automáticamente</label>
-              <button onClick={addRecipe} className="text-[10px] flex items-center gap-1 text-primary hover:text-primary/80 font-medium"><Plus size={10}/> Añadir</button>
-            </div>
-            {form.recipes?.map((r, i) => (
-              <div key={i} className="flex items-center gap-2 mb-2">
-                <select value={r.productId} onChange={e => updateRecipe(i, 'productId', e.target.value)} className="flex-1 bg-background border border-border rounded-sm px-2 py-1.5 text-xs">
-                  <option value="">Seleccioná producto</option>
-                  {products.map(p => <option key={p.id} value={p.id}>{p.name} ({p.unit})</option>)}
-                </select>
-                <input type="number" placeholder="Cant." value={r.amount} onChange={e => updateRecipe(i, 'amount', Number(e.target.value))} className="w-16 bg-background border border-border rounded-sm px-2 py-1.5 text-xs text-center" />
-                <button onClick={() => removeRecipe(i)} className="text-red-400 hover:text-red-500"><Trash2 size={12}/></button>
+              <div>
+                <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase block">
+                  Insumos a descontar automáticamente
+                </label>
+                <span className="text-[10px] text-muted-foreground">Productos cargados y costo por servicio</span>
               </div>
-            ))}
-            {(!form.recipes || form.recipes.length === 0) && <p className="text-[10px] text-muted-foreground italic">No se descuenta stock para este servicio.</p>}
+              <button
+                type="button"
+                onClick={addRecipe}
+                className="text-xs flex items-center gap-1 text-primary hover:text-primary/80 font-medium px-2 py-1 rounded bg-primary/10 transition-colors"
+              >
+                <Plus size={12}/> Añadir Insumo
+              </button>
+            </div>
+
+            <div className="space-y-2 mt-2">
+              {form.recipes?.map((r, i) => {
+                const prod = products.find(p => p.id === r.productId);
+                const unitPrice = prod?.price || 0;
+                const subtotal = unitPrice * (Number(r.amount) || 0);
+
+                return (
+                  <div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-background border border-border/60">
+                    <div className="flex-1 min-w-0">
+                      <select
+                        value={r.productId}
+                        onChange={e => updateRecipe(i, 'productId', e.target.value)}
+                        className="w-full bg-transparent border-0 text-xs text-foreground focus:outline-none focus:ring-0"
+                      >
+                        <option value="">-- Seleccioná producto en stock --</option>
+                        {products.map(p => (
+                          <option key={p.id} value={p.id}>
+                            {p.name} ({p.unit}) {p.price ? `- $${p.price.toLocaleString("es-AR")}` : ""}
+                          </option>
+                        ))}
+                      </select>
+                      {prod && unitPrice > 0 && (
+                        <p className="text-[10px] text-muted-foreground px-1">
+                          Costo: ${unitPrice.toLocaleString("es-AR")} por {prod.unit || "unidad"} · Subtotal: <strong className="text-foreground">${subtotal.toLocaleString("es-AR")}</strong>
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="text-[10px] text-muted-foreground">Cant:</span>
+                      <input
+                        type="number"
+                        min="0.01"
+                        step="any"
+                        placeholder="1"
+                        value={r.amount}
+                        onChange={e => updateRecipe(i, 'amount', Number(e.target.value))}
+                        className="w-16 bg-card border border-border rounded px-2 py-1 text-xs text-center font-medium focus:outline-none focus:border-primary"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeRecipe(i)}
+                        className="text-red-400 hover:text-red-500 p-1 rounded hover:bg-red-500/10 transition-colors"
+                        title="Eliminar insumo"
+                      >
+                        <Trash2 size={13}/>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {(!form.recipes || form.recipes.length === 0) && (
+              <p className="text-[11px] text-muted-foreground italic py-2">No se descuenta stock para este servicio.</p>
+            )}
+
+            {/* Resumen financiero del servicio: Costo de Insumos vs Rentabilidad Neta */}
+            {(form.recipes && form.recipes.length > 0) && (
+              <div className="mt-3 p-3 rounded-lg bg-accent/15 border border-border/80 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-muted-foreground block tracking-wider">Costo Insumos</span>
+                  <span className="text-sm font-bold text-rose-500">
+                    ${totalInsumosCost.toLocaleString("es-AR")}
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] uppercase font-bold text-muted-foreground block tracking-wider">Rentabilidad Neta</span>
+                  <span className={`text-sm font-bold ${netProfit >= 0 ? "text-emerald-500" : "text-rose-500"}`}>
+                    ${netProfit.toLocaleString("es-AR")} ({profitMargin}%)
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
 
           {error && <div className="flex items-center gap-2 text-red-400 text-xs bg-red-400/10 border border-red-400/20 rounded-sm px-3 py-2"><AlertCircle size={12} />{error}</div>}
         </div>
-        <div className="flex justify-end gap-2 px-5 py-4 border-t border-border/40">
-          <button onClick={onClose} className="text-xs px-4 py-2 rounded-sm border border-border text-muted-foreground hover:text-foreground">Cancelar</button>
-          <button onClick={handleSave} disabled={saving} className="flex items-center gap-2 text-xs font-semibold px-4 py-2 rounded-sm bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+
+        {/* Footer fijo con botones Cancelar y Guardar */}
+        <div className="flex justify-end gap-2 px-5 py-3.5 border-t border-border/40 shrink-0 bg-card">
+          <button type="button" onClick={onClose} className="text-xs px-4 py-2 rounded-sm border border-border text-muted-foreground hover:text-foreground transition-colors">Cancelar</button>
+          <button type="button" onClick={handleSave} disabled={saving} className="flex items-center gap-2 text-xs font-semibold px-4 py-2 rounded-sm bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors">
             {saving ? <><Save size={12} className="animate-spin" /> Guardando...</> : "Guardar"}
           </button>
         </div>
@@ -461,9 +563,37 @@ export default function Servicios() {
                     <div className="w-2 h-2 rounded-full bg-primary" />
                     <h4 className="text-sm font-bold text-foreground">{service.name}</h4>
                   </div>
-                  <p className="text-xs text-muted-foreground mb-4">
+                  <p className="text-xs text-muted-foreground mb-3">
                     {service.duration} min · ${service.price.toLocaleString("es-AR")} · {service.category}
                   </p>
+
+                  {/* Resumen de Insumos Cargados y Rentabilidad de acuerdo a los gastos */}
+                  {(() => {
+                    const linkedRecipes = serviceProducts.filter(sp => sp.serviceId === service.id);
+                    const insumosCost = linkedRecipes.reduce((sum, sp) => {
+                      const prod = products.find(p => p.id === sp.productId);
+                      return sum + ((prod?.price || 0) * (sp.amount || 0));
+                    }, 0);
+                    const netProfit = service.price - insumosCost;
+                    const margin = service.price > 0 ? Math.round((netProfit / service.price) * 100) : 0;
+
+                    return (
+                      <div className="mb-4 p-2.5 rounded-lg bg-accent/10 border border-border/50 text-[11px] space-y-1">
+                        <div className="flex items-center justify-between text-muted-foreground">
+                          <span>📦 Insumos cargados:</span>
+                          <span className="font-medium text-foreground">
+                            {linkedRecipes.length > 0 ? `${linkedRecipes.length} prod. ($${insumosCost.toLocaleString("es-AR")})` : "0 (sin costo)"}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between font-semibold">
+                          <span className="text-muted-foreground">Rentabilidad estimada:</span>
+                          <span className={netProfit >= 0 ? "text-emerald-500 font-bold" : "text-rose-500 font-bold"}>
+                            ${netProfit.toLocaleString("es-AR")} ({margin}%)
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })()}
                   
                   {/* Stats */}
                   <div className="flex items-center justify-between mt-auto pt-4 border-t border-border/40">

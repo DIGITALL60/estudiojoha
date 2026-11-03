@@ -37,6 +37,8 @@ export interface SupplierItem {
   email?: string | null;
   category?: string | null;
   contactName?: string | null;
+  address?: string | null;
+  paymentMethod?: string | null;
   notes?: string | null;
 }
 
@@ -98,6 +100,8 @@ export default function Caja() {
   const [inlineSupplierPhone, setInlineSupplierPhone] = useState("");
   const [inlineSupplierContact, setInlineSupplierContact] = useState("");
   const [inlineSupplierCategory, setInlineSupplierCategory] = useState("Insumos");
+  const [inlineSupplierAddress, setInlineSupplierAddress] = useState("");
+  const [inlineSupplierPaymentMethod, setInlineSupplierPaymentMethod] = useState("A consignación");
   const [savingInlineSupplier, setSavingInlineSupplier] = useState(false);
 
   // Estados de Billeteras Virtuales dinámicas y personalizadas
@@ -351,6 +355,8 @@ export default function Caja() {
           phone: inlineSupplierPhone.trim() || undefined,
           contactName: inlineSupplierContact.trim() || undefined,
           category: inlineSupplierCategory || "Insumos",
+          address: inlineSupplierAddress.trim() || undefined,
+          paymentMethod: inlineSupplierPaymentMethod || "A consignación",
         }),
       });
       if (res.ok) {
@@ -365,6 +371,8 @@ export default function Caja() {
         setInlineSupplierName("");
         setInlineSupplierPhone("");
         setInlineSupplierContact("");
+        setInlineSupplierAddress("");
+        setInlineSupplierPaymentMethod("A consignación");
       } else {
         alert("Error al guardar proveedor.");
       }
@@ -3359,6 +3367,35 @@ export default function Caja() {
                     <option value="Publicidad">Publicidad y Marketing</option>
                     <option value="Limpieza">Limpieza y Mantenimiento</option>
                     <option value="General">General / Otros</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
+                    Dirección
+                  </label>
+                  <input
+                    type="text"
+                    value={inlineSupplierAddress}
+                    onChange={e => setInlineSupplierAddress(e.target.value)}
+                    placeholder="Ej: Av. San Martín 1234, Local 2"
+                    className="w-full bg-background border border-border rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:border-primary transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
+                    Forma de Pago
+                  </label>
+                  <select
+                    value={inlineSupplierPaymentMethod}
+                    onChange={e => setInlineSupplierPaymentMethod(e.target.value)}
+                    className="w-full bg-background border border-border rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:border-primary transition-all font-medium"
+                  >
+                    <option value="A consignación">A consignación</option>
+                    <option value="Efectivo">Efectivo</option>
+                    <option value="Cuenta corriente">Cuenta corriente</option>
+                    <option value="Cheque">Cheque</option>
                   </select>
                 </div>
               </div>

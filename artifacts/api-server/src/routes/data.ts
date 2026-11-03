@@ -1100,10 +1100,11 @@ router.get("/suppliers", requireAuth, async (req, res) => {
 
 router.post("/suppliers", requireAuth, async (req, res) => {
   try {
-    const { name, phone, email, category, contactName, notes } = req.body;
+    const { name, phone, email, category, contactName, address, paymentMethod, payment_method, notes } = req.body;
     if (!name || !name.trim()) {
       return res.status(400).json({ error: "El nombre del proveedor es obligatorio" });
     }
+    const finalPaymentMethod = (paymentMethod || payment_method || "Efectivo").trim();
     const id = randomUUID();
     await db.insert(suppliers).values({
       id,
@@ -1112,6 +1113,8 @@ router.post("/suppliers", requireAuth, async (req, res) => {
       email: email ? email.trim() : null,
       category: category ? category.trim() : "Insumos",
       contactName: contactName ? contactName.trim() : null,
+      address: address ? address.trim() : null,
+      paymentMethod: finalPaymentMethod,
       notes: notes ? notes.trim() : null,
       createdAt: new Date(),
     });
@@ -1126,13 +1129,16 @@ router.post("/suppliers", requireAuth, async (req, res) => {
 router.patch("/suppliers/:id", requireAuth, async (req, res) => {
   try {
     const { id } = req.params as { id: string };
-    const { name, phone, email, category, contactName, notes } = req.body;
+    const { name, phone, email, category, contactName, address, paymentMethod, payment_method, notes } = req.body;
+    const finalPaymentMethod = paymentMethod !== undefined ? paymentMethod : payment_method;
     await db.update(suppliers).set({
       name: name !== undefined ? name.trim() : undefined,
       phone: phone !== undefined ? phone.trim() : undefined,
       email: email !== undefined ? email.trim() : undefined,
       category: category !== undefined ? category.trim() : undefined,
       contactName: contactName !== undefined ? contactName.trim() : undefined,
+      address: address !== undefined ? (address ? address.trim() : null) : undefined,
+      paymentMethod: finalPaymentMethod !== undefined ? (finalPaymentMethod ? finalPaymentMethod.trim() : null) : undefined,
       notes: notes !== undefined ? notes.trim() : undefined,
     }).where(eq(suppliers.id, id));
 

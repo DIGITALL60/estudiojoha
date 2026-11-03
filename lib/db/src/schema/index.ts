@@ -26,6 +26,8 @@ export const suppliers = sqliteTable("suppliers", {
   email: text("email"),
   category: text("category"), // e.g. Insumos, Coloración, Equipamiento, etc.
   contactName: text("contact_name"),
+  address: text("address"),
+  paymentMethod: text("payment_method"),
   notes: text("notes"), // CBU/Alias, pedidos, días de entrega, etc.
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(new Date()),
 });

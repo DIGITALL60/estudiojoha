@@ -19,8 +19,8 @@ export default function Rentabilidad() {
   const [expenses, setExpenses] = useState<{ id: string; amount: number; date: string; concept: string }[]>([]);
   const [filter, setFilter] = useState<"Semana" | "Mes" | "Trimestre" | "Año">("Semana");
 
-  // Selector de semana con calendario (Solicitado por la dueña)
-  const [selectedWeekDate, setSelectedWeekDate] = useState<string>(() => {
+  // Selector de fecha con calendario para cualquier período (Semana, Mes, Trimestre, Año)
+  const [selectedDate, setSelectedDate] = useState<string>(() => {
     return new Date().toISOString().split("T")[0];
   });
 
@@ -54,33 +54,79 @@ export default function Rentabilidad() {
     return { monday, sunday, startStr, endStr };
   };
 
-  const { monday, sunday, startStr: weekStart, endStr: weekEnd } = getWeekBounds(selectedWeekDate);
+  const { monday, sunday, startStr: weekStart, endStr: weekEnd } = getWeekBounds(selectedDate);
+  const currentDateObj = new Date(selectedDate + "T00:00:00");
 
-  const handlePrevWeek = () => {
-    const d = new Date(selectedWeekDate + "T00:00:00");
-    d.setDate(d.getDate() - 7);
-    setSelectedWeekDate(d.toISOString().split("T")[0]);
+  const handlePrevPeriod = () => {
+    const d = new Date(selectedDate + "T00:00:00");
+    if (filter === "Semana") {
+      d.setDate(d.getDate() - 7);
+    } else if (filter === "Mes") {
+      d.setMonth(d.getMonth() - 1);
+    } else if (filter === "Trimestre") {
+      d.setMonth(d.getMonth() - 3);
+    } else if (filter === "Año") {
+      d.setFullYear(d.getFullYear() - 1);
+    }
+    const pad = (n: number) => String(n).padStart(2, "0");
+    setSelectedDate(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
   };
 
-  const handleNextWeek = () => {
-    const d = new Date(selectedWeekDate + "T00:00:00");
-    d.setDate(d.getDate() + 7);
-    setSelectedWeekDate(d.toISOString().split("T")[0]);
+  const handleNextPeriod = () => {
+    const d = new Date(selectedDate + "T00:00:00");
+    if (filter === "Semana") {
+      d.setDate(d.getDate() + 7);
+    } else if (filter === "Mes") {
+      d.setMonth(d.getMonth() + 1);
+    } else if (filter === "Trimestre") {
+      d.setMonth(d.getMonth() + 3);
+    } else if (filter === "Año") {
+      d.setFullYear(d.getFullYear() + 1);
+    }
+    const pad = (n: number) => String(n).padStart(2, "0");
+    setSelectedDate(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
+  };
+
+  const getPeriodLabel = () => {
+    if (filter === "Semana") {
+      return `Semana: ${monday.toLocaleDateString("es-AR", { day: "numeric", month: "short" })} al ${sunday.toLocaleDateString("es-AR", { day: "numeric", month: "short" })}`;
+    }
+    if (filter === "Mes") {
+      const monthName = currentDateObj.toLocaleDateString("es-AR", { month: "long" });
+      const capitalized = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+      return `Mes: ${capitalized} ${currentDateObj.getFullYear()}`;
+    }
+    if (filter === "Trimestre") {
+      const q = Math.floor(currentDateObj.getMonth() / 3);
+      const qLabels = [
+        "T1 (Ene - Mar)",
+        "T2 (Abr - Jun)",
+        "T3 (Jul - Sep)",
+        "T4 (Oct - Dic)",
+      ];
+      return `Trimestre: ${qLabels[q]} ${currentDateObj.getFullYear()}`;
+    }
+    if (filter === "Año") {
+      return `Año: ${currentDateObj.getFullYear()}`;
+    }
+    return "";
   };
 
   const getFilteredApps = () => {
-    const now = new Date();
+    const targetYear = currentDateObj.getFullYear();
+    const targetMonth = currentDateObj.getMonth();
+    const targetQuarter = Math.floor(targetMonth / 3);
+
     return appointments.filter(a => {
       const d = new Date(a.date + "T00:00:00");
-      if (filter === "Año") return d.getFullYear() === now.getFullYear();
-      if (filter === "Mes") return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+      if (filter === "Año") return d.getFullYear() === targetYear;
+      if (filter === "Mes") return d.getFullYear() === targetYear && d.getMonth() === targetMonth;
       if (filter === "Semana") {
         return a.date >= weekStart && a.date <= weekEnd;
       }
       if (filter === "Trimestre") {
-        const quarter = Math.floor(now.getMonth() / 3);
         const appQuarter = Math.floor(d.getMonth() / 3);
-        return d.getFullYear() === now.getFullYear() && appQuarter === quarter;
+        return d.getFullYear() === targetYear && appQuarter === targetQuarter;
       }
       return true;
     });
@@ -90,16 +136,18 @@ export default function Rentabilidad() {
 
   const filterByPeriod = (dateStr: string) => {
     const d = new Date(dateStr + "T00:00:00");
-    const now = new Date();
-    if (filter === "Año") return d.getFullYear() === now.getFullYear();
-    if (filter === "Mes") return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+    const targetYear = currentDateObj.getFullYear();
+    const targetMonth = currentDateObj.getMonth();
+    const targetQuarter = Math.floor(targetMonth / 3);
+
+    if (filter === "Año") return d.getFullYear() === targetYear;
+    if (filter === "Mes") return d.getFullYear() === targetYear && d.getMonth() === targetMonth;
     if (filter === "Semana") {
       return dateStr >= weekStart && dateStr <= weekEnd;
     }
     if (filter === "Trimestre") {
-      const quarter = Math.floor(now.getMonth() / 3);
       const appQuarter = Math.floor(d.getMonth() / 3);
-      return d.getFullYear() === now.getFullYear() && appQuarter === quarter;
+      return d.getFullYear() === targetYear && appQuarter === targetQuarter;
     }
     return true;
   };
@@ -214,44 +262,42 @@ export default function Rentabilidad() {
           ))}
         </div>
 
-        {/* Desplegable de calendario para elegir qué semana ver */}
-        {filter === "Semana" && (
-          <div className="flex items-center gap-2 bg-background border border-border rounded-lg px-2.5 py-1.5 shadow-xs">
-            <button
-              type="button"
-              onClick={handlePrevWeek}
-              className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
-              title="Semana anterior"
-            >
-              <ChevronLeft size={16} />
-            </button>
+        {/* Selector con calendario desplegable y navegación para el período activo */}
+        <div className="flex items-center gap-2 bg-background border border-border rounded-lg px-2.5 py-1.5 shadow-xs">
+          <button
+            type="button"
+            onClick={handlePrevPeriod}
+            className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+            title="Período anterior"
+          >
+            <ChevronLeft size={16} />
+          </button>
 
-            <div className="flex items-center gap-2">
-              <CalendarIcon size={14} className="text-primary" />
-              <span className="text-xs font-semibold text-foreground whitespace-nowrap">
-                Semana: {monday.toLocaleDateString("es-AR", { day: "numeric", month: "short" })} al {sunday.toLocaleDateString("es-AR", { day: "numeric", month: "short" })}
-              </span>
+          <div className="flex items-center gap-2">
+            <CalendarIcon size={14} className="text-primary" />
+            <span className="text-xs font-semibold text-foreground whitespace-nowrap">
+              {getPeriodLabel()}
+            </span>
 
-              {/* Calendario nativo desplegable para seleccionar cualquier fecha */}
-              <input
-                type="date"
-                value={selectedWeekDate}
-                onChange={e => e.target.value && setSelectedWeekDate(e.target.value)}
-                className="bg-card border border-border/60 rounded px-1.5 py-0.5 text-[11px] text-foreground focus:outline-none focus:border-primary cursor-pointer hover:border-primary/50 transition-colors"
-                title="Hacé clic para abrir el calendario y elegir cualquier día de la semana"
-              />
-            </div>
-
-            <button
-              type="button"
-              onClick={handleNextWeek}
-              className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
-              title="Semana siguiente"
-            >
-              <ChevronRight size={16} />
-            </button>
+            {/* Calendario nativo desplegable para seleccionar cualquier fecha */}
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={e => e.target.value && setSelectedDate(e.target.value)}
+              className="bg-card border border-border/60 rounded px-1.5 py-0.5 text-[11px] text-foreground focus:outline-none focus:border-primary cursor-pointer hover:border-primary/50 transition-colors"
+              title="Hacé clic para abrir el calendario y seleccionar fecha"
+            />
           </div>
-        )}
+
+          <button
+            type="button"
+            onClick={handleNextPeriod}
+            className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+            title="Período siguiente"
+          >
+            <ChevronRight size={16} />
+          </button>
+        </div>
       </div>
 
       {/* KPI Cards */}
