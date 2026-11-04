@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Search, AlertTriangle, Package, Edit2, Trash2, ChevronDown, ChevronUp, X, Save, Check, Upload, Loader2, Image as ImageIcon } from "lucide-react";
+import { Plus, Search, AlertTriangle, Package, Edit2, Trash2, ChevronDown, ChevronUp, X, Save, Check, Upload, Loader2, Image as ImageIcon, Truck } from "lucide-react";
 import AdminLayout from "./AdminLayout";
 import { fetchAPI } from "@/lib/api";
 
@@ -13,10 +13,21 @@ export interface Product {
   unit: string;
   price: number;
   imageUrl?: string | null;
+  supplierId?: string | null;
+  supplierName?: string | null;
+}
+
+export interface SupplierItem {
+  id: string;
+  name: string;
+  phone?: string | null;
+  email?: string | null;
+  contactName?: string | null;
 }
 
 export default function Stock() {
   const [stockItems, setStockItems] = useState<Product[]>([]);
+  const [suppliers, setSuppliers] = useState<SupplierItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState<"Todos" | "Insumos" | "Shop">("Todos");
@@ -35,7 +46,19 @@ export default function Stock() {
     }
   };
 
-  useEffect(() => { fetchProducts(); }, []);
+  const fetchSuppliers = async () => {
+    try {
+      const res = await fetchAPI("/api/data/suppliers");
+      if (res.ok) setSuppliers(await res.json());
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    fetchProducts();
+    fetchSuppliers();
+  }, []);
 
   const lowStockItems = stockItems.filter(i => i.stock <= i.minStock);
 
@@ -43,7 +66,8 @@ export default function Stock() {
     .filter(i => {
       if (filterType === "Insumos" && i.category !== "Insumos") return false;
       if (filterType === "Shop" && i.category !== "Shop") return false;
-      return i.name.toLowerCase().includes(search.toLowerCase());
+      const term = search.toLowerCase();
+      return i.name.toLowerCase().includes(term) || (i.supplierName && i.supplierName.toLowerCase().includes(term));
     })
     .sort((a, b) => {
       const dir = sortDir === "asc" ? 1 : -1;
@@ -57,7 +81,18 @@ export default function Stock() {
   };
 
   const handleNew = () => {
-    setEditing({ id: "", name: "", category: filterType === "Shop" ? "Shop" : "Insumos", stock: 0, minStock: 0, unit: "unidad", price: 0, imageUrl: "" });
+    setEditing({
+      id: "",
+      name: "",
+      category: filterType === "Shop" ? "Shop" : "Insumos",
+      stock: 0,
+      minStock: 0,
+      unit: "unidad",
+      price: 0,
+      imageUrl: "",
+      supplierId: null,
+      supplierName: null,
+    });
   };
 
   const handleDelete = async (id: string) => {
@@ -198,11 +233,19 @@ export default function Stock() {
                       )}
                       <div>
                         <span className="text-xs font-semibold text-foreground block">{item.name}</span>
-                        {item.category === "Shop" && (
-                          <span className="text-[9px] uppercase tracking-wider text-emerald-500 font-semibold bg-emerald-500/10 px-1.5 py-0.2 rounded inline-block mt-0.5">
-                            Venta Shop
-                          </span>
-                        )}
+                        <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                          {item.supplierName && (
+                            <span className="text-[10px] text-muted-foreground flex items-center gap-1 bg-muted/40 px-1.5 py-0.5 rounded border border-border/40">
+                              <Truck size={10} className="text-primary/80 flex-shrink-0" />
+                              <span className="truncate max-w-[150px]">{item.supplierName}</span>
+                            </span>
+                          )}
+                          {item.category === "Shop" && (
+                            <span className="text-[9px] uppercase tracking-wider text-emerald-500 font-semibold bg-emerald-500/10 px-1.5 py-0.2 rounded inline-block">
+                              Venta Shop
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </td>
@@ -242,6 +285,8 @@ export default function Stock() {
         {editing && (
           <ProductModal
             product={editing}
+            suppliers={suppliers}
+            onSupplierCreated={(s) => setSuppliers(prev => [s, ...prev])}
             onClose={() => setEditing(null)}
             onSave={(p, isNew) => {
               if (isNew) setStockItems([...stockItems, p]);
@@ -255,13 +300,67 @@ export default function Stock() {
   );
 }
 
-function ProductModal({ product, onClose, onSave }: { product: Product; onClose: () => void; onSave: (p: Product, isNew: boolean) => void }) {
+function ProductModal({
+  product,
+  suppliers,
+  onSupplierCreated,
+  onClose,
+  onSave
+}: {
+  product: Product;
+  suppliers: SupplierItem[];
+  onSupplierCreated: (s: SupplierItem) => void;
+  onClose: () => void;
+  onSave: (p: Product, isNew: boolean) => void;
+}) {
   const [form, setForm] = useState(product);
   const [saving, setSaving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [services, setServices] = useState<any[]>([]);
   const [linkedServices, setLinkedServices] = useState<{serviceId: string, amount: number}[]>([]);
   const [filterCat, setFilterCat] = useState("Todas");
+  const [showInlineSupplierModal, setShowInlineSupplierModal] = useState(false);
+  const [newSupName, setNewSupName] = useState("");
+  const [newSupPhone, setNewSupPhone] = useState("");
+  const [newSupContact, setNewSupContact] = useState("");
+  const [savingSup, setSavingSup] = useState(false);
+
+  const handleSaveInlineSupplier = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newSupName.trim()) return alert("Por favor ingresá el nombre del proveedor");
+    setSavingSup(true);
+    try {
+      const res = await fetchAPI("/api/data/suppliers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newSupName.trim(),
+          phone: newSupPhone.trim() || null,
+          contactName: newSupContact.trim() || null,
+          category: form.category === "Insumos" ? "Insumos" : "General",
+        }),
+      });
+      if (res.ok) {
+        const created = await res.json();
+        onSupplierCreated(created);
+        setForm(prev => ({
+          ...prev,
+          supplierId: created.id,
+          supplierName: created.name,
+        }));
+        setShowInlineSupplierModal(false);
+        setNewSupName("");
+        setNewSupPhone("");
+        setNewSupContact("");
+      } else {
+        alert("Error al guardar proveedor");
+      }
+    } catch {
+      alert("Error al guardar proveedor");
+    } finally {
+      setSavingSup(false);
+    }
+  };
 
   useEffect(() => {
     fetchAPI("/api/data/services").then(r => r.json()).then(setServices).catch(console.error);
@@ -364,6 +463,81 @@ function ProductModal({ product, onClose, onSave }: { product: Product; onClose:
                 <option value="cm">cm (centímetro)</option>
               </select>
             </div>
+          </div>
+
+          {/* Selector de Proveedor */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-[9px] font-bold tracking-widest text-muted-foreground uppercase flex items-center gap-1.5">
+                <Truck size={12} className="text-primary" />
+                Proveedor {form.category === "Insumos" ? "(Uso Interno)" : "(Opcional)"}
+              </label>
+              {form.supplierId && (
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, supplierId: null, supplierName: null })}
+                  className="text-[10px] text-muted-foreground hover:text-red-400 transition-colors"
+                >
+                  Quitar proveedor
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5">
+              <select
+                value={form.supplierId || ""}
+                onChange={e => {
+                  const id = e.target.value;
+                  const found = suppliers.find(s => s.id === id);
+                  setForm({
+                    ...form,
+                    supplierId: id || null,
+                    supplierName: found ? found.name : null,
+                  });
+                }}
+                className="flex-1 bg-background border border-border rounded-sm px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none"
+              >
+                <option value="">-- Sin proveedor asociado --</option>
+                {suppliers.map(s => (
+                  <option key={s.id} value={s.id}>
+                    🚚 {s.name} {s.contactName ? `(${s.contactName})` : ""}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setShowInlineSupplierModal(true)}
+                className="px-2.5 py-2 text-xs font-semibold bg-primary/10 text-primary border border-primary/20 rounded-sm hover:bg-primary/20 transition-colors flex items-center gap-1 shadow-2xs whitespace-nowrap"
+                title="Registrar nuevo proveedor"
+              >
+                <Plus size={13} />
+                <span>Nuevo</span>
+              </button>
+            </div>
+
+            {(() => {
+              const selectedSup = suppliers.find(s => s.id === form.supplierId);
+              if (!selectedSup) return null;
+              return (
+                <div className="mt-1.5 flex items-center justify-between text-[11px] bg-muted/30 border border-border/50 rounded px-2.5 py-1.5 text-muted-foreground">
+                  <span className="truncate mr-2">
+                    {selectedSup.contactName && <strong className="text-foreground mr-1">{selectedSup.contactName} ·</strong>}
+                    {selectedSup.phone || "Sin teléfono registrado"}
+                  </span>
+                  {selectedSup.phone && (
+                    <a
+                      href={`https://wa.me/${selectedSup.phone.replace(/\D/g, "")}?text=${encodeURIComponent(
+                        `Hola ${selectedSup.contactName || selectedSup.name}, te consulto por stock del insumo "${form.name || "insumo"}" desde Estudio Joha.`
+                      )}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-emerald-500 hover:text-emerald-400 font-semibold flex items-center gap-1 flex-shrink-0"
+                    >
+                      WhatsApp
+                    </a>
+                  )}
+                </div>
+              );
+            })()}
           </div>
           <div className="grid grid-cols-3 gap-4">
             <div>
@@ -521,6 +695,95 @@ function ProductModal({ product, onClose, onSave }: { product: Product; onClose:
           <button onClick={onClose} className="px-4 py-2 text-xs rounded-sm border border-border hover:bg-muted transition-colors">Cancelar</button>
           <button onClick={handleSave} disabled={saving} className="px-4 py-2 text-xs rounded-sm bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-2">{saving ? 'Guardando...' : 'Guardar'}</button>
         </div>
+
+        {/* Modal Crear Proveedor Rápido */}
+        <AnimatePresence>
+          {showInlineSupplierModal && (
+            <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-background/80 backdrop-blur-xs">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="bg-card border border-border shadow-2xl rounded-sm p-5 w-full max-w-sm"
+              >
+                <div className="flex items-center justify-between mb-4 border-b border-border/60 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Truck size={15} className="text-primary" />
+                    <h4 className="text-xs font-bold text-foreground uppercase tracking-wider">Nuevo Proveedor</h4>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowInlineSupplierModal(false)}
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+
+                <form onSubmit={handleSaveInlineSupplier} className="space-y-3">
+                  <div>
+                    <label className="text-[9px] font-bold tracking-widest text-muted-foreground uppercase block mb-1">
+                      Nombre o Empresa *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={newSupName}
+                      onChange={e => setNewSupName(e.target.value)}
+                      placeholder="Ej: Distribuidora Bella..."
+                      className="w-full bg-background border border-border rounded-sm px-3 py-1.5 text-xs focus:border-primary focus:outline-none"
+                      autoFocus
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[9px] font-bold tracking-widest text-muted-foreground uppercase block mb-1">
+                      Teléfono / WhatsApp
+                    </label>
+                    <input
+                      type="text"
+                      value={newSupPhone}
+                      onChange={e => setNewSupPhone(e.target.value)}
+                      placeholder="Ej: 3512345678"
+                      className="w-full bg-background border border-border rounded-sm px-3 py-1.5 text-xs focus:border-primary focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[9px] font-bold tracking-widest text-muted-foreground uppercase block mb-1">
+                      Contacto / Vendedor
+                    </label>
+                    <input
+                      type="text"
+                      value={newSupContact}
+                      onChange={e => setNewSupContact(e.target.value)}
+                      placeholder="Ej: Marcelo"
+                      className="w-full bg-background border border-border rounded-sm px-3 py-1.5 text-xs focus:border-primary focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowInlineSupplierModal(false)}
+                      className="px-3 py-1.5 rounded-sm border border-border text-xs text-muted-foreground hover:bg-muted/50"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={savingSup}
+                      className="px-3 py-1.5 rounded-sm bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      {savingSup && <Loader2 size={12} className="animate-spin" />}
+                      Guardar
+                    </button>
+                  </div>
+                </form>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
       </motion.div>
     </motion.div>
   );

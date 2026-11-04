@@ -977,9 +977,16 @@ router.get("/products", async (req, res) => {
 
 router.post("/products", requireAuth, async (req, res) => {
   try {
-    const { name, category, stock, minStock, unit, price, imageUrl, services: linkedServices } = req.body;
+    const { name, category, stock, minStock, unit, price, imageUrl, supplierId, supplierName, services: linkedServices } = req.body;
     if (!name || !category || !unit) return res.status(400).json({ error: "Name, category and unit required" });
     const id = randomUUID();
+
+    let resolvedSupplierName = supplierName || null;
+    if (supplierId && !resolvedSupplierName) {
+      const [s] = await db.select().from(suppliers).where(eq(suppliers.id, supplierId)).limit(1);
+      if (s) resolvedSupplierName = s.name;
+    }
+
     await db.insert(products).values({
       id, name, category,
       stock: Number(stock || 0),
@@ -987,6 +994,8 @@ router.post("/products", requireAuth, async (req, res) => {
       unit,
       price: Number(price || 0),
       imageUrl: imageUrl || null,
+      supplierId: supplierId || null,
+      supplierName: resolvedSupplierName,
     });
 
     if (linkedServices && Array.isArray(linkedServices)) {
@@ -1010,7 +1019,16 @@ router.post("/products", requireAuth, async (req, res) => {
 router.patch("/products/:id", requireAuth, async (req, res) => {
   try {
     const { id } = req.params as { id: string };
-    const { name, category, stock, minStock, unit, price, imageUrl, services: linkedServices } = req.body;
+    const { name, category, stock, minStock, unit, price, imageUrl, supplierId, supplierName, services: linkedServices } = req.body;
+
+    let resolvedSupplierName = supplierName;
+    if (supplierId && resolvedSupplierName === undefined) {
+      const [s] = await db.select().from(suppliers).where(eq(suppliers.id, supplierId)).limit(1);
+      if (s) resolvedSupplierName = s.name;
+    } else if (supplierId === null || supplierId === "") {
+      resolvedSupplierName = null;
+    }
+
     await db.update(products).set({
       name, category,
       stock: stock !== undefined ? Number(stock) : undefined,
@@ -1018,6 +1036,8 @@ router.patch("/products/:id", requireAuth, async (req, res) => {
       unit,
       price: price !== undefined ? Number(price) : undefined,
       imageUrl: imageUrl !== undefined ? imageUrl : undefined,
+      supplierId: supplierId !== undefined ? (supplierId || null) : undefined,
+      supplierName: resolvedSupplierName !== undefined ? (resolvedSupplierName || null) : undefined,
     }).where(eq(products.id, id as string));
 
     if (linkedServices && Array.isArray(linkedServices)) {

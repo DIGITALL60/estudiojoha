@@ -83,6 +83,8 @@ export const products = sqliteTable("products", {
   unit: text("unit").notNull(), // e.g., 'unidad', 'litro', 'kit'
   price: integer("price").notNull().default(0),
   imageUrl: text("image_url"),
+  supplierId: text("supplier_id").references(() => suppliers.id),
+  supplierName: text("supplier_name"),
 });
 
 export const insertProductSchema = createInsertSchema(products);
