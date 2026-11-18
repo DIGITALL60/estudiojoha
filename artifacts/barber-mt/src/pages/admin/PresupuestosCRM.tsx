@@ -163,7 +163,7 @@ export default function PresupuestosCRM() {
       amount: 0,
       deposit: 0,
       status: "nuevo",
-      channel: "WhatsApp",
+      channel: "WhatsApp Empresa (Manual)",
       date: new Date().toISOString().split("T")[0],
       notes: "",
     });
@@ -230,6 +230,23 @@ export default function PresupuestosCRM() {
             <span className="text-xs font-semibold text-emerald-400">({stats.conversionRate}% éxito)</span>
           </div>
           <span className="text-[11px] text-muted-foreground mt-0.5">Conversión comercial</span>
+        </div>
+      </div>
+
+      {/* Sync & Automation Info Banner */}
+      <div className="mb-5 bg-card border border-border/60 rounded-xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-xs">
+        <div className="flex items-start gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0 mt-0.5 sm:mt-0 text-primary text-base">
+            🤖
+          </div>
+          <div>
+            <p className="font-semibold text-foreground">
+              Seguimiento Inteligente: Asistente de WhatsApp + Registro Manual
+            </p>
+            <p className="text-muted-foreground text-[11px] mt-0.5">
+              Las consultas y turnos del <strong>Asistente Virtual de WhatsApp</strong> se registran y actualizan automáticamente en este panel. Además, tenés disponible el botón <strong>"+ Nueva Consulta / Presupuesto"</strong> para agendar manualmente los chats que entren por el <strong>otro número de la empresa</strong>, llamadas o Instagram.
+            </p>
+          </div>
         </div>
       </div>
 
@@ -381,9 +398,23 @@ export default function PresupuestosCRM() {
 
                       {/* Channel */}
                       <td className="px-4 py-3.5 hidden md:table-cell">
-                        <span className="text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded bg-muted/40 border border-border/40 text-muted-foreground">
-                          {item.channel || "WhatsApp"}
-                        </span>
+                        {item.channel?.toLowerCase().includes("asistente") || item.channel?.toLowerCase().includes("bot") ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-violet-500/15 border border-violet-500/30 text-violet-400">
+                            🤖 Asistente Bot
+                          </span>
+                        ) : item.channel?.toLowerCase().includes("instagram") ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-pink-500/15 border border-pink-500/30 text-pink-400">
+                            📸 Instagram
+                          </span>
+                        ) : item.channel?.toLowerCase().includes("presencial") ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-amber-500/15 border border-amber-500/30 text-amber-400">
+                            🏪 Presencial
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-400">
+                            📱 {item.channel || "WhatsApp Empresa"}
+                          </span>
+                        )}
                       </td>
 
                       {/* Actions */}
@@ -623,15 +654,15 @@ function PresupuestoModal({
                 Canal de Consulta
               </label>
               <select
-                value={form.channel || "WhatsApp"}
+                value={form.channel || "WhatsApp Empresa (Manual)"}
                 onChange={e => setForm(f => ({ ...f, channel: e.target.value }))}
                 className="w-full bg-background border border-border rounded-sm px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none"
               >
-                <option value="WhatsApp">WhatsApp</option>
-                <option value="Instagram">Instagram</option>
-                <option value="Presencial">Presencial (Local)</option>
-                <option value="Llamada">Llamada Telefónica</option>
-                <option value="Sitio Web">Sitio Web</option>
+                <option value="WhatsApp Empresa (Manual)">WhatsApp Empresa (Manual / Otro Número)</option>
+                <option value="WhatsApp Asistente (Bot)">WhatsApp Asistente (Bot)</option>
+                <option value="Instagram Direct">Instagram Direct</option>
+                <option value="Presencial (Local)">Presencial (Local)</option>
+                <option value="Llamada Telefónica">Llamada Telefónica</option>
               </select>
             </div>
 

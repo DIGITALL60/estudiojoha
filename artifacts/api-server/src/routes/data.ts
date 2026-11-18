@@ -1408,9 +1408,56 @@ router.delete("/consumed-supplies/:id", requireAuth, async (req, res) => {
 // ─── PRESUPUESTOS / CRM (Gestor de Consultas) ─────────────────────────────
 router.get("/presupuestos", requireAuth, async (_req, res) => {
   try {
+    // 1. Sincronizar automáticamente turnos confirmados por el bot que aún no estén en presupuestos
+    try {
+      const botAppointments = await db.select().from(appointments);
+      const existingQuotes = await db.select().from(presupuestos);
+      const existingKeys = new Set(existingQuotes.map(q => `${q.clientPhone}_${q.date}`));
+
+      const allClients = await db.select().from(clients);
+      const clientMap = new Map(allClients.map(c => [c.id, c]));
+
+      const allServices = await db.select().from(services);
+      const serviceMap = new Map(allServices.map(s => [s.id, s]));
+
+      for (const app of botAppointments) {
+        if (app.notes && (app.notes.includes("WhatsApp Bot") || app.notes.includes("Bot"))) {
+          const client = clientMap.get(app.clientId);
+          const srv = serviceMap.get(app.serviceId);
+          const phone = client?.phone ? client.phone.replace(/\D/g, "") : "";
+          const key = `${phone}_${app.date}`;
+
+          if (phone && !existingKeys.has(key)) {
+            const id = randomUUID();
+            await db.insert(presupuestos).values({
+              id,
+              clientName: client?.name || "Cliente WhatsApp",
+              clientPhone: phone,
+              serviceDetails: srv?.name || "Servicio",
+              estimatedTotal: app.price || 0,
+              status: "agendado",
+              channel: "WhatsApp Asistente (Bot)",
+              date: app.date,
+              notes: `Turno agendado automáticamente vía WhatsApp Bot (${app.time}hs)`,
+              createdAt: app.createdAt || new Date(),
+            });
+            existingKeys.add(key);
+          }
+        }
+      }
+    } catch (syncErr) {
+      logger.warn({ syncErr }, "Warning auto-syncing bot appointments to CRM");
+    }
+
     const data = await db.select().from(presupuestos);
-    const sorted = (data || []).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
-    res.json(sorted);
+    const mapped = (data || []).map(p => ({
+      ...p,
+      serviceName: p.serviceDetails || "Servicio",
+      amount: p.estimatedTotal || 0,
+      deposit: 0,
+    })).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+
+    res.json(mapped);
   } catch (err) {
     logger.error({ err }, "Error fetching presupuestos");
     res.status(500).json({ error: "Failed to fetch presupuestos" });
@@ -1419,26 +1466,35 @@ router.get("/presupuestos", requireAuth, async (_req, res) => {
 
 router.post("/presupuestos", requireAuth, async (req, res) => {
   try {
-    const { clientName, clientPhone, serviceDetails, estimatedTotal, status, channel, notes, date } = req.body;
+    const { clientName, clientPhone, serviceDetails, serviceName, estimatedTotal, amount, status, channel, notes, date, deposit } = req.body;
     if (!clientName || !clientPhone) {
       return res.status(400).json({ error: "Client name and phone are required" });
     }
     const id = randomUUID();
     const today = new Date().toISOString().split("T")[0];
+    const details = (serviceDetails || serviceName || "Consulta general").trim();
+    const total = Number(estimatedTotal !== undefined ? estimatedTotal : amount) || 0;
+
     await db.insert(presupuestos).values({
       id,
       clientName: clientName.trim(),
       clientPhone: clientPhone.trim(),
-      serviceDetails: serviceDetails || "",
-      estimatedTotal: Number(estimatedTotal) || 0,
+      serviceDetails: details,
+      estimatedTotal: total,
       status: status || "nuevo",
-      channel: channel || "WhatsApp",
+      channel: channel || "WhatsApp Empresa (Manual)",
       notes: notes || null,
       date: date || today,
       createdAt: new Date(),
     });
+
     const [created] = await db.select().from(presupuestos).where(eq(presupuestos.id, id)).limit(1);
-    return res.status(201).json(created);
+    return res.status(201).json({
+      ...created,
+      serviceName: created.serviceDetails,
+      amount: created.estimatedTotal,
+      deposit: Number(deposit || 0),
+    });
   } catch (err) {
     logger.error({ err }, "Error creating presupuesto");
     return res.status(500).json({ error: "Failed to create presupuesto" });
@@ -1448,19 +1504,29 @@ router.post("/presupuestos", requireAuth, async (req, res) => {
 router.patch("/presupuestos/:id", requireAuth, async (req, res) => {
   try {
     const { id } = req.params as { id: string };
-    const { clientName, clientPhone, serviceDetails, estimatedTotal, status, channel, notes, date } = req.body;
+    const { clientName, clientPhone, serviceDetails, serviceName, estimatedTotal, amount, status, channel, notes, date, deposit } = req.body;
+    
+    const details = serviceDetails !== undefined ? serviceDetails : serviceName;
+    const total = estimatedTotal !== undefined ? Number(estimatedTotal) : (amount !== undefined ? Number(amount) : undefined);
+
     await db.update(presupuestos).set({
       clientName: clientName !== undefined ? clientName.trim() : undefined,
       clientPhone: clientPhone !== undefined ? clientPhone.trim() : undefined,
-      serviceDetails: serviceDetails !== undefined ? serviceDetails : undefined,
-      estimatedTotal: estimatedTotal !== undefined ? Number(estimatedTotal) : undefined,
+      serviceDetails: details !== undefined ? details.trim() : undefined,
+      estimatedTotal: total !== undefined ? total : undefined,
       status: status !== undefined ? status : undefined,
       channel: channel !== undefined ? channel : undefined,
       notes: notes !== undefined ? notes : undefined,
       date: date !== undefined ? date : undefined,
     }).where(eq(presupuestos.id, id));
+
     const [updated] = await db.select().from(presupuestos).where(eq(presupuestos.id, id)).limit(1);
-    return res.json(updated);
+    return res.json({
+      ...updated,
+      serviceName: updated.serviceDetails,
+      amount: updated.estimatedTotal,
+      deposit: Number(deposit || 0),
+    });
   } catch (err) {
     return res.status(500).json({ error: "Failed to update presupuesto" });
   }

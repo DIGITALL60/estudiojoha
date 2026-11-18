@@ -3,7 +3,7 @@
  * Maneja el estado de la conversación y crea turnos reales en la base de datos.
  */
 
-import { db, services, professionals, clients, appointments, professional_schedules, professional_services, blocked_dates, vouchers } from "@workspace/db";
+import { db, services, professionals, clients, appointments, professional_schedules, professional_services, blocked_dates, vouchers, presupuestos } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { cloudSendText, cloudSendList, cloudSendButtons } from "./whatsapp-cloud.js";
@@ -159,6 +159,71 @@ async function getUpcomingAvailableDates(professionalId: string, duration: numbe
   return result;
 }
 
+// ─── CRM / Presupuestos Sync ────────────────────────────────────────────────
+export async function syncBotPresupuesto({
+  from,
+  clientName,
+  serviceDetails,
+  estimatedTotal,
+  status,
+  notes,
+}: {
+  from: string;
+  clientName?: string;
+  serviceDetails?: string;
+  estimatedTotal?: number;
+  status: "nuevo" | "enviado" | "agendado" | "rechazado";
+  notes?: string;
+}) {
+  try {
+    const today = new Date().toISOString().split("T")[0];
+    const cleanFrom = from.replace(/\D/g, "");
+
+    // Search for existing open quote from this phone today or in progress
+    const allQuotes = await db.select().from(presupuestos).where(eq(presupuestos.clientPhone, cleanFrom));
+    const activeQuote = allQuotes.find(
+      q => (q.channel?.includes("Asistente") || q.channel?.includes("Bot")) && (q.date === today || q.status === "nuevo" || q.status === "enviado")
+    );
+
+    // Resolve client name if not provided or placeholder
+    let resolvedName = clientName?.trim();
+    if (!resolvedName || resolvedName.toLowerCase().includes("whatsapp")) {
+      const allClients = await db.select().from(clients);
+      const matched = allClients.find(c => phonesMatch(c.phone || "", cleanFrom));
+      if (matched?.name) resolvedName = matched.name;
+      else resolvedName = activeQuote?.clientName || "Consulta WhatsApp";
+    }
+
+    if (activeQuote) {
+      await db
+        .update(presupuestos)
+        .set({
+          clientName: resolvedName,
+          serviceDetails: serviceDetails || activeQuote.serviceDetails,
+          estimatedTotal: estimatedTotal !== undefined ? estimatedTotal : activeQuote.estimatedTotal,
+          status,
+          notes: notes || activeQuote.notes,
+        })
+        .where(eq(presupuestos.id, activeQuote.id));
+    } else {
+      await db.insert(presupuestos).values({
+        id: randomUUID(),
+        clientName: resolvedName,
+        clientPhone: cleanFrom,
+        serviceDetails: serviceDetails || "Consulta de servicio",
+        estimatedTotal: Number(estimatedTotal || 0),
+        status,
+        channel: "WhatsApp Asistente (Bot)",
+        date: today,
+        notes: notes || "Consulta iniciada por el Asistente de WhatsApp",
+        createdAt: new Date(),
+      });
+    }
+  } catch (err) {
+    logger.error({ err }, "[Bot] Error syncing presupuesto CRM");
+  }
+}
+
 // ─── Main handler ────────────────────────────────────────────────────────────
 export async function handleBotMessage(from: string, text: string, interactiveId?: string): Promise<void> {
   const isBotEnabled = await getBoolSetting("whatsapp_notif");
@@ -208,6 +273,13 @@ export async function handleBotMessage(from: string, text: string, interactiveId
 
   // Handle Human Escalation immediately if it's not a cancellation button click
   if (isHumanEscalation && !isCancellation) {
+    await syncBotPresupuesto({
+      from,
+      serviceDetails: session.serviceName || "Consulta con asesora",
+      estimatedTotal: session.servicePrice || 0,
+      status: "nuevo",
+      notes: "Clienta solicitó hablar con asesora humana (derivada al WhatsApp de Joha)",
+    });
     sessions.delete(from);
     await cloudSendText(from, "Te entiendo 💜. Para hablar directamente con nosotras o resolver cualquier duda que tengas, por favor escribinos tocando este link:\n\n👉 https://wa.me/5493572532685\n\n¡Joha te va a responder enseguida!");
     return;
@@ -457,6 +529,15 @@ export async function handleBotMessage(from: string, text: string, interactiveId
       session.servicePrice = svc.price;
       session.step = "choosing_professional";
       sessions.set(from, session);
+
+      await syncBotPresupuesto({
+        from,
+        serviceDetails: svc.name,
+        estimatedTotal: svc.price,
+        status: "enviado",
+        notes: `El Asistente le cotizó ${svc.name} ($${svc.price.toLocaleString("es-AR")}). En selección de profesional.`,
+      });
+
       await showProfessionals(from, svc.id);
       return;
     }
@@ -579,6 +660,16 @@ export async function handleBotMessage(from: string, text: string, interactiveId
       session.clientName = text.trim();
       session.step = "asking_voucher";
       sessions.set(from, session);
+
+      await syncBotPresupuesto({
+        from,
+        clientName: session.clientName,
+        serviceDetails: session.serviceName,
+        estimatedTotal: session.servicePrice,
+        status: "enviado",
+        notes: `Clienta identificada como ${session.clientName}. Pendiente de confirmación.`,
+      });
+
       await cloudSendText(
         from,
         `¿Tenés un código de descuento? 🎁\n\nIngresalo ahora o escribí *NO* para continuar sin descuento.`
@@ -717,12 +808,29 @@ export async function handleBotMessage(from: string, text: string, interactiveId
         const [d, m, y] = (session.date || "").split("-");
         const dateDisplay = `${d}/${m}/${y}`;
 
+        await syncBotPresupuesto({
+          from,
+          clientName: session.clientName,
+          serviceDetails: session.serviceName,
+          estimatedTotal: finalPrice,
+          status: "agendado",
+          notes: `Turno confirmado automáticamente por Asistente para el ${dateDisplay} a las ${session.time}hs con ${session.professionalName}`,
+        });
+
         await cloudSendText(
           from,
           `✅ *¡Turno confirmado!*\n\n👤 ${session.clientName}\n💅 ${session.serviceName}\n👩‍🎨 ${session.professionalName}\n📅 ${dateDisplay}\n⏰ ${session.time}hs\n\n📍 Río Segundo, Córdoba\n\n*Tu turno quedó registrado* para el día ${dateDisplay} a las ${session.time}hs ✨\n\n¡Gracias por elegirnos! 💜 Si necesitás reprogramar, avisanos con 24hs de anticipación.`
         );
         logger.info({ from, appointmentId }, "[Bot] Turno creado desde WhatsApp");
       } else if (input === "confirm_no") {
+        await syncBotPresupuesto({
+          from,
+          clientName: session.clientName,
+          serviceDetails: session.serviceName,
+          estimatedTotal: session.servicePrice,
+          status: "rechazado",
+          notes: `Clienta canceló en la pantalla de confirmación del Asistente.`,
+        });
         // Offer to reschedule instead of just cancelling
         sessions.delete(from);
         await cloudSendText(from,
