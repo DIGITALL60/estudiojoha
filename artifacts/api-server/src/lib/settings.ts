@@ -11,6 +11,8 @@ export const DEFAULT_SETTINGS: Record<string, string> = {
   whatsapp_notif: "true",
   notify_admin_turns: "false",
   notify_staff_turns: "true",
+  arm_auto_followup: "true",
+  arm_followup_delay_mins: "20",
   birthday_auto: "false",
   reminder_24h: "true",
   reminder_2h: "false",

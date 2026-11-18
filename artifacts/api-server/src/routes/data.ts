@@ -1547,6 +1547,51 @@ router.delete("/presupuestos/:id", requireAuth, async (req, res) => {
   }
 });
 
+router.post("/presupuestos/:id/followup", requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params as { id: string };
+    const [item] = await db.select().from(presupuestos).where(eq(presupuestos.id, id)).limit(1);
+    if (!item) {
+      return res.status(404).json({ error: "Presupuesto no encontrado" });
+    }
+
+    const clientFirstName = (item.clientName || "").split(" ")[0].trim();
+    const serviceText = item.serviceDetails || "nuestros servicios";
+    const msg =
+      `¡Hola ${clientFirstName || ""}! 😊✨\n\n` +
+      `Te escribimos de *Estudio Joha Molinero* para consultarte si te gustaría coordinar tu turno para *${serviceText}*.\n\n` +
+      `Tenemos lugares disponibles para estos días con nuestras profesionales 💅\n\n` +
+      `Respondé *SÍ* y te paso los horarios libres, o avisanos si tenés alguna duda sobre el servicio. ¡Te esperamos! 💜`;
+
+    const sent = await cloudSendText(item.clientPhone, msg);
+    if (!sent) {
+      return res.status(500).json({ error: "No se pudo enviar el mensaje por WhatsApp Cloud API" });
+    }
+
+    const timestampStr = new Date().toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" });
+    const updatedNotes = (item.notes ? item.notes + "\n" : "") + `[⚡ Seguimiento ARM enviado el ${timestampStr}]`;
+
+    await db.update(presupuestos).set({
+      followupSent: 1,
+      followupSentAt: new Date().toISOString(),
+      notes: updatedNotes,
+    } as any).where(eq(presupuestos.id, id));
+
+    const [updated] = await db.select().from(presupuestos).where(eq(presupuestos.id, id)).limit(1);
+    return res.json({
+      success: true,
+      item: {
+        ...updated,
+        serviceName: updated.serviceDetails,
+        amount: updated.estimatedTotal,
+      },
+    });
+  } catch (err) {
+    logger.error({ err }, "Error sending manual ARM follow-up");
+    return res.status(500).json({ error: "Error al enviar seguimiento comercial" });
+  }
+});
+
 router.post("/purge-test-data", requireAuth, async (_req, res) => {
   try {
     await db.delete(appointments);

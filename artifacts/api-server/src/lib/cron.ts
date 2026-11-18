@@ -1,18 +1,20 @@
 import cron from "node-cron";
-import { db, appointments, clients, services, professionals, vouchers } from "@workspace/db";
+import { db, appointments, clients, services, professionals, vouchers, presupuestos } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { randomUUID } from "crypto";
-import { cloudSendTemplate } from "./whatsapp-cloud.js";
+import { cloudSendTemplate, cloudSendText } from "./whatsapp-cloud.js";
 import { logger } from "./logger.js";
-import { getBoolSetting } from "./settings.js";
+import { getBoolSetting, getSetting } from "./settings.js";
 
 // Cron: cada dia a las 10:00 para recordatorio 24hs
 const CRON_24H = "0 10 * * *";
 // Cron: cada 30 minutos para recordatorio 2hs
 const CRON_2H = "*/30 * * * *";
+// Cron: cada 10 minutos para seguimiento proactivo de ARM
+const CRON_ARM_FOLLOWUP = "*/10 * * * *";
 
 export function initCronJobs() {
-  logger.info(`Starting cron jobs — 24h: ${CRON_24H} | 2h: ${CRON_2H}`);
+  logger.info(`Starting cron jobs — 24h: ${CRON_24H} | 2h: ${CRON_2H} | ARM: ${CRON_ARM_FOLLOWUP}`);
 
   // ─── 24-hour reminder ─────────────────────────────────────────────────────
   cron.schedule(CRON_24H, async () => {
@@ -185,6 +187,62 @@ export function initCronJobs() {
       }
     } catch (err) {
       logger.error({ err }, "Error running 2h appointment reminders job");
+    }
+  });
+
+  // ─── ARM Auto Follow-up for abandoned inquiries ──────────────────────────
+  cron.schedule(CRON_ARM_FOLLOWUP, async () => {
+    try {
+      const armEnabled = await getBoolSetting("arm_auto_followup");
+      if (!armEnabled) return;
+
+      const whatsappEnabled = await getBoolSetting("whatsapp_notif");
+      if (!whatsappEnabled) return;
+
+      const delayMinsSetting = await getSetting("arm_followup_delay_mins", "20");
+      const delayMs = (parseInt(delayMinsSetting, 10) || 20) * 60 * 1000;
+      const now = Date.now();
+      const maxAgeMs = 23 * 60 * 60 * 1000; // within 23 hours
+
+      const allQuotes = await db.select().from(presupuestos);
+      const candidates = allQuotes.filter(q => {
+        if (q.status !== "enviado" && q.status !== "nuevo") return false;
+        if (!q.channel?.toLowerCase().includes("asistente") && !q.channel?.toLowerCase().includes("bot")) return false;
+        if (q.followupSent) return false;
+
+        const createdTime = q.createdAt ? new Date(q.createdAt).getTime() : 0;
+        if (!createdTime) return false;
+        const age = now - createdTime;
+        return age >= delayMs && age <= maxAgeMs;
+      });
+
+      for (const quote of candidates) {
+        try {
+          const clientFirstName = (quote.clientName || "").split(" ")[0].trim();
+          const serviceText = quote.serviceDetails || "nuestros servicios";
+          const msg =
+            `¡Hola ${clientFirstName || ""}! 😊✨\n\n` +
+            `Vimos que consultaste por *${serviceText}* en Estudio Joha Molinero.\n` +
+            `¿Te gustaría que te reservemos un lugar esta semana con alguna de nuestras profesionales antes de que se completen los horarios? 💜\n\n` +
+            `Respondé *SÍ* y te paso los horarios libres, o avisanos si tenés alguna duda sobre el servicio. ¡Te esperamos! 🌸`;
+
+          const sent = await cloudSendText(quote.clientPhone, msg);
+          if (sent) {
+            const timestampStr = new Date().toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" });
+            const updatedNotes = (quote.notes ? quote.notes + "\n" : "") + `[⚡ Seguimiento ARM automático enviado el ${timestampStr}]`;
+            await db.update(presupuestos).set({
+              followupSent: 1,
+              followupSentAt: new Date().toISOString(),
+              notes: updatedNotes,
+            } as any).where(eq(presupuestos.id, quote.id));
+            logger.info({ quoteId: quote.id, phone: quote.clientPhone }, "[ARM] Auto follow-up sent to inactive client");
+          }
+        } catch (itemErr) {
+          logger.error({ itemErr, quoteId: quote.id }, "[ARM] Error sending auto follow-up");
+        }
+      }
+    } catch (err) {
+      logger.error({ err }, "Error running ARM auto follow-up job");
     }
   });
 }

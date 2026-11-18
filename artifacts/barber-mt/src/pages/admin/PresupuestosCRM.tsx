@@ -4,7 +4,7 @@ import {
   ClipboardList, Plus, Search, MessageSquare, Phone, Calendar,
   DollarSign, CheckCircle2, Clock, XCircle, Trash2, Edit2,
   ExternalLink, UserCheck, AlertCircle, Filter, RefreshCw, X, Loader2,
-  User, Sparkles
+  User, Sparkles, Zap
 } from "lucide-react";
 import AdminLayout from "./AdminLayout";
 import { fetchAPI } from "@/lib/api";
@@ -21,6 +21,8 @@ export interface Presupuesto {
   channel?: string | null;
   date: string;
   notes?: string | null;
+  followupSent?: number | null;
+  followupSentAt?: string | null;
   createdAt?: string;
 }
 
@@ -45,8 +47,9 @@ export default function PresupuestosCRM() {
   const [services, setServices] = useState<ServiceOption[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [activeTab, setActiveTab] = useState<"todos" | "nuevo" | "enviado" | "agendado" | "rechazado">("todos");
+  const [activeTab, setActiveTab] = useState<"todos" | "seguimiento" | "nuevo" | "enviado" | "agendado" | "rechazado">("todos");
   const [search, setSearch] = useState("");
+  const [sendingARMId, setSendingARMId] = useState<string | null>(null);
 
   // Modal create/edit
   const [editing, setEditing] = useState<Presupuesto | null>(null);
@@ -110,6 +113,26 @@ export default function PresupuestosCRM() {
     }
   };
 
+  // Send automated ARM follow-up via WhatsApp API
+  const handleSendARM = async (item: Presupuesto) => {
+    setSendingARMId(item.id);
+    try {
+      const res = await fetchAPI(`/api/data/presupuestos/${item.id}/followup`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "No se pudo enviar el seguimiento");
+      }
+      alert(`✅ ¡Seguimiento ARM enviado con éxito a ${item.clientName} por WhatsApp!`);
+      loadPresupuestos();
+    } catch (err: any) {
+      alert(`⚠️ ${err.message || "Error al enviar mensaje"}`);
+    } finally {
+      setSendingARMId(null);
+    }
+  };
+
   // WhatsApp helper
   const handleOpenWhatsApp = (p: Presupuesto) => {
     const cleanPhone = p.clientPhone.replace(/\D/g, "");
@@ -133,16 +156,21 @@ export default function PresupuestosCRM() {
     const nuevos = presupuestos.filter(p => p.status === "nuevo").length;
     const enviados = presupuestos.filter(p => p.status === "enviado").length;
     const agendados = presupuestos.filter(p => p.status === "agendado").length;
+    const pendientesSeguimiento = presupuestos.filter(p => p.status === "enviado" || p.status === "nuevo").length;
     const conversionRate = total > 0 ? Math.round((agendados / total) * 100) : 0;
     const totalAmount = presupuestos.reduce((acc, p) => acc + (p.amount || 0), 0);
 
-    return { total, nuevos, enviados, agendados, conversionRate, totalAmount };
+    return { total, nuevos, enviados, agendados, pendientesSeguimiento, conversionRate, totalAmount };
   }, [presupuestos]);
 
   // Filtered list
   const filtered = useMemo(() => {
     return presupuestos.filter(p => {
-      if (activeTab !== "todos" && p.status !== activeTab) return false;
+      if (activeTab === "seguimiento") {
+        if (p.status !== "enviado" && p.status !== "nuevo") return false;
+      } else if (activeTab !== "todos" && p.status !== activeTab) {
+        return false;
+      }
       if (search.trim()) {
         const q = search.toLowerCase();
         return (
@@ -256,25 +284,26 @@ export default function PresupuestosCRM() {
       {/* Tabs & Search */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-4">
         <div className="flex bg-card border border-border rounded-sm p-1 gap-1 flex-shrink-0 overflow-x-auto">
-          {(["todos", "nuevo", "enviado", "agendado", "rechazado"] as const).map(tab => (
+          {[
+            { id: "todos", label: "Todos" },
+            { id: "seguimiento", label: `⚡ Requieren Seguimiento (${stats.pendientesSeguimiento})` },
+            { id: "nuevo", label: "Nuevos" },
+            { id: "enviado", label: "Enviados" },
+            { id: "agendado", label: "Agendados" },
+            { id: "rechazado", label: "No Concretados" },
+          ].map(tab => (
             <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-sm transition-colors whitespace-nowrap ${
-                activeTab === tab
-                  ? "bg-primary text-primary-foreground shadow-xs"
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-sm transition-colors whitespace-nowrap cursor-pointer ${
+                activeTab === tab.id
+                  ? tab.id === "seguimiento"
+                    ? "bg-amber-500 text-white shadow-xs font-bold"
+                    : "bg-primary text-primary-foreground shadow-xs"
                   : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
               }`}
             >
-              {tab === "todos"
-                ? "Todos"
-                : tab === "nuevo"
-                ? "Nuevos"
-                : tab === "enviado"
-                ? "Enviados"
-                : tab === "agendado"
-                ? "Agendados"
-                : "No Concretados"}
+              {tab.label}
             </button>
           ))}
         </div>
@@ -367,6 +396,15 @@ export default function PresupuestosCRM() {
                               {item.notes}
                             </span>
                           )}
+                          {item.followupSent ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-violet-400 font-semibold mt-1">
+                              <Zap size={10} className="fill-violet-400" /> Seguimiento ARM enviado
+                            </span>
+                          ) : (item.status === "enviado" || item.status === "nuevo") ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-amber-500 font-semibold mt-1">
+                              <Clock size={10} /> Esperando respuesta
+                            </span>
+                          ) : null}
                         </div>
                       </td>
 
@@ -423,11 +461,28 @@ export default function PresupuestosCRM() {
                       {/* Actions */}
                       <td className="px-4 py-3.5 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1.5">
+                          {/* ⚡ Recontactar ARM (solo si está en nuevo o enviado) */}
+                          {(item.status === "enviado" || item.status === "nuevo") && (
+                            <button
+                              onClick={() => handleSendARM(item)}
+                              disabled={sendingARMId === item.id}
+                              title="Enviar mensaje de seguimiento comercial por WhatsApp con el Asistente (ARM)"
+                              className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded border transition-all cursor-pointer ${
+                                item.followupSent
+                                  ? "bg-violet-500/10 hover:bg-violet-500/20 text-violet-400 border-violet-500/30"
+                                  : "bg-amber-500/15 hover:bg-amber-500/25 text-amber-500 border-amber-500/30 shadow-xs"
+                              }`}
+                            >
+                              <Zap size={11} className={sendingARMId === item.id ? "animate-spin" : item.followupSent ? "" : "fill-amber-500"} />
+                              <span>{sendingARMId === item.id ? "Enviando..." : item.followupSent ? "Re-seguir (ARM)" : "Seguimiento ARM"}</span>
+                            </button>
+                          )}
+
                           {/* Send WhatsApp */}
                           <button
                             onClick={() => handleOpenWhatsApp(item)}
-                            title="Enviar cotización por WhatsApp"
-                            className="inline-flex items-center gap-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 border border-emerald-500/30 text-[11px] font-bold px-2 py-1 rounded transition-colors"
+                            title="Abrir chat en WhatsApp"
+                            className="inline-flex items-center gap-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 border border-emerald-500/30 text-[11px] font-bold px-2 py-1 rounded transition-colors cursor-pointer"
                           >
                             <MessageSquare size={11} />
                             <span>WhatsApp</span>

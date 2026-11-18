@@ -238,6 +238,8 @@ export const presupuestos = sqliteTable("presupuestos", {
   status: text("status").notNull().default("nuevo"), // 'nuevo' | 'enviado' | 'agendado' | 'rechazado'
   channel: text("channel").default("WhatsApp"), // WhatsApp, Instagram, Presencial, Recomendación
   notes: text("notes"),
+  followupSent: integer("followup_sent").default(0),
+  followupSentAt: text("followup_sent_at"),
   date: text("date").notNull(), // YYYY-MM-DD
   createdAt: integer("created_at", { mode: 'timestamp' }).notNull().default(new Date()),
 });

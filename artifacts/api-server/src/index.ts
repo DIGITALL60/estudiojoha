@@ -193,6 +193,8 @@ function initSchema() {
     try { sqlite.exec("ALTER TABLE expenses ADD COLUMN supplier_name text"); } catch (e) {}
     try { sqlite.exec("ALTER TABLE suppliers ADD COLUMN address text"); } catch (e) {}
     try { sqlite.exec("ALTER TABLE suppliers ADD COLUMN payment_method text"); } catch (e) {}
+    try { sqlite.exec("ALTER TABLE presupuestos ADD COLUMN followup_sent integer DEFAULT 0"); } catch (e) {}
+    try { sqlite.exec("ALTER TABLE presupuestos ADD COLUMN followup_sent_at text"); } catch (e) {}
 
 
     logger.info("Database schema initialized successfully");

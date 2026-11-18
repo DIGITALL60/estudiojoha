@@ -24,6 +24,7 @@ type Step =
   | "confirming"
   | "rescheduling_choosing_date"
   | "rescheduling_choosing_time"
+  | "resuming_quote"
   | "done";
 
 interface Session {
@@ -53,8 +54,8 @@ function getSession(from: string): Session {
   const now = Date.now();
   if (sessions.has(from)) {
     const s = sessions.get(from)!;
-    // Session timeout: 30 minutes
-    if (now - s.lastActivity > 30 * 60 * 1000) {
+    // Session timeout: 4 hours (so inactive clients can resume smoothly without losing context)
+    if (now - s.lastActivity > 4 * 60 * 60 * 1000) {
       sessions.delete(from);
     } else {
       return s;
@@ -475,12 +476,84 @@ export async function handleBotMessage(from: string, text: string, interactiveId
   }
 
   try {
-    // ── WELCOME ──────────────────────────────────────────────────────────────
+    // ── WELCOME OR RESUME PENDING CONSULTATION (ARM) ─────────────────────────
     if (session.step === "idle" || isGreeting) {
+      // Check if client has a pending open consultation in CRM (e.g. they asked earlier and went cold)
+      const cleanFrom = from.replace(/\D/g, "");
+      const allQuotes = await db.select().from(presupuestos).where(eq(presupuestos.clientPhone, cleanFrom));
+      const openQuote = allQuotes.find(
+        q => (q.status === "enviado" || q.status === "nuevo") && q.serviceDetails
+      );
+
+      if (openQuote && openQuote.serviceDetails) {
+        const allServices = await db.select().from(services);
+        const srv = allServices.find(
+          s => s.name.toLowerCase() === openQuote.serviceDetails?.toLowerCase() ||
+               openQuote.serviceDetails?.toLowerCase().includes(s.name.toLowerCase())
+        );
+
+        if (srv) {
+          const isDirectAffirmative = ["si", "sí", "dale", "1", "quiero", "ok", "bueno", "perfecto", "continuar", "horarios"].some(
+            w => normalized === w || normalized.startsWith(w)
+          );
+
+          if (isDirectAffirmative) {
+            session.serviceId = srv.id;
+            session.serviceName = srv.name;
+            session.serviceDuration = srv.duration;
+            session.servicePrice = srv.price;
+            session.category = srv.category;
+            session.step = "choosing_professional";
+            sessions.set(from, session);
+
+            await cloudSendText(from, `¡Buenísimo! Retomamos tu turno para *${srv.name}* ($${srv.price.toLocaleString("es-AR")}) 💜\n\nPor favor elegí con qué profesional querés atenderte 👇`);
+            await showProfessionals(from, srv.id);
+            return;
+          }
+
+          // Otherwise, ask if they want to resume this quote or start over
+          session.serviceId = srv.id;
+          session.serviceName = srv.name;
+          session.serviceDuration = srv.duration;
+          session.servicePrice = srv.price;
+          session.category = srv.category;
+          session.step = "resuming_quote";
+          sessions.set(from, session);
+
+          const firstName = (openQuote.clientName || "").split(" ")[0] || "";
+          await cloudSendText(from,
+            `¡Hola de nuevo ${firstName}! 👋💜\n\n` +
+            `Veo que estabas consultando por *${srv.name}* ($${srv.price.toLocaleString("es-AR")}).\n\n` +
+            `¿Querés que sigamos con este turno o preferís ver todos los servicios?\n\n` +
+            `1️⃣ *Continuar con ${srv.name}*\n` +
+            `2️⃣ *Ver todos los servicios desde el inicio*`
+          );
+          return;
+        }
+      }
+
       session.step = "choosing_category";
       sessions.set(from, session);
       await showCategories(from);
       return;
+    }
+
+    // ── RESUMING QUOTE ────────────────────────────────────────────────────────
+    if (session.step === "resuming_quote") {
+      if (input === "1" || normalized === "1" || normalized.includes("si") || normalized.includes("continuar") || normalized.includes("ese")) {
+        session.step = "choosing_professional";
+        sessions.set(from, session);
+        await cloudSendText(from, `¡Genial! Elegí a continuación con qué profesional querés atenderte 👇`);
+        await showProfessionals(from, session.serviceId!);
+        return;
+      } else {
+        session.step = "choosing_category";
+        session.serviceId = undefined;
+        session.serviceName = undefined;
+        sessions.set(from, session);
+        await showCategories(from);
+        return;
+      }
     }
 
     // ── CHOOSING CATEGORY ────────────────────────────────────────────────────
