@@ -204,7 +204,8 @@ export async function syncBotPresupuesto({
           estimatedTotal: estimatedTotal !== undefined ? estimatedTotal : activeQuote.estimatedTotal,
           status,
           notes: notes || activeQuote.notes,
-        })
+          followupSent: status === "rechazado" ? 1 : activeQuote.followupSent,
+        } as any)
         .where(eq(presupuestos.id, activeQuote.id));
     } else {
       await db.insert(presupuestos).values({
@@ -486,6 +487,30 @@ export async function handleBotMessage(from: string, text: string, interactiveId
       );
 
       if (openQuote && openQuote.serviceDetails) {
+        const isDecline = [
+          "no", "no gracias", "por ahora no", "cancelar", "cancelo", 
+          "no me interesa", "no quiero", "gracias no", "no por ahora", 
+          "ahora no", "dejar", "baja"
+        ].some(w => normalized === w || normalized.startsWith(w));
+
+        if (isDecline) {
+          await syncBotPresupuesto({
+            from,
+            clientName: openQuote.clientName,
+            serviceDetails: openQuote.serviceDetails,
+            estimatedTotal: openQuote.estimatedTotal,
+            status: "rechazado",
+            notes: (openQuote.notes ? openQuote.notes + "\n" : "") + `[Clienta indicó 'No' por WhatsApp — Marcado como No Concretado]`,
+          });
+          sessions.delete(from);
+
+          await cloudSendText(
+            from,
+            `¡Entendido! Muchas gracias por avisarnos 💜\n\nSi más adelante querés consultar precios, cursos o reservar cualquier tratamiento, ¡acá estamos para cuando quieras! ✨\n\n¡Que tengas un hermoso día! 🌸`
+          );
+          return;
+        }
+
         const allServices = await db.select().from(services);
         const srv = allServices.find(
           s => s.name.toLowerCase() === openQuote.serviceDetails?.toLowerCase() ||
@@ -526,7 +551,8 @@ export async function handleBotMessage(from: string, text: string, interactiveId
             `Veo que estabas consultando por *${srv.name}* ($${srv.price.toLocaleString("es-AR")}).\n\n` +
             `¿Querés que sigamos con este turno o preferís ver todos los servicios?\n\n` +
             `1️⃣ *Continuar con ${srv.name}*\n` +
-            `2️⃣ *Ver todos los servicios desde el inicio*`
+            `2️⃣ *Ver todos los servicios desde el inicio*\n\n` +
+            `(Si no deseás el turno, respondé *NO* y damos de baja la consulta)`
           );
           return;
         }
@@ -540,18 +566,50 @@ export async function handleBotMessage(from: string, text: string, interactiveId
 
     // ── RESUMING QUOTE ────────────────────────────────────────────────────────
     if (session.step === "resuming_quote") {
+      const isDecline = [
+        "no", "no gracias", "por ahora no", "cancelar", "cancelo", 
+        "no me interesa", "no quiero", "gracias no", "no por ahora", 
+        "ahora no", "dejar", "baja"
+      ].some(w => normalized === w || normalized.startsWith(w));
+
+      if (isDecline) {
+        const cleanFrom = from.replace(/\D/g, "");
+        const allQuotes = await db.select().from(presupuestos).where(eq(presupuestos.clientPhone, cleanFrom));
+        const openQuote = allQuotes.find(q => q.status === "enviado" || q.status === "nuevo");
+        if (openQuote) {
+          await syncBotPresupuesto({
+            from,
+            clientName: openQuote.clientName,
+            serviceDetails: openQuote.serviceDetails || session.serviceName,
+            estimatedTotal: openQuote.estimatedTotal,
+            status: "rechazado",
+            notes: (openQuote.notes ? openQuote.notes + "\n" : "") + `[Clienta indicó 'No' — No Concretado]`,
+          });
+        }
+        sessions.delete(from);
+
+        await cloudSendText(
+          from,
+          `¡Entendido! Muchas gracias por avisarnos 💜\n\nSi más adelante querés consultar precios o reservar cualquier servicio, ¡acá estamos para cuando quieras! ✨\n\n¡Que tengas un hermoso día! 🌸`
+        );
+        return;
+      }
+
       if (input === "1" || normalized === "1" || normalized.includes("si") || normalized.includes("continuar") || normalized.includes("ese")) {
         session.step = "choosing_professional";
         sessions.set(from, session);
         await cloudSendText(from, `¡Genial! Elegí a continuación con qué profesional querés atenderte 👇`);
         await showProfessionals(from, session.serviceId!);
         return;
-      } else {
+      } else if (input === "2" || normalized === "2" || normalized.includes("todos") || normalized.includes("otro") || normalized.includes("inicio")) {
         session.step = "choosing_category";
         session.serviceId = undefined;
         session.serviceName = undefined;
         sessions.set(from, session);
         await showCategories(from);
+        return;
+      } else {
+        await cloudSendText(from, `Por favor respondé *1* para continuar con ${session.serviceName || "este servicio"} o *2* para ver todos los servicios. O respondé *NO* para no agendar.`);
         return;
       }
     }
@@ -617,6 +675,31 @@ export async function handleBotMessage(from: string, text: string, interactiveId
 
     // ── CHOOSING PROFESSIONAL ────────────────────────────────────────────────
     if (session.step === "choosing_professional") {
+      // Check if user declines / cancels
+      const isDecline = [
+        "no", "no gracias", "por ahora no", "cancelar", "cancelo", 
+        "no me interesa", "no quiero", "gracias no", "no por ahora", 
+        "ahora no", "dejar", "baja"
+      ].some(w => normalized === w || normalized.startsWith(w));
+
+      if (isDecline) {
+        await syncBotPresupuesto({
+          from,
+          clientName: session.clientName,
+          serviceDetails: session.serviceName,
+          estimatedTotal: session.servicePrice,
+          status: "rechazado",
+          notes: `[Clienta indicó 'No' en selección de profesional — Marcado como No Concretado]`,
+        });
+        sessions.delete(from);
+
+        await cloudSendText(
+          from,
+          `¡Entendido! Muchas gracias por avisarnos 💜\n\nSi más adelante querés consultar precios o reservar cualquier servicio, ¡acá estamos para cuando quieras! ✨\n\n¡Que tengas un hermoso día! 🌸`
+        );
+        return;
+      }
+
       const allProfs = await db.select().from(professionals);
       const profServices = await db.select().from(professional_services).where(eq(professional_services.serviceId, session.serviceId!));
       const validProfIds = new Set(profServices.map(ps => ps.professionalId));
@@ -677,6 +760,30 @@ export async function handleBotMessage(from: string, text: string, interactiveId
 
     // ── CHOOSING DATE ────────────────────────────────────────────────────────
     if (session.step === "choosing_date") {
+      const isDecline = [
+        "no", "no gracias", "por ahora no", "cancelar", "cancelo", 
+        "no me interesa", "no quiero", "gracias no", "no por ahora", 
+        "ahora no", "dejar", "baja"
+      ].some(w => normalized === w || normalized.startsWith(w));
+
+      if (isDecline) {
+        await syncBotPresupuesto({
+          from,
+          clientName: session.clientName,
+          serviceDetails: session.serviceName,
+          estimatedTotal: session.servicePrice,
+          status: "rechazado",
+          notes: `[Clienta indicó 'No' en selección de fecha — Marcado como No Concretado]`,
+        });
+        sessions.delete(from);
+
+        await cloudSendText(
+          from,
+          `¡Entendido! Muchas gracias por avisarnos 💜\n\nSi más adelante querés consultar precios o reservar cualquier servicio, ¡acá estamos para cuando quieras! ✨\n\n¡Que tengas un hermoso día! 🌸`
+        );
+        return;
+      }
+
       let dateStr = "";
       const numIdx = parseInt(input.trim());
       if (session.lastUpcomingDates && numIdx >= 1 && numIdx <= session.lastUpcomingDates.length) {
