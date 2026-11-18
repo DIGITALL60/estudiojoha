@@ -263,6 +263,7 @@ function NewTurnModal({ onClose, defaultDate, defaultTime = "10:00", onCreated, 
 
 function EditTurnModal({ app, onClose, onUpdated, isAdmin }: { app: Appointment; onClose: () => void; onUpdated: () => void; isAdmin: boolean }) {
   const [status, setStatus] = useState(app.status || "agendado");
+  const [duration, setDuration] = useState<number>(app.duration || 60);
   const [notes, setNotes] = useState(app.notes || "");
   const [clientNotes, setClientNotes] = useState(app.clientNotes || "");
   const initialMethod = (app as any).paymentMethod || "Efectivo";
@@ -359,6 +360,7 @@ function EditTurnModal({ app, onClose, onUpdated, isAdmin }: { app: Appointment;
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           status, 
+          duration: Number(duration) || app.duration || 60,
           notes: finalNotes,
           paymentMethod: paymentMethod === "Transferencia" ? `Transferencia (${bankAccount})` : paymentMethod,
           shopSales: Number(shopSales)
@@ -437,7 +439,7 @@ function EditTurnModal({ app, onClose, onUpdated, isAdmin }: { app: Appointment;
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted-foreground block mb-1.5">Estado</label>
               <select value={status} onChange={e => setStatus(e.target.value)}
@@ -447,6 +449,23 @@ function EditTurnModal({ app, onClose, onUpdated, isAdmin }: { app: Appointment;
                 <option value="completado">Completado</option>
                 <option value="cancelado">Cancelado</option>
               </select>
+            </div>
+            <div>
+              <label className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted-foreground block mb-1.5 flex items-center gap-1">
+                <Clock size={11} className="text-primary" />
+                <span>Tiempo trabajado</span>
+              </label>
+              <div className="relative flex items-center">
+                <input
+                  type="number"
+                  min="5"
+                  step="5"
+                  value={duration}
+                  onChange={e => setDuration(Math.max(5, Number(e.target.value)))}
+                  className="w-full bg-background border border-border rounded-sm px-3 py-2 text-xs text-foreground focus:outline-none focus:border-primary pr-10"
+                />
+                <span className="absolute right-2.5 text-[10px] text-muted-foreground font-semibold">min</span>
+              </div>
             </div>
             <div>
               <label className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted-foreground block mb-1.5 text-emerald-500">Método de pago</label>

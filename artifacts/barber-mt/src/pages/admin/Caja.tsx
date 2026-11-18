@@ -91,6 +91,7 @@ export default function Caja() {
     wallet: "Mercado Pago",
     supplierId: "",
     supplierName: "",
+    expenseType: "variable",
   });
   const [showExpenseForm, setShowExpenseForm] = useState(false);
   const [professionals, setProfessionals] = useState<Professional[]>([]);
@@ -665,6 +666,7 @@ export default function Caja() {
                 category: newExpense.category,
                 paymentMethod: splitMethod,
                 payment_method: splitMethod,
+                expenseType: newExpense.expenseType || "variable",
                 supplierId: newExpense.supplierId || undefined,
                 supplierName: selectedSup ? selectedSup.name : undefined,
                 date: selectedDate,
@@ -681,6 +683,7 @@ export default function Caja() {
           wallet: "Mercado Pago",
           supplierId: "",
           supplierName: "",
+          expenseType: "variable",
         });
         setIsExpenseSplitPayment(false);
         setShowExpenseForm(false);
@@ -707,6 +710,7 @@ export default function Caja() {
           category: newExpense.category,
           paymentMethod: finalMethod,
           payment_method: finalMethod,
+          expenseType: newExpense.expenseType || "variable",
           supplierId: newExpense.supplierId || undefined,
           supplierName: selectedSup ? selectedSup.name : undefined,
           date: selectedDate,
@@ -720,6 +724,7 @@ export default function Caja() {
         wallet: "Mercado Pago",
         supplierId: "",
         supplierName: "",
+        expenseType: "variable",
       });
       setShowExpenseForm(false);
       loadData();
@@ -1121,6 +1126,7 @@ export default function Caja() {
           category: editingExpense.category,
           paymentMethod: finalMethod,
           payment_method: finalMethod,
+          expenseType: editingExpense.expenseType || (editingExpense as any).expense_type || "variable",
           date: editingExpense.date,
           supplierId: editingExpense.supplierId || null,
           supplierName: finalSupplierName,
@@ -1377,7 +1383,18 @@ export default function Caja() {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 items-center">
+                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5 items-center">
+                        <div>
+                          <select
+                            value={newExpense.expenseType || "variable"}
+                            onChange={e => setNewExpense(f => ({ ...f, expenseType: e.target.value }))}
+                            className="w-full bg-card border border-border rounded-md px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none font-medium"
+                          >
+                            <option value="variable">📊 Variable</option>
+                            <option value="fijo">🔒 Fijo</option>
+                          </select>
+                        </div>
+
                         <div>
                           <select
                             value={newExpense.paymentMethod}
@@ -1455,6 +1472,9 @@ export default function Caja() {
                             <span className="text-muted-foreground ml-2 text-[10px] uppercase tracking-wider bg-border/30 px-1.5 py-0.5 rounded">{e.category}</span>
                             <span className={`ml-1.5 text-[10px] uppercase tracking-wider border px-1.5 py-0.5 rounded font-semibold ${badgeStyle}`}>
                               {rawMethod}
+                            </span>
+                            <span className={`ml-1.5 text-[9px] uppercase tracking-wider border px-1.5 py-0.5 rounded font-semibold ${(e.expenseType || (e as any).expense_type) === "fijo" ? "bg-blue-500/10 text-blue-400 border-blue-500/30" : "bg-amber-500/10 text-amber-400 border-amber-500/30"}`}>
+                              {(e.expenseType || (e as any).expense_type) === "fijo" ? "🔒 Fijo" : "📊 Variable"}
                             </span>
                           </div>
                         </div>
@@ -1863,6 +1883,28 @@ export default function Caja() {
                         onChange={e => setNewExpense(f => ({ ...f, amount: e.target.value }))}
                         className="w-full bg-background border border-border rounded-md pl-7 pr-3 py-2 text-xs font-semibold text-foreground focus:border-primary focus:outline-none"
                       />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">
+                      Tipo de Gasto (Fijo o Variable) *
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setNewExpense(f => ({ ...f, expenseType: "variable" }))}
+                        className={`py-2 px-3 text-xs font-semibold rounded-md border flex items-center justify-center gap-1.5 transition-all ${(newExpense.expenseType || "variable") === "variable" ? "bg-amber-500/15 border-amber-500/50 text-amber-500 shadow-2xs font-bold" : "bg-background border-border text-muted-foreground hover:bg-muted/50"}`}
+                      >
+                        <span>📊 Variable</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewExpense(f => ({ ...f, expenseType: "fijo" }))}
+                        className={`py-2 px-3 text-xs font-semibold rounded-md border flex items-center justify-center gap-1.5 transition-all ${(newExpense.expenseType || "variable") === "fijo" ? "bg-blue-500/15 border-blue-500/50 text-blue-500 shadow-2xs font-bold" : "bg-background border-border text-muted-foreground hover:bg-muted/50"}`}
+                      >
+                        <span>🔒 Fijo</span>
+                      </button>
                     </div>
                   </div>
 
@@ -2792,6 +2834,20 @@ export default function Caja() {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">
+                      Tipo de Gasto
+                    </label>
+                    <select
+                      value={editingExpense.expenseType || (editingExpense as any).expense_type || "variable"}
+                      onChange={e => setEditingExpense(prev => prev ? { ...prev, expenseType: e.target.value } : null)}
+                      className="w-full bg-background border border-border/80 rounded-lg px-3 py-2 text-xs text-foreground focus:outline-none focus:border-primary transition-all font-medium"
+                    >
+                      <option value="variable">📊 Variable</option>
+                      <option value="fijo">🔒 Fijo</option>
+                    </select>
+                  </div>
+
                   <div>
                     <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">
                       Forma de Egreso

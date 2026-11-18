@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Search, AlertTriangle, Package, Edit2, Trash2, ChevronDown, ChevronUp, X, Save, Check, Upload, Loader2, Image as ImageIcon, Truck } from "lucide-react";
+import { Plus, Search, AlertTriangle, Package, Edit2, Trash2, ChevronDown, ChevronUp, X, Save, Check, Upload, Loader2, Image as ImageIcon, Truck, Calendar, History, RotateCcw, Archive } from "lucide-react";
 import AdminLayout from "./AdminLayout";
 import { fetchAPI } from "@/lib/api";
 
@@ -25,15 +25,31 @@ export interface SupplierItem {
   contactName?: string | null;
 }
 
+export interface ConsumedSupplyItem {
+  id: string;
+  productId: string;
+  productName: string;
+  category: string;
+  supplierName?: string | null;
+  quantity: number;
+  unit: string;
+  cost: number;
+  date: string;
+  notes?: string | null;
+  createdAt?: string;
+}
+
 export default function Stock() {
   const [stockItems, setStockItems] = useState<Product[]>([]);
   const [suppliers, setSuppliers] = useState<SupplierItem[]>([]);
+  const [consumedSupplies, setConsumedSupplies] = useState<ConsumedSupplyItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [filterType, setFilterType] = useState<"Todos" | "Insumos" | "Shop">("Todos");
+  const [filterType, setFilterType] = useState<"Todos" | "Insumos" | "Shop" | "Utilizado">("Todos");
   const [sortBy, setSortBy] = useState<"name" | "stock">("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [editing, setEditing] = useState<Product | null>(null);
+  const [markingConsumed, setMarkingConsumed] = useState<Product | boolean | null>(null);
 
   const fetchProducts = async () => {
     try {
@@ -55,10 +71,43 @@ export default function Stock() {
     }
   };
 
+  const fetchConsumedSupplies = async () => {
+    try {
+      const res = await fetchAPI("/api/data/consumed-supplies");
+      if (res.ok) setConsumedSupplies(await res.json());
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   useEffect(() => {
     fetchProducts();
     fetchSuppliers();
+    fetchConsumedSupplies();
   }, []);
+
+  const handleDeleteConsumed = async (id: string) => {
+    if (!confirm("¿Eliminar este registro de insumo agotado? Esto restaurará el stock correspondiente del producto.")) return;
+    try {
+      const res = await fetchAPI(`/api/data/consumed-supplies/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        setConsumedSupplies(prev => prev.filter(c => c.id !== id));
+        fetchProducts();
+      }
+    } catch (err) {
+      alert("Error al eliminar el registro");
+    }
+  };
+
+  const filteredConsumed = consumedSupplies.filter(c => {
+    const term = search.toLowerCase();
+    return (
+      c.productName.toLowerCase().includes(term) ||
+      (c.supplierName && c.supplierName.toLowerCase().includes(term)) ||
+      (c.notes && c.notes.toLowerCase().includes(term)) ||
+      c.date.includes(term)
+    );
+  });
 
   const lowStockItems = stockItems.filter(i => i.stock <= i.minStock);
 
@@ -110,10 +159,22 @@ export default function Stock() {
       title="Stock"
       subtitle={`${stockItems.length} productos · ${lowStockItems.length} con stock bajo`}
       actions={
-        <button onClick={handleNew} className="flex items-center gap-2 bg-primary text-primary-foreground text-xs font-semibold px-4 py-2 rounded-sm hover:bg-primary/90 transition-colors">
-          <Plus size={13} />
-          Agregar producto
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setMarkingConsumed(true)}
+            className="flex items-center gap-1.5 bg-amber-500/10 text-amber-500 border border-amber-500/30 text-xs font-semibold px-3 py-2 rounded-sm hover:bg-amber-500/20 transition-colors"
+          >
+            <Archive size={13} />
+            Registrar insumo agotado
+          </button>
+          <button
+            onClick={handleNew}
+            className="flex items-center gap-2 bg-primary text-primary-foreground text-xs font-semibold px-4 py-2 rounded-sm hover:bg-primary/90 transition-colors"
+          >
+            <Plus size={13} />
+            Agregar producto
+          </button>
+        </div>
       }
     >
       {/* Low stock alert */}
@@ -134,37 +195,64 @@ export default function Stock() {
       )}
 
       {/* Stats Boxes */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <div className="bg-card border border-border/50 rounded-xl p-4 flex flex-col justify-center">
-          <span className="text-[9px] uppercase tracking-[0.2em] font-bold text-muted-foreground mb-2">Productos activos</span>
-          <span className="text-xl font-bold text-primary">{stockItems.filter(i => i.stock > 0).length}</span>
+      {filterType === "Utilizado" ? (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          <div className="bg-card border border-border/50 rounded-xl p-4 flex flex-col justify-center">
+            <span className="text-[9px] uppercase tracking-[0.2em] font-bold text-muted-foreground mb-2">Insumos agotados</span>
+            <span className="text-xl font-bold text-amber-500">{consumedSupplies.length}</span>
+          </div>
+          <div className="bg-card border border-border/50 rounded-xl p-4 flex flex-col justify-center">
+            <span className="text-[9px] uppercase tracking-[0.2em] font-bold text-muted-foreground mb-2">Unidades gastadas</span>
+            <span className="text-xl font-bold text-primary">
+              {consumedSupplies.reduce((acc, c) => acc + (c.quantity || 0), 0)}
+            </span>
+          </div>
+          <div className="bg-card border border-border/50 rounded-xl p-4 flex flex-col justify-center">
+            <span className="text-[9px] uppercase tracking-[0.2em] font-bold text-muted-foreground mb-2">Costo total insumos</span>
+            <span className="text-xl font-bold text-red-400">
+              $ {consumedSupplies.reduce((acc, c) => acc + ((c.quantity || 1) * (c.cost || 0)), 0).toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+            </span>
+          </div>
+          <div className="bg-card border border-border/50 rounded-xl p-4 flex flex-col justify-center">
+            <span className="text-[9px] uppercase tracking-[0.2em] font-bold text-muted-foreground mb-2">Último descarte</span>
+            <span className="text-sm font-semibold text-foreground">
+              {consumedSupplies[0]?.date ? new Date(consumedSupplies[0].date + "T12:00:00").toLocaleDateString("es-AR") : "Sin registros"}
+            </span>
+          </div>
         </div>
-        <div className="bg-card border border-border/50 rounded-xl p-4 flex flex-col justify-center">
-          <span className="text-[9px] uppercase tracking-[0.2em] font-bold text-muted-foreground mb-2">Bajo mínimo</span>
-          <span className="text-xl font-bold text-amber-500">{lowStockItems.length}</span>
+      ) : (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          <div className="bg-card border border-border/50 rounded-xl p-4 flex flex-col justify-center">
+            <span className="text-[9px] uppercase tracking-[0.2em] font-bold text-muted-foreground mb-2">Productos activos</span>
+            <span className="text-xl font-bold text-primary">{stockItems.filter(i => i.stock > 0).length}</span>
+          </div>
+          <div className="bg-card border border-border/50 rounded-xl p-4 flex flex-col justify-center">
+            <span className="text-[9px] uppercase tracking-[0.2em] font-bold text-muted-foreground mb-2">Bajo mínimo</span>
+            <span className="text-xl font-bold text-amber-500">{lowStockItems.length}</span>
+          </div>
+          <div className="bg-card border border-border/50 rounded-xl p-4 flex flex-col justify-center">
+            <span className="text-[9px] uppercase tracking-[0.2em] font-bold text-muted-foreground mb-2">Total productos</span>
+            <span className="text-xl font-bold text-blue-400">{stockItems.length}</span>
+          </div>
+          <div className="bg-card border border-border/50 rounded-xl p-4 flex flex-col justify-center">
+            <span className="text-[9px] uppercase tracking-[0.2em] font-bold text-muted-foreground mb-2">Valor inventario</span>
+            <span className="text-xl font-bold text-emerald-500">
+              $ {stockItems.reduce((acc, i) => acc + (i.stock > 0 ? i.stock * i.price : 0), 0).toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+            </span>
+          </div>
         </div>
-        <div className="bg-card border border-border/50 rounded-xl p-4 flex flex-col justify-center">
-          <span className="text-[9px] uppercase tracking-[0.2em] font-bold text-muted-foreground mb-2">Total productos</span>
-          <span className="text-xl font-bold text-blue-400">{stockItems.length}</span>
-        </div>
-        <div className="bg-card border border-border/50 rounded-xl p-4 flex flex-col justify-center">
-          <span className="text-[9px] uppercase tracking-[0.2em] font-bold text-muted-foreground mb-2">Valor inventario</span>
-          <span className="text-xl font-bold text-emerald-500">
-            $ {stockItems.reduce((acc, i) => acc + (i.stock > 0 ? i.stock * i.price : 0), 0).toLocaleString("es-AR", { minimumFractionDigits: 2 })}
-          </span>
-        </div>
-      </div>
+      )}
 
       <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-4">
         {/* Tabs */}
         <div className="flex bg-card border border-border/50 rounded-sm overflow-hidden p-1 gap-1 flex-shrink-0">
-          {(["Todos", "Insumos", "Shop"] as const).map(tab => (
+          {(["Todos", "Insumos", "Shop", "Utilizado"] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setFilterType(tab)}
               className={`px-4 py-1.5 text-xs font-semibold rounded-sm transition-colors ${filterType === tab ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"}`}
             >
-              {tab === "Insumos" ? "Uso Interno" : tab === "Shop" ? "Venta Shop" : "Todos"}
+              {tab === "Insumos" ? "Uso Interno" : tab === "Shop" ? "Venta Shop" : tab === "Utilizado" ? "Stock Utilizado" : "Todos"}
             </button>
           ))}
         </div>
@@ -175,111 +263,211 @@ export default function Stock() {
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Buscar producto..."
+            placeholder={filterType === "Utilizado" ? "Buscar por insumo, proveedor, nota o fecha..." : "Buscar producto..."}
             className="w-full bg-card border border-border rounded-sm pl-9 pr-4 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
           />
         </div>
       </div>
 
       {/* Table */}
-      <div className="bg-card border border-border rounded-sm overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-border/40 bg-muted/20">
-              <th className="text-left px-4 py-3">
-                <button onClick={() => handleSort("name")} className="flex items-center gap-1 text-[10px] font-bold tracking-[0.15em] uppercase text-muted-foreground hover:text-foreground transition-colors">
-                  Producto
-                  {sortBy === "name" && (sortDir === "asc" ? <ChevronUp size={10} /> : <ChevronDown size={10} />)}
-                </button>
-              </th>
-              <th className="text-left px-4 py-3 hidden sm:table-cell">
-                <span className="text-[10px] font-bold tracking-[0.15em] uppercase text-muted-foreground">Categoría</span>
-              </th>
-              <th className="text-right px-4 py-3">
-                <button onClick={() => handleSort("stock")} className="flex items-center gap-1 text-[10px] font-bold tracking-[0.15em] uppercase text-muted-foreground hover:text-foreground transition-colors ml-auto">
-                  Stock
-                  {sortBy === "stock" && (sortDir === "asc" ? <ChevronUp size={10} /> : <ChevronDown size={10} />)}
-                </button>
-              </th>
-              <th className="text-right px-4 py-3 hidden md:table-cell">
-                <span className="text-[10px] font-bold tracking-[0.15em] uppercase text-muted-foreground">Precio unit.</span>
-              </th>
-              <th className="px-4 py-3 w-20" />
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((item, i) => {
-              const isLow = item.stock <= item.minStock;
-              return (
-                <motion.tr
-                  key={item.id}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: i * 0.03 }}
-                  className="border-b border-border/20 last:border-0 hover:bg-accent/5 transition-colors group"
-                >
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      {item.imageUrl ? (
-                        <img
-                          src={item.imageUrl}
-                          alt={item.name}
-                          className="w-9 h-9 rounded-md object-cover border border-border/60 shadow-xs flex-shrink-0"
-                        />
-                      ) : (
-                        <div className="w-9 h-9 rounded-md bg-muted/40 border border-border/40 flex items-center justify-center flex-shrink-0">
-                          <Package size={14} className={isLow ? "text-amber-400" : "text-muted-foreground"} />
-                        </div>
-                      )}
+      {filterType === "Utilizado" ? (
+        <div className="bg-card border border-border rounded-sm overflow-hidden">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-border/40 bg-muted/20">
+                <th className="text-left px-4 py-3">
+                  <span className="text-[10px] font-bold tracking-[0.15em] uppercase text-muted-foreground">Fecha Terminado</span>
+                </th>
+                <th className="text-left px-4 py-3">
+                  <span className="text-[10px] font-bold tracking-[0.15em] uppercase text-muted-foreground">Insumo Agotado</span>
+                </th>
+                <th className="text-right px-4 py-3">
+                  <span className="text-[10px] font-bold tracking-[0.15em] uppercase text-muted-foreground">Cantidad</span>
+                </th>
+                <th className="text-right px-4 py-3 hidden sm:table-cell">
+                  <span className="text-[10px] font-bold tracking-[0.15em] uppercase text-muted-foreground">Costo Estimado</span>
+                </th>
+                <th className="text-left px-4 py-3 hidden md:table-cell">
+                  <span className="text-[10px] font-bold tracking-[0.15em] uppercase text-muted-foreground">Notas / Motivo</span>
+                </th>
+                <th className="px-4 py-3 w-16 text-right" />
+              </tr>
+            </thead>
+            <tbody>
+              {filteredConsumed.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="text-center py-10 text-xs text-muted-foreground">
+                    No se registran insumos agotados en este momento. Podés usar "Registrar insumo agotado" arriba a la derecha.
+                  </td>
+                </tr>
+              ) : (
+                filteredConsumed.map((item, i) => (
+                  <motion.tr
+                    key={item.id}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: i * 0.03 }}
+                    className="border-b border-border/20 last:border-0 hover:bg-accent/5 transition-colors group"
+                  >
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                        <Calendar size={12} className="text-amber-500" />
+                        <span>{new Date(item.date + "T12:00:00").toLocaleDateString("es-AR")}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
                       <div>
-                        <span className="text-xs font-semibold text-foreground block">{item.name}</span>
+                        <span className="text-xs font-semibold text-foreground block">{item.productName}</span>
                         <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                          <span className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold bg-muted/40 px-1.5 py-0.5 rounded border border-border/40">
+                            {item.category}
+                          </span>
                           {item.supplierName && (
                             <span className="text-[10px] text-muted-foreground flex items-center gap-1 bg-muted/40 px-1.5 py-0.5 rounded border border-border/40">
                               <Truck size={10} className="text-primary/80 flex-shrink-0" />
                               <span className="truncate max-w-[150px]">{item.supplierName}</span>
                             </span>
                           )}
-                          {item.category === "Shop" && (
-                            <span className="text-[9px] uppercase tracking-wider text-emerald-500 font-semibold bg-emerald-500/10 px-1.5 py-0.2 rounded inline-block">
-                              Venta Shop
-                            </span>
-                          )}
                         </div>
                       </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 hidden sm:table-cell">
-                    <span className="text-[11px] text-muted-foreground">{item.category}</span>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      {isLow && <AlertTriangle size={11} className="text-amber-400" />}
-                      <span className={`text-xs font-semibold ${isLow ? "text-amber-400" : "text-foreground"}`}>
-                        {item.stock} {item.unit}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <span className="text-xs font-bold text-amber-500">
+                        {item.quantity} {item.unit}
                       </span>
-                      <span className="text-[10px] text-muted-foreground/50">/ mín {item.minStock}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-right hidden md:table-cell">
-                    <span className="text-xs text-muted-foreground">${item.price.toLocaleString("es-AR")}</span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity justify-end">
-                      <button onClick={() => setEditing(item)} className="w-7 h-7 flex items-center justify-center rounded-sm text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all">
-                        <Edit2 size={12} />
+                    </td>
+                    <td className="px-4 py-3 text-right hidden sm:table-cell">
+                      <span className="text-xs text-muted-foreground">
+                        ${((item.cost || 0) * (item.quantity || 1)).toLocaleString("es-AR")}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 hidden md:table-cell">
+                      <span className="text-xs text-muted-foreground">
+                        {item.notes || <span className="opacity-40 italic">Sin notas</span>}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        onClick={() => handleDeleteConsumed(item.id)}
+                        title="Eliminar registro y restaurar stock"
+                        className="w-7 h-7 inline-flex items-center justify-center rounded-sm text-muted-foreground hover:text-red-400 hover:bg-red-400/10 transition-all opacity-0 group-hover:opacity-100"
+                      >
+                        <RotateCcw size={12} />
                       </button>
-                      <button onClick={() => handleDelete(item.id)} className="w-7 h-7 flex items-center justify-center rounded-sm text-muted-foreground hover:text-red-400 hover:bg-red-400/10 transition-all">
-                        <Trash2 size={12} />
-                      </button>
-                    </div>
-                  </td>
-                </motion.tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+                    </td>
+                  </motion.tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="bg-card border border-border rounded-sm overflow-hidden">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-border/40 bg-muted/20">
+                <th className="text-left px-4 py-3">
+                  <button onClick={() => handleSort("name")} className="flex items-center gap-1 text-[10px] font-bold tracking-[0.15em] uppercase text-muted-foreground hover:text-foreground transition-colors">
+                    Producto
+                    {sortBy === "name" && (sortDir === "asc" ? <ChevronUp size={10} /> : <ChevronDown size={10} />)}
+                  </button>
+                </th>
+                <th className="text-left px-4 py-3 hidden sm:table-cell">
+                  <span className="text-[10px] font-bold tracking-[0.15em] uppercase text-muted-foreground">Categoría</span>
+                </th>
+                <th className="text-right px-4 py-3">
+                  <button onClick={() => handleSort("stock")} className="flex items-center gap-1 text-[10px] font-bold tracking-[0.15em] uppercase text-muted-foreground hover:text-foreground transition-colors ml-auto">
+                    Stock
+                    {sortBy === "stock" && (sortDir === "asc" ? <ChevronUp size={10} /> : <ChevronDown size={10} />)}
+                  </button>
+                </th>
+                <th className="text-right px-4 py-3 hidden md:table-cell">
+                  <span className="text-[10px] font-bold tracking-[0.15em] uppercase text-muted-foreground">Precio unit.</span>
+                </th>
+                <th className="px-4 py-3 w-24" />
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((item, i) => {
+                const isLow = item.stock <= item.minStock;
+                return (
+                  <motion.tr
+                    key={item.id}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: i * 0.03 }}
+                    className="border-b border-border/20 last:border-0 hover:bg-accent/5 transition-colors group"
+                  >
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        {item.imageUrl ? (
+                          <img
+                            src={item.imageUrl}
+                            alt={item.name}
+                            className="w-9 h-9 rounded-md object-cover border border-border/60 shadow-xs flex-shrink-0"
+                          />
+                        ) : (
+                          <div className="w-9 h-9 rounded-md bg-muted/40 border border-border/40 flex items-center justify-center flex-shrink-0">
+                            <Package size={14} className={isLow ? "text-amber-400" : "text-muted-foreground"} />
+                          </div>
+                        )}
+                        <div>
+                          <span className="text-xs font-semibold text-foreground block">{item.name}</span>
+                          <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                            {item.supplierName && (
+                              <span className="text-[10px] text-muted-foreground flex items-center gap-1 bg-muted/40 px-1.5 py-0.5 rounded border border-border/40">
+                                <Truck size={10} className="text-primary/80 flex-shrink-0" />
+                                <span className="truncate max-w-[150px]">{item.supplierName}</span>
+                              </span>
+                            )}
+                            {item.category === "Shop" && (
+                              <span className="text-[9px] uppercase tracking-wider text-emerald-500 font-semibold bg-emerald-500/10 px-1.5 py-0.2 rounded inline-block">
+                                Venta Shop
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 hidden sm:table-cell">
+                      <span className="text-[11px] text-muted-foreground">{item.category}</span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        {isLow && <AlertTriangle size={11} className="text-amber-400" />}
+                        <span className={`text-xs font-semibold ${isLow ? "text-amber-400" : "text-foreground"}`}>
+                          {item.stock} {item.unit}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground/50">/ mín {item.minStock}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-right hidden md:table-cell">
+                      <span className="text-xs text-muted-foreground">${item.price.toLocaleString("es-AR")}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity justify-end">
+                        <button
+                          onClick={() => setMarkingConsumed(item)}
+                          title="Registrar como agotado / tirado"
+                          className="w-7 h-7 flex items-center justify-center rounded-sm text-muted-foreground hover:text-amber-400 hover:bg-amber-400/10 transition-all"
+                        >
+                          <Archive size={12} />
+                        </button>
+                        <button onClick={() => setEditing(item)} className="w-7 h-7 flex items-center justify-center rounded-sm text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all">
+                          <Edit2 size={12} />
+                        </button>
+                        <button onClick={() => handleDelete(item.id)} className="w-7 h-7 flex items-center justify-center rounded-sm text-muted-foreground hover:text-red-400 hover:bg-red-400/10 transition-all">
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    </td>
+                  </motion.tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <AnimatePresence>
         {editing && (
@@ -292,6 +480,17 @@ export default function Stock() {
               if (isNew) setStockItems([...stockItems, p]);
               else setStockItems(stockItems.map(item => item.id === p.id ? p : item));
               setEditing(null);
+            }}
+          />
+        )}
+        {markingConsumed && (
+          <MarkConsumedModal
+            initialProduct={typeof markingConsumed === "object" ? markingConsumed : null}
+            products={stockItems}
+            onClose={() => setMarkingConsumed(null)}
+            onSaved={() => {
+              fetchProducts();
+              fetchConsumedSupplies();
             }}
           />
         )}
@@ -784,6 +983,181 @@ function ProductModal({
             </div>
           )}
         </AnimatePresence>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function MarkConsumedModal({
+  initialProduct,
+  products,
+  onClose,
+  onSaved,
+}: {
+  initialProduct?: Product | null;
+  products: Product[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [selectedProductId, setSelectedProductId] = useState<string>(initialProduct?.id || "");
+  const [quantity, setQuantity] = useState<number>(1);
+  const [date, setDate] = useState<string>(new Date().toISOString().split("T")[0]);
+  const [notes, setNotes] = useState<string>("");
+  const [saving, setSaving] = useState(false);
+
+  const selectedProduct = products.find(p => p.id === selectedProductId) || initialProduct;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const prod = selectedProduct;
+    if (!prod) {
+      alert("Por favor selecciona un producto.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const res = await fetchAPI("/api/data/consumed-supplies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productId: prod.id,
+          productName: prod.name,
+          category: prod.category || "Insumos",
+          supplierName: prod.supplierName || null,
+          quantity: Number(quantity) || 1,
+          unit: prod.unit || "unidad",
+          cost: prod.price || 0,
+          date: date || new Date().toISOString().split("T")[0],
+          notes: notes.trim() || null,
+        }),
+      });
+
+      if (!res.ok) throw new Error("Error al registrar insumo agotado");
+      onSaved();
+      onClose();
+    } catch (err: any) {
+      alert(err.message || "Error al registrar el insumo utilizado");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+    >
+      <motion.div
+        initial={{ scale: 0.95, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.95, opacity: 0 }}
+        className="bg-card border border-border rounded-lg shadow-2xl max-w-md w-full overflow-hidden"
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-muted/20">
+          <div className="flex items-center gap-2">
+            <Archive size={16} className="text-amber-500" />
+            <h3 className="font-semibold text-foreground text-sm">Registrar Insumo Agotado / Descartado</h3>
+          </div>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+            <X size={16} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+          <div>
+            <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase block mb-1">
+              Producto o Insumo agotado *
+            </label>
+            <select
+              value={selectedProductId}
+              onChange={e => setSelectedProductId(e.target.value)}
+              className="w-full bg-background border border-border rounded-sm px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none"
+              required
+            >
+              <option value="">-- Seleccionar producto --</option>
+              {products.map(p => (
+                <option key={p.id} value={p.id}>
+                  {p.name} (Stock actual: {p.stock} {p.unit}) {p.supplierName ? `· Prov: ${p.supplierName}` : ""}
+                </option>
+              ))}
+            </select>
+            {selectedProduct && (
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Stock actual: <span className="font-medium text-foreground">{selectedProduct.stock} {selectedProduct.unit}</span>
+                {selectedProduct.supplierName && ` · Proveedor: ${selectedProduct.supplierName}`}
+              </p>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase block mb-1">
+                Cantidad agotada / tirada *
+              </label>
+              <input
+                type="number"
+                min="0.1"
+                step="any"
+                value={quantity}
+                onChange={e => setQuantity(Number(e.target.value))}
+                className="w-full bg-background border border-border rounded-sm px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase block mb-1">
+                Fecha cuando se terminó *
+              </label>
+              <input
+                type="date"
+                value={date}
+                onChange={e => setDate(e.target.value)}
+                className="w-full bg-background border border-border rounded-sm px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none"
+                required
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase block mb-1">
+              Notas / Motivo (opcional)
+            </label>
+            <input
+              type="text"
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              placeholder="Ej: Se terminó en cabina, frasco roto, vencido..."
+              className="w-full bg-background border border-border rounded-sm px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none"
+            />
+          </div>
+
+          <div className="bg-amber-500/10 border border-amber-500/20 rounded p-3 text-xs text-amber-500 flex items-start gap-2">
+            <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
+            <span>Al registrar el insumo como agotado, se descontará automáticamente del stock disponible y quedará registrado con su fecha.</span>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-border">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 rounded-sm border border-border text-xs text-muted-foreground hover:bg-muted/50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="px-4 py-2 rounded-sm bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 disabled:opacity-50 flex items-center gap-1.5"
+            >
+              {saving && <Loader2 size={12} className="animate-spin" />}
+              Confirmar Insumo Agotado
+            </button>
+          </div>
+        </form>
       </motion.div>
     </motion.div>
   );

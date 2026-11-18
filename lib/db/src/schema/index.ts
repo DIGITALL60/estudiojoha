@@ -170,6 +170,7 @@ export const expenses = sqliteTable("expenses", {
   amount: integer("amount").notNull(),
   category: text("category").notNull().default("General"), // e.g. Insumos, Alquiler, Sueldos
   paymentMethod: text("payment_method").default("Efectivo"), // Efectivo, Transferencia (billetera), etc.
+  expenseType: text("expense_type").default("variable"), // 'fijo' | 'variable'
   date: text("date").notNull(), // YYYY-MM-DD
   professionalId: text("professional_id").references(() => professionals.id), // If expense is tied to a professional
   supplierId: text("supplier_id").references(() => suppliers.id),
@@ -206,3 +207,43 @@ export const app_settings = sqliteTable("app_settings", {
   key: text("key").primaryKey(),
   value: text("value").notNull(),
 });
+
+// Consumed Supplies Table (Stock Utilizado / Insumos agotados/dados de baja)
+export const consumed_supplies = sqliteTable("consumed_supplies", {
+  id: text("id").primaryKey(),
+  productId: text("product_id").notNull().references(() => products.id),
+  productName: text("product_name").notNull(),
+  category: text("category").notNull().default("Insumos"),
+  supplierName: text("supplier_name"),
+  quantity: integer("quantity").notNull().default(1),
+  unit: text("unit").notNull().default("unidad"),
+  cost: integer("cost").notNull().default(0),
+  date: text("date").notNull(), // YYYY-MM-DD
+  notes: text("notes"),
+  createdAt: integer("created_at", { mode: 'timestamp' }).notNull().default(new Date()),
+});
+
+export const insertConsumedSupplySchema = createInsertSchema(consumed_supplies);
+export const selectConsumedSupplySchema = createSelectSchema(consumed_supplies);
+export type InsertConsumedSupply = z.infer<typeof insertConsumedSupplySchema>;
+export type ConsumedSupply = z.infer<typeof selectConsumedSupplySchema>;
+
+// Presupuestos & Consultas CRM Table
+export const presupuestos = sqliteTable("presupuestos", {
+  id: text("id").primaryKey(),
+  clientName: text("client_name").notNull(),
+  clientPhone: text("client_phone").notNull(),
+  serviceDetails: text("service_details"),
+  estimatedTotal: integer("estimated_total").notNull().default(0),
+  status: text("status").notNull().default("nuevo"), // 'nuevo' | 'enviado' | 'agendado' | 'rechazado'
+  channel: text("channel").default("WhatsApp"), // WhatsApp, Instagram, Presencial, Recomendación
+  notes: text("notes"),
+  date: text("date").notNull(), // YYYY-MM-DD
+  createdAt: integer("created_at", { mode: 'timestamp' }).notNull().default(new Date()),
+});
+
+export const insertPresupuestoSchema = createInsertSchema(presupuestos);
+export const selectPresupuestoSchema = createSelectSchema(presupuestos);
+export type InsertPresupuesto = z.infer<typeof insertPresupuestoSchema>;
+export type Presupuesto = z.infer<typeof selectPresupuestoSchema>;
+

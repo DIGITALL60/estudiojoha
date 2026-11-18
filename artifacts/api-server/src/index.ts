@@ -1,6 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
-import { db, sqlite, professionals, services, app_settings, professional_schedules, appointments, clients, expenses, vouchers, blocked_dates, products, suppliers } from "@workspace/db";
+import { db, sqlite, professionals, services, app_settings, professional_schedules, appointments, clients, expenses, vouchers, blocked_dates, products, suppliers, consumed_supplies, presupuestos } from "@workspace/db";
 import { randomUUID } from "crypto";
 import { DEFAULT_SETTINGS } from "./lib/settings.js";
 
@@ -140,6 +140,32 @@ function initSchema() {
         \`notes\` text,
         \`created_at\` integer NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS \`consumed_supplies\` (
+        \`id\` text PRIMARY KEY NOT NULL,
+        \`product_id\` text NOT NULL,
+        \`product_name\` text NOT NULL,
+        \`category\` text DEFAULT 'Insumos' NOT NULL,
+        \`supplier_name\` text,
+        \`quantity\` integer DEFAULT 1 NOT NULL,
+        \`unit\` text DEFAULT 'unidad' NOT NULL,
+        \`cost\` integer DEFAULT 0 NOT NULL,
+        \`date\` text NOT NULL,
+        \`notes\` text,
+        \`created_at\` integer NOT NULL,
+        FOREIGN KEY (\`product_id\`) REFERENCES \`products\`(\`id\`)
+      );
+      CREATE TABLE IF NOT EXISTS \`presupuestos\` (
+        \`id\` text PRIMARY KEY NOT NULL,
+        \`client_name\` text NOT NULL,
+        \`client_phone\` text NOT NULL,
+        \`service_details\` text,
+        \`estimated_total\` integer DEFAULT 0 NOT NULL,
+        \`status\` text DEFAULT 'nuevo' NOT NULL,
+        \`channel\` text DEFAULT 'WhatsApp',
+        \`notes\` text,
+        \`date\` text NOT NULL,
+        \`created_at\` integer NOT NULL
+      );
       
       -- Fix potential encoding issues in DB
       UPDATE \`services\` SET \`category\` = 'Catálogo Eventos' WHERE \`category\` LIKE 'Cat%logo Eventos';
@@ -162,6 +188,7 @@ function initSchema() {
     try { sqlite.exec("ALTER TABLE products ADD COLUMN supplier_id text"); } catch (e) {}
     try { sqlite.exec("ALTER TABLE products ADD COLUMN supplier_name text"); } catch (e) {}
     try { sqlite.exec("ALTER TABLE expenses ADD COLUMN payment_method text DEFAULT 'Efectivo'"); } catch (e) {}
+    try { sqlite.exec("ALTER TABLE expenses ADD COLUMN expense_type text DEFAULT 'variable'"); } catch (e) {}
     try { sqlite.exec("ALTER TABLE expenses ADD COLUMN supplier_id text"); } catch (e) {}
     try { sqlite.exec("ALTER TABLE expenses ADD COLUMN supplier_name text"); } catch (e) {}
     try { sqlite.exec("ALTER TABLE suppliers ADD COLUMN address text"); } catch (e) {}

@@ -114,6 +114,7 @@ export default function CierreMensual() {
   const [editAmount, setEditAmount] = useState("");
   const [editCategory, setEditCategory] = useState("Insumos");
   const [editPaymentMethod, setEditPaymentMethod] = useState("Efectivo");
+  const [editExpenseType, setEditExpenseType] = useState("variable");
   const [editSupplierId, setEditSupplierId] = useState("");
   const [editDate, setEditDate] = useState("");
   const [savingEditExpense, setSavingEditExpense] = useState(false);
@@ -123,6 +124,7 @@ export default function CierreMensual() {
   const [newAmount, setNewAmount] = useState("");
   const [newCategory, setNewCategory] = useState("Insumos");
   const [newPaymentMethod, setNewPaymentMethod] = useState("Efectivo");
+  const [newExpenseType, setNewExpenseType] = useState("variable");
   const [newDate, setNewDate] = useState("");
   const [savingExpense, setSavingExpense] = useState(false);
 
@@ -187,13 +189,15 @@ export default function CierreMensual() {
   const totalIncome = completedApps.reduce((sum, a) => sum + (a.price || 0) + (a.shopSales || 0), 0);
   const expectedPendingIncome = pendingApps.reduce((sum, a) => sum + (a.price || 0) + (a.shopSales || 0), 0);
   const totalExpenses = expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
+  const fixedExpenses = expenses.filter((e) => (e.expenseType || (e as any).expense_type) === "fijo").reduce((sum, e) => sum + (e.amount || 0), 0);
+  const variableExpenses = expenses.filter((e) => (e.expenseType || (e as any).expense_type) !== "fijo").reduce((sum, e) => sum + (e.amount || 0), 0);
   const netProfit = totalIncome - totalExpenses;
   const margin = totalIncome > 0 ? Math.round((netProfit / totalIncome) * 100) : 0;
   const ticketPromedio = completedApps.length > 0 ? (totalIncome / completedApps.length) : 0;
 
-  // Servicio estrella del mes (el más vendido y facturado según turnos completados)
-  const starService = (() => {
-    if (completedApps.length === 0) return null;
+  // Top 3 Servicios del mes (Solicitado por la dueña: podio Top 1, 2 y 3 por facturación y demanda)
+  const topServices = (() => {
+    if (completedApps.length === 0) return [];
     const map: Record<string, { name: string; count: number; totalRevenue: number }> = {};
     completedApps.forEach(a => {
       const isPureShop = (a.shopSales || 0) > 0 && a.price === 0;
@@ -203,9 +207,8 @@ export default function CierreMensual() {
       map[name].totalRevenue += (a.price || 0) + (a.shopSales || 0);
     });
     const list = Object.values(map);
-    if (list.length === 0) return null;
     list.sort((a, b) => b.totalRevenue - a.totalRevenue || b.count - a.count);
-    return list[0];
+    return list.slice(0, 3);
   })();
 
   // Gastos filtrados por la búsqueda rápida (Lupita)
@@ -346,7 +349,7 @@ export default function CierreMensual() {
       (a) => a.professionalName?.toLowerCase() === selectedProfForClients.name?.toLowerCase()
     );
 
-    const headers = ["Fecha", "Hora", "Clienta", "Telefono", "Concepto", "Monto Servicio", "Monto Shop", "Total", "Medio de Pago", "Notas"];
+    const headers = ["Fecha", "Hora", "Clienta", "Telefono", "Concepto", "Duracion (min)", "Monto Servicio", "Monto Shop", "Total", "Medio de Pago", "Notas"];
     const rows = profApps.map((a) => {
       const isPureShop = (a.shopSales || 0) > 0 && a.price === 0;
       const srvName = isPureShop ? "Venta Shop" : a.serviceName || "Servicio";
@@ -357,6 +360,7 @@ export default function CierreMensual() {
         a.clientName || "",
         a.clientPhone || "",
         srvName,
+        a.duration || 60,
         a.price || 0,
         a.shopSales || 0,
         total,
@@ -430,6 +434,7 @@ export default function CierreMensual() {
           category: newCategory,
           paymentMethod: newPaymentMethod,
           payment_method: newPaymentMethod,
+          expenseType: newExpenseType || "variable",
           supplierId: newSupplierId || undefined,
           supplierName: selectedSup ? selectedSup.name : undefined,
           date: dateToSave,
@@ -441,6 +446,7 @@ export default function CierreMensual() {
         setNewAmount("");
         setNewSupplierId("");
         setNewPaymentMethod("Efectivo");
+        setNewExpenseType("variable");
         loadMonthData();
       }
     } catch (err) {
@@ -456,6 +462,7 @@ export default function CierreMensual() {
     setEditAmount(String(e.amount));
     setEditCategory(e.category || "Insumos");
     setEditPaymentMethod(e.paymentMethod || (e as any).payment_method || "Efectivo");
+    setEditExpenseType((e as any).expenseType || (e as any).expense_type || "variable");
     setEditSupplierId(e.supplierId || "");
     setEditDate(e.date || `${periodPrefix}-15`);
   };
@@ -474,6 +481,7 @@ export default function CierreMensual() {
           category: editCategory,
           paymentMethod: editPaymentMethod,
           payment_method: editPaymentMethod,
+          expenseType: editExpenseType || "variable",
           supplierId: editSupplierId || null,
           supplierName: selectedSup ? selectedSup.name : null,
           date: editDate,
@@ -630,9 +638,11 @@ export default function CierreMensual() {
             <p className="text-2xl font-light text-rose-400">
               -${totalExpenses.toLocaleString("es-AR")}
             </p>
-            <p className="text-[11px] text-muted-foreground mt-1">
-              {expenses.length} egresos registrados
-            </p>
+            <div className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1.5 flex-wrap">
+              <span>🔒 Fijos: <strong className="text-foreground">${fixedExpenses.toLocaleString("es-AR")}</strong></span>
+              <span>·</span>
+              <span>📊 Var: <strong className="text-foreground">${variableExpenses.toLocaleString("es-AR")}</strong></span>
+            </div>
           </div>
         </div>
 
@@ -694,35 +704,65 @@ export default function CierreMensual() {
         </div>
       </div>
 
-      {/* Servicio Estrella del Mes (Solicitado por la dueña) */}
-      {starService && (
-        <div className="bg-gradient-to-r from-amber-500/15 via-primary/10 to-transparent border border-amber-500/30 rounded-sm p-4 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
-          <div className="flex items-center gap-3.5">
-            <div className="w-11 h-11 rounded-full bg-amber-500/20 text-amber-500 flex items-center justify-center text-xl flex-shrink-0 shadow-xs border border-amber-500/30">
-              ⭐
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold tracking-wider uppercase text-amber-500 bg-amber-500/15 border border-amber-500/20 px-2 py-0.5 rounded">
-                  SERVICIO ESTRELLA DEL MES
-                </span>
-                <span className="text-[11px] text-muted-foreground">Mayor facturación y ventas</span>
-              </div>
-              <h4 className="text-base font-bold text-foreground mt-0.5">
-                {starService.name}
-              </h4>
+      {/* Top 3 Servicios del Mes (Solicitado por la dueña) */}
+      {topServices.length > 0 && (
+        <div className="mb-6 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-bold tracking-wider uppercase text-amber-500 bg-amber-500/15 border border-amber-500/25 px-2.5 py-0.5 rounded-full flex items-center gap-1.5 shadow-2xs">
+                ⭐ TOP 3 SERVICIOS DEL MES
+              </span>
+              <span className="text-[11px] text-muted-foreground hidden sm:inline">Mayor facturación y ventas en el período</span>
             </div>
           </div>
-          <div className="flex items-center gap-4 text-xs bg-background/50 border border-border/40 px-3.5 py-2 rounded-sm w-full sm:w-auto justify-between sm:justify-end">
-            <div className="text-right">
-              <span className="text-muted-foreground block text-[10px] uppercase tracking-wider">Facturado</span>
-              <span className="text-sm font-bold text-foreground">${starService.totalRevenue.toLocaleString("es-AR")}</span>
-            </div>
-            <div className="w-px h-7 bg-border/60" />
-            <div className="text-right">
-              <span className="text-muted-foreground block text-[10px] uppercase tracking-wider">Turnos</span>
-              <span className="text-sm font-bold text-primary">{starService.count} {starService.count === 1 ? "turno" : "turnos"}</span>
-            </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {topServices.map((srv, idx) => {
+              const medals = ["🥇", "🥈", "🥉"];
+              const rankLabels = ["Top 1 · Servicio Estrella", "Top 2", "Top 3"];
+              const gradients = [
+                "from-amber-500/20 via-amber-500/5 to-transparent border-amber-500/40",
+                "from-slate-400/15 via-slate-400/5 to-transparent border-slate-400/30",
+                "from-orange-500/15 via-orange-500/5 to-transparent border-orange-500/30",
+              ];
+              const medalBgs = [
+                "bg-amber-500/20 text-amber-400 border-amber-500/30",
+                "bg-slate-400/20 text-slate-300 border-slate-400/30",
+                "bg-orange-500/20 text-orange-400 border-orange-500/30",
+              ];
+
+              return (
+                <div
+                  key={srv.name}
+                  className={`bg-gradient-to-r ${gradients[idx] || gradients[1]} border rounded-lg p-3.5 flex flex-col justify-between shadow-xs transition-all`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className={`w-9 h-9 rounded-full ${medalBgs[idx] || medalBgs[1]} flex items-center justify-center text-lg flex-shrink-0 shadow-xs border`}>
+                      {medals[idx]}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <span className="text-[10px] font-bold tracking-wider uppercase text-muted-foreground block">
+                        {rankLabels[idx]}
+                      </span>
+                      <h4 className="text-xs font-bold text-foreground truncate mt-0.5" title={srv.name}>
+                        {srv.name}
+                      </h4>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-border/40 text-xs">
+                    <div>
+                      <span className="text-muted-foreground block text-[9px] uppercase tracking-wider">Facturado</span>
+                      <span className="text-sm font-bold text-foreground">${srv.totalRevenue.toLocaleString("es-AR")}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-muted-foreground block text-[9px] uppercase tracking-wider">Turnos</span>
+                      <span className="text-xs font-bold text-primary">{srv.count} {srv.count === 1 ? "turno" : "turnos"}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -1155,20 +1195,32 @@ export default function CierreMensual() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">Proveedor (Opcional)</label>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">Tipo de Gasto (Fijo / Variable) *</label>
                     <select
-                      value={newSupplierId}
-                      onChange={(e) => setNewSupplierId(e.target.value)}
-                      className="w-full bg-background border border-border/60 rounded-sm p-2 text-xs focus:outline-none focus:border-primary"
+                      value={newExpenseType}
+                      onChange={(e) => setNewExpenseType(e.target.value)}
+                      className="w-full bg-background border border-border/60 rounded-sm p-2 text-xs focus:outline-none focus:border-primary font-medium"
                     >
-                      <option value="">-- Sin proveedor --</option>
-                      {suppliers.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          🚚 {s.name} {s.contactName ? `(${s.contactName})` : ""}
-                        </option>
-                      ))}
+                      <option value="variable">📊 Gasto Variable</option>
+                      <option value="fijo">🔒 Gasto Fijo</option>
                     </select>
                   </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Proveedor (Opcional)</label>
+                  <select
+                    value={newSupplierId}
+                    onChange={(e) => setNewSupplierId(e.target.value)}
+                    className="w-full bg-background border border-border/60 rounded-sm p-2 text-xs focus:outline-none focus:border-primary"
+                  >
+                    <option value="">-- Sin proveedor --</option>
+                    {suppliers.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        🚚 {s.name} {s.contactName ? `(${s.contactName})` : ""}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -1322,6 +1374,9 @@ export default function CierreMensual() {
                             <span className="font-mono">{e.date}</span>
                             <span>·</span>
                             <span className="bg-muted px-1.5 py-0.5 rounded text-[10px]">{e.paymentMethod || "Efectivo"}</span>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${(e.expenseType || (e as any).expense_type) === "fijo" ? "bg-blue-500/10 text-blue-400 border border-blue-500/20" : "bg-amber-500/10 text-amber-400 border border-amber-500/20"}`}>
+                              {(e.expenseType || (e as any).expense_type) === "fijo" ? "🔒 Fijo" : "📊 Variable"}
+                            </span>
                           </div>
                         </div>
 
@@ -1431,14 +1486,26 @@ export default function CierreMensual() {
                   </div>
 
                   <div>
-                    <label className="block text-[10px] font-bold uppercase text-muted-foreground mb-1">Fecha</label>
-                    <input
-                      type="date"
-                      value={editDate}
-                      onChange={(e) => setEditDate(e.target.value)}
-                      className="w-full bg-background border border-border rounded-md px-3 py-2 text-foreground focus:outline-none focus:border-primary"
-                    />
+                    <label className="block text-[10px] font-bold uppercase text-muted-foreground mb-1">Tipo de Gasto *</label>
+                    <select
+                      value={editExpenseType}
+                      onChange={(e) => setEditExpenseType(e.target.value)}
+                      className="w-full bg-background border border-border rounded-md px-3 py-2 text-foreground focus:outline-none focus:border-primary font-medium"
+                    >
+                      <option value="variable">📊 Gasto Variable</option>
+                      <option value="fijo">🔒 Gasto Fijo</option>
+                    </select>
                   </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-muted-foreground mb-1">Fecha</label>
+                  <input
+                    type="date"
+                    value={editDate}
+                    onChange={(e) => setEditDate(e.target.value)}
+                    className="w-full bg-background border border-border rounded-md px-3 py-2 text-foreground focus:outline-none focus:border-primary"
+                  />
                 </div>
 
                 <div>
@@ -1648,6 +1715,10 @@ export default function CierreMensual() {
           const totalShop = profApps.reduce((s, a) => s + (a.shopSales || 0), 0);
           const totalEarned = totalServices + totalShop;
           const avgTicket = profApps.length > 0 ? Math.round(totalEarned / profApps.length) : 0;
+          const totalMinutesWorked = profApps.reduce((s, a) => s + (a.duration || 60), 0);
+          const hoursWorked = Math.floor(totalMinutesWorked / 60);
+          const minutesWorked = totalMinutesWorked % 60;
+          const hoursFormatted = `${hoursWorked} hs ${minutesWorked > 0 ? `${minutesWorked} min` : ""}`.trim();
 
           const filtered = profApps.filter((a) => {
             const matchesSearch =
@@ -1727,11 +1798,23 @@ export default function CierreMensual() {
                   </div>
 
                   {/* Summary KPI Badges */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 mt-4">
                     <div className="bg-background/80 border border-border/60 rounded-lg p-2.5">
                       <span className="text-[10px] text-muted-foreground font-medium block">Clientas Atendidas</span>
                       <span className="text-base font-bold text-foreground font-mono">
                         {profApps.length}
+                      </span>
+                    </div>
+
+                    <div className="bg-background/80 border border-border/60 rounded-lg p-2.5">
+                      <span className="text-[10px] text-muted-foreground font-medium block flex items-center gap-1">
+                        <Clock size={11} className="text-primary" /> Horas Trabajadas
+                      </span>
+                      <span className="text-base font-bold text-emerald-500 font-mono">
+                        {hoursFormatted || "0 hs"}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground block">
+                        {totalMinutesWorked} min totales
                       </span>
                     </div>
 
@@ -1751,7 +1834,7 @@ export default function CierreMensual() {
                       </div>
                     </div>
 
-                    <div className="bg-background/80 border border-border/60 rounded-lg p-2.5">
+                    <div className="bg-background/80 border border-border/60 rounded-lg p-2.5 col-span-2 sm:col-span-1">
                       <span className="text-[10px] text-muted-foreground font-medium block">Ticket Promedio</span>
                       <span className="text-base font-bold text-foreground font-mono">
                         ${avgTicket.toLocaleString("es-AR")}
@@ -1904,6 +1987,9 @@ export default function CierreMensual() {
                                 <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                                   <span className="text-xs text-foreground/90 font-medium">
                                     {isPureShop ? "🛍️ Venta Shop" : `✂️ ${app.serviceName || "Servicio"}`}
+                                  </span>
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium flex items-center gap-1">
+                                    <Clock size={10} /> {app.duration || 60} min
                                   </span>
                                   {(app.shopSales || 0) > 0 && !isPureShop && (
                                     <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-medium">

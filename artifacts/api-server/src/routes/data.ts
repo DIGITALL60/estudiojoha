@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, professionals, services, clients, appointments, professional_schedules, professional_services, products, service_products, expenses, app_settings, blocked_dates, vouchers, suppliers } from "@workspace/db";
+import { db, professionals, services, clients, appointments, professional_schedules, professional_services, products, service_products, expenses, app_settings, blocked_dates, vouchers, suppliers, consumed_supplies, presupuestos } from "@workspace/db";
 
 import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
@@ -1189,6 +1189,8 @@ router.get("/expenses", requireAuth, async (req, res) => {
       ...e,
       paymentMethod: e.paymentMethod || e.payment_method || "Efectivo",
       payment_method: e.paymentMethod || e.payment_method || "Efectivo",
+      expenseType: e.expenseType || e.expense_type || "variable",
+      expense_type: e.expenseType || e.expense_type || "variable",
       supplierId: e.supplierId || e.supplier_id || null,
       supplierName: e.supplierName || e.supplier_name || null,
     }));
@@ -1200,11 +1202,12 @@ router.get("/expenses", requireAuth, async (req, res) => {
 
 router.post("/expenses", requireAuth, async (req, res) => {
   try {
-    const { concept, amount, category, paymentMethod, payment_method, date, professionalId, supplierId, supplierName } = req.body;
+    const { concept, amount, category, paymentMethod, payment_method, expenseType, expense_type, date, professionalId, supplierId, supplierName } = req.body;
     if (!concept || amount === undefined || !date) {
       return res.status(400).json({ error: "Missing required fields" });
     }
     const resolvedMethod = paymentMethod || payment_method || "Efectivo";
+    const resolvedType = expenseType || expense_type || "variable";
     
     // Resolve supplier name if ID provided but not name
     let resolvedSupplierName = supplierName;
@@ -1220,6 +1223,7 @@ router.post("/expenses", requireAuth, async (req, res) => {
       amount: Number(amount),
       category: category || "General",
       paymentMethod: resolvedMethod,
+      expenseType: resolvedType,
       date,
       professionalId,
       supplierId: supplierId || null,
@@ -1231,6 +1235,8 @@ router.post("/expenses", requireAuth, async (req, res) => {
       ...created,
       paymentMethod: created.paymentMethod || resolvedMethod,
       payment_method: created.paymentMethod || resolvedMethod,
+      expenseType: (created as any).expenseType || resolvedType,
+      expense_type: (created as any).expenseType || resolvedType,
     } : created;
     return res.status(201).json(result);
   } catch (err) {
@@ -1252,8 +1258,9 @@ router.delete("/expenses/:id", requireAuth, async (req, res) => {
 router.put("/expenses/:id", requireAuth, async (req, res) => {
   try {
     const { id } = req.params as { id: string };
-    const { concept, amount, category, paymentMethod, payment_method, date, professionalId, supplierId, supplierName } = req.body;
+    const { concept, amount, category, paymentMethod, payment_method, expenseType, expense_type, date, professionalId, supplierId, supplierName } = req.body;
     const resolvedMethod = paymentMethod !== undefined ? paymentMethod : (payment_method !== undefined ? payment_method : undefined);
+    const resolvedType = expenseType !== undefined ? expenseType : (expense_type !== undefined ? expense_type : undefined);
     
     let resolvedSupplierName = supplierName;
     if (supplierId && !resolvedSupplierName) {
@@ -1266,6 +1273,7 @@ router.put("/expenses/:id", requireAuth, async (req, res) => {
       amount: amount !== undefined ? Number(amount) : undefined,
       category: category !== undefined ? category : undefined,
       paymentMethod: resolvedMethod,
+      expenseType: resolvedType,
       date: date !== undefined ? date : undefined,
       professionalId: professionalId !== undefined ? professionalId : undefined,
       supplierId: supplierId !== undefined ? (supplierId || null) : undefined,
@@ -1276,6 +1284,8 @@ router.put("/expenses/:id", requireAuth, async (req, res) => {
       ...updated,
       paymentMethod: updated.paymentMethod || resolvedMethod || "Efectivo",
       payment_method: updated.paymentMethod || resolvedMethod || "Efectivo",
+      expenseType: (updated as any).expenseType || resolvedType || "variable",
+      expense_type: (updated as any).expenseType || resolvedType || "variable",
     } : updated;
     return res.json(result);
   } catch (err) {
@@ -1286,8 +1296,9 @@ router.put("/expenses/:id", requireAuth, async (req, res) => {
 router.patch("/expenses/:id", requireAuth, async (req, res) => {
   try {
     const { id } = req.params as { id: string };
-    const { concept, amount, category, paymentMethod, payment_method, date, professionalId, supplierId, supplierName } = req.body;
+    const { concept, amount, category, paymentMethod, payment_method, expenseType, expense_type, date, professionalId, supplierId, supplierName } = req.body;
     const resolvedMethod = paymentMethod !== undefined ? paymentMethod : (payment_method !== undefined ? payment_method : undefined);
+    const resolvedType = expenseType !== undefined ? expenseType : (expense_type !== undefined ? expense_type : undefined);
     
     let resolvedSupplierName = supplierName;
     if (supplierId && !resolvedSupplierName) {
@@ -1300,6 +1311,7 @@ router.patch("/expenses/:id", requireAuth, async (req, res) => {
       amount: amount !== undefined ? Number(amount) : undefined,
       category: category !== undefined ? category : undefined,
       paymentMethod: resolvedMethod,
+      expenseType: resolvedType,
       date: date !== undefined ? date : undefined,
       professionalId: professionalId !== undefined ? professionalId : undefined,
       supplierId: supplierId !== undefined ? (supplierId || null) : undefined,
@@ -1310,10 +1322,157 @@ router.patch("/expenses/:id", requireAuth, async (req, res) => {
       ...updated,
       paymentMethod: updated.paymentMethod || resolvedMethod || "Efectivo",
       payment_method: updated.paymentMethod || resolvedMethod || "Efectivo",
+      expenseType: (updated as any).expenseType || resolvedType || "variable",
+      expense_type: (updated as any).expenseType || resolvedType || "variable",
     } : updated;
     return res.json(result);
   } catch (err) {
     return res.status(500).json({ error: "Failed to update expense" });
+  }
+});
+
+// ─── CONSUMED SUPPLIES (Stock Utilizado / Insumos agotados) ───────────────
+router.get("/consumed-supplies", requireAuth, async (_req, res) => {
+  try {
+    const data = await db.select().from(consumed_supplies);
+    const sorted = (data || []).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+    res.json(sorted);
+  } catch (err) {
+    logger.error({ err }, "Error fetching consumed supplies");
+    res.status(500).json({ error: "Failed to fetch consumed supplies" });
+  }
+});
+
+router.post("/consumed-supplies", requireAuth, async (req, res) => {
+  try {
+    const { productId, productName, category, supplierName, quantity, unit, cost, date, notes } = req.body;
+    if (!productId || !productName || !date) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+    const id = randomUUID();
+    const qty = Number(quantity) || 1;
+
+    await db.insert(consumed_supplies).values({
+      id,
+      productId,
+      productName,
+      category: category || "Insumos",
+      supplierName: supplierName || null,
+      quantity: qty,
+      unit: unit || "unidad",
+      cost: Number(cost) || 0,
+      date,
+      notes: notes || null,
+      createdAt: new Date(),
+    });
+
+    // Also decrement stock if product exists
+    try {
+      const [prod] = await db.select().from(products).where(eq(products.id, productId)).limit(1);
+      if (prod) {
+        const newStock = Math.max(0, (prod.stock || 0) - qty);
+        await db.update(products).set({ stock: newStock }).where(eq(products.id, productId));
+      }
+    } catch (e) {
+      logger.warn({ err: e }, "Failed to decrement product stock for consumed supply");
+    }
+
+    const [created] = await db.select().from(consumed_supplies).where(eq(consumed_supplies.id, id)).limit(1);
+    return res.status(201).json(created);
+  } catch (err) {
+    logger.error({ err }, "Error creating consumed supply record");
+    return res.status(500).json({ error: "Failed to record consumed supply" });
+  }
+});
+
+router.delete("/consumed-supplies/:id", requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params as { id: string };
+    const [item] = await db.select().from(consumed_supplies).where(eq(consumed_supplies.id, id)).limit(1);
+    if (item) {
+      // Restore product stock
+      try {
+        const [prod] = await db.select().from(products).where(eq(products.id, item.productId)).limit(1);
+        if (prod) {
+          await db.update(products).set({ stock: (prod.stock || 0) + item.quantity }).where(eq(products.id, item.productId));
+        }
+      } catch (e) {}
+      await db.delete(consumed_supplies).where(eq(consumed_supplies.id, id));
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to delete consumed supply record" });
+  }
+});
+
+// ─── PRESUPUESTOS / CRM (Gestor de Consultas) ─────────────────────────────
+router.get("/presupuestos", requireAuth, async (_req, res) => {
+  try {
+    const data = await db.select().from(presupuestos);
+    const sorted = (data || []).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+    res.json(sorted);
+  } catch (err) {
+    logger.error({ err }, "Error fetching presupuestos");
+    res.status(500).json({ error: "Failed to fetch presupuestos" });
+  }
+});
+
+router.post("/presupuestos", requireAuth, async (req, res) => {
+  try {
+    const { clientName, clientPhone, serviceDetails, estimatedTotal, status, channel, notes, date } = req.body;
+    if (!clientName || !clientPhone) {
+      return res.status(400).json({ error: "Client name and phone are required" });
+    }
+    const id = randomUUID();
+    const today = new Date().toISOString().split("T")[0];
+    await db.insert(presupuestos).values({
+      id,
+      clientName: clientName.trim(),
+      clientPhone: clientPhone.trim(),
+      serviceDetails: serviceDetails || "",
+      estimatedTotal: Number(estimatedTotal) || 0,
+      status: status || "nuevo",
+      channel: channel || "WhatsApp",
+      notes: notes || null,
+      date: date || today,
+      createdAt: new Date(),
+    });
+    const [created] = await db.select().from(presupuestos).where(eq(presupuestos.id, id)).limit(1);
+    return res.status(201).json(created);
+  } catch (err) {
+    logger.error({ err }, "Error creating presupuesto");
+    return res.status(500).json({ error: "Failed to create presupuesto" });
+  }
+});
+
+router.patch("/presupuestos/:id", requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params as { id: string };
+    const { clientName, clientPhone, serviceDetails, estimatedTotal, status, channel, notes, date } = req.body;
+    await db.update(presupuestos).set({
+      clientName: clientName !== undefined ? clientName.trim() : undefined,
+      clientPhone: clientPhone !== undefined ? clientPhone.trim() : undefined,
+      serviceDetails: serviceDetails !== undefined ? serviceDetails : undefined,
+      estimatedTotal: estimatedTotal !== undefined ? Number(estimatedTotal) : undefined,
+      status: status !== undefined ? status : undefined,
+      channel: channel !== undefined ? channel : undefined,
+      notes: notes !== undefined ? notes : undefined,
+      date: date !== undefined ? date : undefined,
+    }).where(eq(presupuestos.id, id));
+    const [updated] = await db.select().from(presupuestos).where(eq(presupuestos.id, id)).limit(1);
+    return res.json(updated);
+  } catch (err) {
+    return res.status(500).json({ error: "Failed to update presupuesto" });
+  }
+});
+
+router.delete("/presupuestos/:id", requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params as { id: string };
+    await db.delete(presupuestos).where(eq(presupuestos.id, id));
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to delete presupuesto" });
   }
 });
 

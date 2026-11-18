@@ -23,6 +23,8 @@ import Cursos from "@/pages/admin/Cursos";
 import Caja from "@/pages/admin/Caja";
 import CierreMensual from "@/pages/admin/CierreMensual";
 import Rentabilidad from "@/pages/admin/Rentabilidad";
+import CostosMargenes from "@/pages/admin/CostosMargenes";
+import PresupuestosCRM from "@/pages/admin/PresupuestosCRM";
 import Salarios from "@/pages/admin/Salarios";
 import Historias from "@/pages/admin/Historias";
 import HistoriaTurnos from "@/pages/admin/HistoriaTurnos";
@@ -92,7 +94,9 @@ function Router() {
       <Route path="/admin/caja">{(params) => <AuthRoute component={Caja} adminOnly />}</Route>
       <Route path="/admin/cierre-mensual">{(params) => <AuthRoute component={CierreMensual} adminOnly />}</Route>
       <Route path="/admin/rentabilidad">{(params) => <AuthRoute component={Rentabilidad} adminOnly />}</Route>
+      <Route path="/admin/costos-margenes">{(params) => <AuthRoute component={CostosMargenes} adminOnly />}</Route>
       <Route path="/admin/salarios">{(params) => <AuthRoute component={Salarios} adminOnly />}</Route>
+      <Route path="/admin/presupuestos">{(params) => <AuthRoute component={PresupuestosCRM} adminOnly />}</Route>
       <Route path="/admin/marketing/historias">{(params) => <AuthRoute component={Historias} />}</Route>
       <Route path="/admin/marketing/historia-turnos">{(params) => <AuthRoute component={HistoriaTurnos} adminOnly />}</Route>
       <Route path="/admin/marketing/reactivacion">{(params) => <AuthRoute component={Reactivacion} adminOnly />}</Route>

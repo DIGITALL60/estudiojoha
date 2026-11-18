@@ -1,7 +1,7 @@
 import { fetchAPI } from "@/lib/api";
 import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Search, X, ChevronRight, Edit2, Download, Phone, Cake, Trash2, AlertTriangle } from "lucide-react";
+import { Plus, Search, X, ChevronRight, Edit2, Download, Phone, Cake, Trash2, AlertTriangle, Trophy, Star, Award, Gift, MessageCircle } from "lucide-react";
 import AdminLayout from "./AdminLayout";
 import ClientHistoryModal, { AppointmentItem } from "./ClientHistoryModal";
 
@@ -245,6 +245,8 @@ export default function Clientes() {
   const [historyClient, setHistoryClient] = useState<Client | null>(null);
   const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [starMetric, setStarMetric] = useState<"revenue" | "count">("revenue");
+  const [starTimeframe, setStarTimeframe] = useState<"mes" | "historico">("mes");
 
   const fetchClients = async () => {
     try {
@@ -314,6 +316,43 @@ export default function Clientes() {
     return clients.filter(c => (duplicateMap.get(cleanPhoneDigits(c.phone)) || 0) > 1).length;
   }, [clients, duplicateMap]);
 
+  // Cliente Estrella / Top 3 Clientes (Solicitado por la dueña con estrella y premios)
+  const starClients = useMemo(() => {
+    if (clients.length === 0 || appointments.length === 0) return [];
+    const now = new Date();
+    const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+    const relevantApps = appointments.filter((a) => {
+      if (a.status !== "completado") return false;
+      if (starTimeframe === "mes") {
+        return a.date && a.date.startsWith(currentYearMonth);
+      }
+      return true;
+    });
+
+    const clientStats = new Map<string, { client: Client; count: number; totalSpent: number }>();
+
+    relevantApps.forEach((a) => {
+      if (!a.clientId) return;
+      const client = clients.find((c) => c.id === a.clientId);
+      if (!client) return;
+
+      const current = clientStats.get(client.id) || { client, count: 0, totalSpent: 0 };
+      current.count += 1;
+      current.totalSpent += (a.price || 0) + (a.shopSales || 0);
+      clientStats.set(client.id, current);
+    });
+
+    const list = Array.from(clientStats.values());
+    if (starMetric === "revenue") {
+      list.sort((a, b) => b.totalSpent - a.totalSpent || b.count - a.count);
+    } else {
+      list.sort((a, b) => b.count - a.count || b.totalSpent - a.totalSpent);
+    }
+
+    return list.slice(0, 3);
+  }, [clients, appointments, starMetric, starTimeframe]);
+
   const now = new Date();
   const filtered = clients.filter(c => {
     const q = search.toLowerCase();
@@ -368,6 +407,137 @@ export default function Clientes() {
           </button>
         </div>
       }>
+      {/* Top 3 Clientes Estrella (Solicitado por la dueña) */}
+      {starClients.length > 0 && (
+        <div className="bg-gradient-to-r from-amber-500/10 via-primary/5 to-transparent border border-amber-500/25 rounded-xl p-4 sm:p-5 mb-6 shadow-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-3 border-b border-border/40">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-full bg-amber-500/20 text-amber-500 flex items-center justify-center text-lg shadow-xs border border-amber-500/30">
+                🏆
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-foreground">
+                    Clientes Estrella {starTimeframe === "mes" ? "del Mes" : "Históricos"}
+                  </h3>
+                  <span className="text-[10px] font-bold text-amber-500 bg-amber-500/15 border border-amber-500/25 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <Star size={10} className="fill-amber-500" /> Top 3
+                  </span>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Identificá a tus mejores clientes para premiarlos con mimos y beneficios 🎁
+                </p>
+              </div>
+            </div>
+
+            {/* Selectors */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center bg-background/80 border border-border/80 rounded-lg p-0.5 text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => setStarMetric("revenue")}
+                  className={`px-2.5 py-1 rounded-md font-semibold transition-all ${starMetric === "revenue" ? "bg-primary text-primary-foreground shadow-2xs" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  💳 Mayor Gasto ($)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStarMetric("count")}
+                  className={`px-2.5 py-1 rounded-md font-semibold transition-all ${starMetric === "count" ? "bg-primary text-primary-foreground shadow-2xs" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  📅 Más Visitas (Conteo)
+                </button>
+              </div>
+
+              <div className="flex items-center bg-background/80 border border-border/80 rounded-lg p-0.5 text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => setStarTimeframe("mes")}
+                  className={`px-2.5 py-1 rounded-md font-semibold transition-all ${starTimeframe === "mes" ? "bg-amber-500 text-white shadow-2xs" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  Este Mes
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStarTimeframe("historico")}
+                  className={`px-2.5 py-1 rounded-md font-semibold transition-all ${starTimeframe === "historico" ? "bg-amber-500 text-white shadow-2xs" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  Histórico
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {starClients.map((item, idx) => {
+              const medals = ["🥇", "🥈", "🥉"];
+              const rankTitles = ["Top 1 · Clienta Estrella", "Top 2", "Top 3"];
+              const cardBorder = [
+                "border-amber-500/40 bg-gradient-to-b from-amber-500/15 via-background/60 to-background",
+                "border-slate-400/30 bg-gradient-to-b from-slate-400/10 via-background/60 to-background",
+                "border-orange-500/30 bg-gradient-to-b from-orange-500/10 via-background/60 to-background",
+              ];
+
+              const rewardWaMsg = encodeURIComponent(
+                `¡Hola ${item.client.name}! 🏆 Te escribimos desde Estudio Joha para contarte que sos una de nuestras clientas estrella de este mes ⭐ Muchísimas gracias por tu confianza. ¡Queremos premiarte con un beneficio exclusivo en tu próximo turno! 🎁✨`
+              );
+
+              return (
+                <div
+                  key={item.client.id}
+                  className={`border rounded-xl p-3.5 flex flex-col justify-between shadow-xs transition-all ${cardBorder[idx] || cardBorder[1]}`}
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] font-bold tracking-wider uppercase text-muted-foreground flex items-center gap-1.5">
+                        <span className="text-base">{medals[idx]}</span>
+                        <span>{rankTitles[idx]}</span>
+                      </span>
+                      {item.client.phone && (
+                        <a
+                          href={`https://wa.me/${item.client.phone.replace(/\D/g, "")}?text=${rewardWaMsg}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[10px] bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-500 border border-emerald-500/30 px-2 py-0.5 rounded-md font-bold flex items-center gap-1 transition-colors"
+                          title="Enviar felicitación y premio por WhatsApp"
+                        >
+                          <Gift size={11} /> Premiar WA
+                        </a>
+                      )}
+                    </div>
+
+                    <h4
+                      className="text-sm font-bold text-foreground hover:text-primary cursor-pointer truncate transition-colors"
+                      onClick={() => setHistoryClient(item.client)}
+                      title="Ver ficha completa"
+                    >
+                      {item.client.name}
+                    </h4>
+
+                    {item.client.phone && (
+                      <p className="text-[11px] text-muted-foreground font-mono flex items-center gap-1 mt-0.5">
+                        <Phone size={10} /> {item.client.phone}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-border/40 text-xs">
+                    <div>
+                      <span className="text-muted-foreground block text-[9px] uppercase tracking-wider">Total Gastado</span>
+                      <span className="text-sm font-bold text-primary">${item.totalSpent.toLocaleString("es-AR")}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-muted-foreground block text-[9px] uppercase tracking-wider">Servicios</span>
+                      <span className="text-xs font-bold text-foreground">{item.count} {item.count === 1 ? "turno" : "turnos"}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Search */}
       <div className="relative mb-4">
         <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -412,6 +582,7 @@ export default function Clientes() {
               const isDuplicate = (duplicateMap.get(cleanPhoneDigits(client.phone)) || 0) > 1;
               const clientApps = appointments.filter(a => a.clientId === client.id);
               const appsCount = clientApps.length;
+              const starIndex = starClients.findIndex(s => s.client.id === client.id);
 
               return (
                 <motion.div key={client.id} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
@@ -427,6 +598,21 @@ export default function Clientes() {
                       <p className="text-sm font-medium text-foreground group-hover:text-primary transition-colors">
                         {client.name}
                       </p>
+                      {starIndex === 0 && (
+                        <span className="text-[10px] bg-amber-500/15 text-amber-500 border border-amber-500/30 px-2 py-0.5 rounded-full font-bold flex items-center gap-1 shadow-2xs">
+                          🥇 Top 1 Estrella
+                        </span>
+                      )}
+                      {starIndex === 1 && (
+                        <span className="text-[10px] bg-slate-400/15 text-slate-300 border border-slate-400/30 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
+                          🥈 Top 2
+                        </span>
+                      )}
+                      {starIndex === 2 && (
+                        <span className="text-[10px] bg-orange-500/15 text-orange-400 border border-orange-500/30 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
+                          🥉 Top 3
+                        </span>
+                      )}
                       {appsCount > 0 && (
                         <span className="text-[10px] bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.2 rounded-full font-medium">
                           {appsCount} turno{appsCount !== 1 ? "s" : ""}

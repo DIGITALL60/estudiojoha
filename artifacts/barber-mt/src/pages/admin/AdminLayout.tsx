@@ -6,7 +6,8 @@ import {
   GraduationCap, Wallet, TrendingUp, BadgeDollarSign,
   Gift, History, RotateCw, Ticket, Settings, LogOut,
   ChevronLeft, ChevronRight, Menu, AlertTriangle, Bell,
-  MessageSquare, Clock, Image as ImageIcon, Truck, X
+  MessageSquare, Clock, Image as ImageIcon, Truck, X,
+  Percent, Calculator, ClipboardList
 } from "lucide-react";
 import LogoIcon from "@/components/LogoIcon";
 import AdminQRModal from "@/components/AdminQRModal";
@@ -35,6 +36,9 @@ const iconMap: Record<string, React.ReactNode> = {
   qrcode: <QrCode size={16} />,
   "message-square": <MessageSquare size={16} />,
   truck: <Truck size={16} />,
+  calculator: <Calculator size={16} />,
+  percent: <Percent size={16} />,
+  "clipboard-list": <ClipboardList size={16} />,
 };
 
 const navConfig = {
@@ -68,6 +72,7 @@ const navConfig = {
         { id: "caja", label: "Caja", icon: "wallet", path: "/admin/caja" },
         { id: "cierre-mensual", label: "Cierre Mensual", icon: "calculator", path: "/admin/cierre-mensual" },
         { id: "rentabilidad", label: "Rentabilidad", icon: "chart-line", path: "/admin/rentabilidad" },
+        { id: "costos-margenes", label: "Costos / márgenes", icon: "percent", path: "/admin/costos-margenes" },
         { id: "salarios", label: "Salarios", icon: "badge-dollar-sign", path: "/admin/salarios" },
       ],
     },
@@ -75,6 +80,7 @@ const navConfig = {
       id: "marketing",
       title: "Marketing",
       items: [
+        { id: "presupuestos", label: "Presupuestos / CRM", icon: "clipboard-list", path: "/admin/presupuestos" },
         { id: "historias", label: "Historias", icon: "image", path: "/admin/marketing/historias" },
         { id: "historia-turnos", label: "Historia de turnos", icon: "history", path: "/admin/marketing/historia-turnos" },
         { id: "reactivacion", label: "Reactivación", icon: "rotate-cw", path: "/admin/marketing/reactivacion" },
