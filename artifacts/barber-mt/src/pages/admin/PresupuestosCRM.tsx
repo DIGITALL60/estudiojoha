@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   ClipboardList, Plus, Search, MessageSquare, Phone, Calendar,
   DollarSign, CheckCircle2, Clock, XCircle, Trash2, Edit2,
-  ExternalLink, UserCheck, AlertCircle, Filter, RefreshCw, X, Loader2
+  ExternalLink, UserCheck, AlertCircle, Filter, RefreshCw, X, Loader2,
+  User, Sparkles
 } from "lucide-react";
 import AdminLayout from "./AdminLayout";
 import { fetchAPI } from "@/lib/api";
@@ -483,6 +484,12 @@ export default function PresupuestosCRM() {
   );
 }
 
+interface ClientOption {
+  id: string;
+  name: string;
+  phone: string;
+}
+
 function PresupuestoModal({
   initial,
   services,
@@ -496,14 +503,49 @@ function PresupuestoModal({
 }) {
   const [form, setForm] = useState<Presupuesto>({ ...initial });
   const [saving, setSaving] = useState(false);
+  const [clients, setClients] = useState<ClientOption[]>([]);
+  const [showClientSuggestions, setShowClientSuggestions] = useState(false);
+  const [selectedServiceId, setSelectedServiceId] = useState("");
 
-  const handleSelectService = (sName: string) => {
-    const matched = services.find(s => s.name === sName);
+  useEffect(() => {
+    fetchAPI("/api/data/clients")
+      .then(r => r.json())
+      .then(d => setClients(Array.isArray(d) ? d : []))
+      .catch(console.error);
+  }, []);
+
+  // Filter clients based on client name or phone search
+  const matchingClients = useMemo(() => {
+    const q = (form.clientName || "").trim().toLowerCase();
+    if (!q || q.length < 1) return [];
+    return clients
+      .filter(c => c.name.toLowerCase().includes(q) || (c.phone && c.phone.includes(q)))
+      .slice(0, 6);
+  }, [clients, form.clientName]);
+
+  const handleSelectClient = (c: ClientOption) => {
     setForm(f => ({
       ...f,
-      serviceName: sName,
-      amount: matched && f.amount === 0 ? matched.price : f.amount,
+      clientName: c.name,
+      clientPhone: c.phone || f.clientPhone,
     }));
+    setShowClientSuggestions(false);
+  };
+
+  const handleSelectService = (s: ServiceOption) => {
+    setSelectedServiceId(s.id);
+    const suggestedDeposit = Math.round(s.price * 0.5);
+    setForm(f => ({
+      ...f,
+      serviceName: s.name,
+      amount: s.price,
+      deposit: f.deposit && f.deposit > 0 ? f.deposit : suggestedDeposit,
+    }));
+  };
+
+  const setDepositPercent = (percent: number) => {
+    const dep = Math.round((form.amount * percent) / 100);
+    setForm(f => ({ ...f, deposit: dep }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -540,7 +582,7 @@ function PresupuestoModal({
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
-        className="bg-card border border-border rounded-lg shadow-2xl max-w-md w-full overflow-hidden"
+        className="bg-card border border-border rounded-xl shadow-2xl max-w-lg w-full overflow-hidden"
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-muted/20">
           <div className="flex items-center gap-2">
@@ -555,60 +597,152 @@ function PresupuestoModal({
         </div>
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase block mb-1">
-                Nombre de la Clienta *
-              </label>
-              <input
-                type="text"
-                required
-                value={form.clientName}
-                onChange={e => setForm(f => ({ ...f, clientName: e.target.value }))}
-                placeholder="Ej: Sofia Gómez"
-                className="w-full bg-background border border-border rounded-sm px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none"
-              />
+          {/* Client Name & Phone with Auto-complete */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="relative">
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase flex items-center gap-1">
+                  Clienta *
+                </label>
+                {clients.length > 0 && (
+                  <span className="text-[9px] text-muted-foreground flex items-center gap-1">
+                    <User size={9} /> {clients.length} registradas
+                  </span>
+                )}
+              </div>
+              <div className="relative">
+                <input
+                  type="text"
+                  required
+                  value={form.clientName}
+                  onChange={e => {
+                    const val = e.target.value;
+                    setForm(f => ({ ...f, clientName: val }));
+                    setShowClientSuggestions(true);
+                  }}
+                  onFocus={() => setShowClientSuggestions(true)}
+                  placeholder="Escribí para buscar clienta..."
+                  className="w-full bg-background border border-border rounded-sm pl-8 pr-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none"
+                />
+                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              </div>
+
+              {/* Client Auto-complete Dropdown */}
+              {showClientSuggestions && matchingClients.length > 0 && (
+                <div className="absolute left-0 right-0 top-full mt-1 z-30 bg-card border border-border rounded-md shadow-xl overflow-hidden divide-y divide-border/40">
+                  <div className="px-2.5 py-1 text-[9px] font-bold text-muted-foreground uppercase bg-muted/40 flex items-center justify-between">
+                    <span>Clientas encontradas:</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowClientSuggestions(false)}
+                      className="text-[9px] text-muted-foreground hover:text-foreground"
+                    >
+                      Cerrar
+                    </button>
+                  </div>
+                  {matchingClients.map(c => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => handleSelectClient(c)}
+                      className="w-full text-left px-3 py-2 text-xs hover:bg-primary/10 transition-colors flex items-center justify-between group"
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="w-5 h-5 rounded-full bg-primary/20 text-primary text-[10px] font-bold flex items-center justify-center">
+                          {c.name.charAt(0).toUpperCase()}
+                        </div>
+                        <span className="font-semibold text-foreground group-hover:text-primary">
+                          {c.name}
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-muted-foreground font-mono">
+                        {c.phone}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div>
               <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase block mb-1">
                 WhatsApp / Teléfono *
               </label>
-              <input
-                type="text"
-                required
-                value={form.clientPhone}
-                onChange={e => setForm(f => ({ ...f, clientPhone: e.target.value }))}
-                placeholder="Ej: 3512345678"
-                className="w-full bg-background border border-border rounded-sm px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none"
-              />
+              <div className="relative">
+                <input
+                  type="text"
+                  required
+                  value={form.clientPhone}
+                  onChange={e => setForm(f => ({ ...f, clientPhone: e.target.value }))}
+                  placeholder="Ej: 3512345678"
+                  className="w-full bg-background border border-border rounded-sm pl-8 pr-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none"
+                />
+                <Phone size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-emerald-500" />
+              </div>
             </div>
           </div>
 
+          {/* Service Quick Selector & Auto-fill */}
           <div>
-            <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase block mb-1">
-              Servicio o Tratamiento Solicitado *
-            </label>
-            <div className="space-y-1.5">
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
+                Servicio o Tratamiento Solicitado *
+              </label>
+              <span className="text-[10px] text-emerald-500 font-semibold flex items-center gap-1">
+                <Sparkles size={11} /> Auto-completa el monto
+              </span>
+            </div>
+
+            <div className="space-y-2">
+              {/* Dropdown de servicios con precio */}
+              <select
+                value={selectedServiceId}
+                onChange={e => {
+                  const s = services.find(srv => srv.id === e.target.value);
+                  if (s) handleSelectService(s);
+                }}
+                className="w-full bg-background border border-border rounded-sm px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none font-medium"
+              >
+                <option value="">-- Buscar / Elegir servicio del salón (auto-carga precio) --</option>
+                {services
+                  .slice()
+                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .map(s => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} — ${s.price.toLocaleString("es-AR")}
+                    </option>
+                  ))}
+              </select>
+
+              {/* Input libre para customizar o añadir extras */}
               <input
                 type="text"
                 required
                 value={form.serviceName}
                 onChange={e => setForm(f => ({ ...f, serviceName: e.target.value }))}
-                placeholder="Ej: Kapping Gel con Deco + Pedicuría Spa"
-                className="w-full bg-background border border-border rounded-sm px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none"
+                placeholder="O editá el detalle (Ej: Kapping Gel con Francesita + Strass)"
+                className="w-full bg-background border border-border rounded-sm px-3 py-1.5 text-xs text-foreground focus:border-primary focus:outline-none"
               />
+
+              {/* Botones rápidos de 1 clic para servicios populares */}
               {services.length > 0 && (
-                <div className="flex items-center gap-1.5 overflow-x-auto py-1">
-                  <span className="text-[10px] text-muted-foreground flex-shrink-0">Sugerencias:</span>
-                  {services.slice(0, 4).map(s => (
+                <div className="flex items-center gap-1.5 overflow-x-auto py-1 scrollbar-none">
+                  <span className="text-[9px] uppercase font-bold text-muted-foreground flex-shrink-0">
+                    Frecuentes:
+                  </span>
+                  {services.slice(0, 6).map(s => (
                     <button
                       type="button"
                       key={s.id}
-                      onClick={() => handleSelectService(s.name)}
-                      className="text-[10px] bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground px-2 py-0.5 rounded border border-border/40 whitespace-nowrap transition-colors"
+                      onClick={() => handleSelectService(s)}
+                      className={`text-[10px] font-medium px-2 py-0.5 rounded border whitespace-nowrap transition-all flex items-center gap-1 ${
+                        form.serviceName === s.name
+                          ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                          : "bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground border-border/40"
+                      }`}
                     >
-                      {s.name}
+                      <span>{s.name}</span>
+                      <strong className="text-foreground font-semibold">${s.price.toLocaleString("es-AR")}</strong>
                     </button>
                   ))}
                 </div>
@@ -616,38 +750,78 @@ function PresupuestoModal({
             </div>
           </div>
 
+          {/* Monto Presupuestado y Seña */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase block mb-1">
-                Monto Presupuestado ($) *
-              </label>
-              <input
-                type="number"
-                min="0"
-                step="any"
-                required
-                value={form.amount}
-                onChange={e => setForm(f => ({ ...f, amount: Number(e.target.value) || 0 }))}
-                className="w-full bg-background border border-border rounded-sm px-3 py-2 text-xs text-foreground font-semibold focus:border-primary focus:outline-none"
-              />
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
+                  Monto Presupuestado ($) *
+                </label>
+                {form.amount > 0 && (
+                  <span className="text-[10px] text-emerald-500 font-bold">✓ Precio cargado</span>
+                )}
+              </div>
+              <div className="relative">
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  required
+                  value={form.amount}
+                  onChange={e => setForm(f => ({ ...f, amount: Number(e.target.value) || 0 }))}
+                  className="w-full bg-background border border-border rounded-sm pl-7 pr-3 py-2 text-sm text-foreground font-bold focus:border-primary focus:outline-none"
+                />
+                <DollarSign size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              </div>
             </div>
 
             <div>
-              <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase block mb-1">
-                Seña Sugerida ($)
-              </label>
-              <input
-                type="number"
-                min="0"
-                step="any"
-                value={form.deposit || 0}
-                onChange={e => setForm(f => ({ ...f, deposit: Number(e.target.value) || 0 }))}
-                placeholder="Ej: 5000"
-                className="w-full bg-background border border-border rounded-sm px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none"
-              />
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
+                  Seña Sugerida ($)
+                </label>
+                {form.amount > 0 && (
+                  <div className="flex items-center gap-1 text-[9px]">
+                    <button
+                      type="button"
+                      onClick={() => setDepositPercent(50)}
+                      className="px-1.5 py-0.2 rounded bg-muted/60 hover:bg-primary/20 hover:text-primary transition-colors text-muted-foreground font-medium"
+                    >
+                      50%
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDepositPercent(30)}
+                      className="px-1.5 py-0.2 rounded bg-muted/60 hover:bg-primary/20 hover:text-primary transition-colors text-muted-foreground font-medium"
+                    >
+                      30%
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDepositPercent(0)}
+                      className="px-1.5 py-0.2 rounded bg-muted/60 hover:bg-primary/20 hover:text-primary transition-colors text-muted-foreground font-medium"
+                    >
+                      $0
+                    </button>
+                  </div>
+                )}
+              </div>
+              <div className="relative">
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={form.deposit || 0}
+                  onChange={e => setForm(f => ({ ...f, deposit: Number(e.target.value) || 0 }))}
+                  placeholder="Ej: 5000"
+                  className="w-full bg-background border border-border rounded-sm pl-7 pr-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none font-semibold"
+                />
+                <DollarSign size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-emerald-500" />
+              </div>
             </div>
           </div>
 
+          {/* Canal y Estado */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase block mb-1">
@@ -708,7 +882,7 @@ function PresupuestoModal({
             <button
               type="submit"
               disabled={saving}
-              className="px-4 py-2 rounded-sm bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 disabled:opacity-50 flex items-center gap-1.5"
+              className="px-4 py-2 rounded-sm bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 disabled:opacity-50 flex items-center gap-1.5 shadow-xs"
             >
               {saving && <Loader2 size={12} className="animate-spin" />}
               Guardar Presupuesto
