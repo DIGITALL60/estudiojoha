@@ -113,21 +113,29 @@ export default function PresupuestosCRM() {
     }
   };
 
-  // Send automated ARM follow-up via WhatsApp API
+  // Send automated ARM follow-up via WhatsApp API or fallback link
   const handleSendARM = async (item: Presupuesto) => {
     setSendingARMId(item.id);
     try {
       const res = await fetchAPI(`/api/data/presupuestos/${item.id}/followup`, {
         method: "POST",
       });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "No se pudo enviar el seguimiento");
+        throw new Error(data.error || "No se pudo procesar el seguimiento");
       }
-      alert(`✅ ¡Seguimiento ARM enviado con éxito a ${item.clientName} por WhatsApp!`);
+      if (data.sentViaApi) {
+        alert(`✅ ¡Seguimiento ARM enviado con éxito a ${item.clientName} por el Asistente de WhatsApp!`);
+      } else if (data.whatsappUrl) {
+        window.open(data.whatsappUrl, "_blank");
+      }
       loadPresupuestos();
     } catch (err: any) {
-      alert(`⚠️ ${err.message || "Error al enviar mensaje"}`);
+      const cleanPhone = item.clientPhone.replace(/\D/g, "");
+      const clientFirstName = (item.clientName || "").split(" ")[0].trim();
+      const serviceText = item.serviceName || "nuestros servicios";
+      const fallbackMsg = `¡Hola ${clientFirstName}! 😊✨ Te escribimos de *Estudio Joha Molinero* para consultarte si te gustaría coordinar tu turno para *${serviceText}*. Tenemos lugares disponibles para estos días con nuestras profesionales 💅 Respondé *SÍ* y te paso los horarios libres 💜`;
+      window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(fallbackMsg)}`, "_blank");
     } finally {
       setSendingARMId(null);
     }

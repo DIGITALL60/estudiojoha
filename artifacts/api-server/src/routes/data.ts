@@ -1563,13 +1563,14 @@ router.post("/presupuestos/:id/followup", requireAuth, async (req, res) => {
       `Tenemos lugares disponibles para estos días con nuestras profesionales 💅\n\n` +
       `Respondé *SÍ* y te paso los horarios libres, o avisanos si tenés alguna duda sobre el servicio. ¡Te esperamos! 💜`;
 
+    const cleanPhone = item.clientPhone.replace(/\D/g, "");
+    const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`;
+
     const sent = await cloudSendText(item.clientPhone, msg);
-    if (!sent) {
-      return res.status(500).json({ error: "No se pudo enviar el mensaje por WhatsApp Cloud API" });
-    }
 
     const timestampStr = new Date().toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" });
-    const updatedNotes = (item.notes ? item.notes + "\n" : "") + `[⚡ Seguimiento ARM enviado el ${timestampStr}]`;
+    const methodTag = sent ? "vía Asistente Bot" : "vía WhatsApp directo";
+    const updatedNotes = (item.notes ? item.notes + "\n" : "") + `[⚡ Seguimiento ARM enviado (${methodTag}) el ${timestampStr}]`;
 
     await db.update(presupuestos).set({
       followupSent: 1,
@@ -1580,6 +1581,8 @@ router.post("/presupuestos/:id/followup", requireAuth, async (req, res) => {
     const [updated] = await db.select().from(presupuestos).where(eq(presupuestos.id, id)).limit(1);
     return res.json({
       success: true,
+      sentViaApi: sent,
+      whatsappUrl,
       item: {
         ...updated,
         serviceName: updated.serviceDetails,

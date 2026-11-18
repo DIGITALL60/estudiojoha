@@ -623,7 +623,29 @@ export async function handleBotMessage(from: string, text: string, interactiveId
       
       const availableProfs = allProfs.filter(p => validProfIds.has(p.id) && (p.role?.toLowerCase() !== "admin" || allProfs.length === 1));
       
-      const prof = availableProfs.find((p) => p.id === input || p.name.toLowerCase().includes(normalized));
+      let prof = availableProfs.find((p) => p.id === input || p.name.toLowerCase().includes(normalized));
+
+      // Allow numeric selection (1, 2, 3...)
+      const numMatch = input.match(/^\d+$/);
+      if (!prof && numMatch) {
+        const index = parseInt(numMatch[0]) - 1;
+        if (index >= 0 && index < availableProfs.length) {
+          prof = availableProfs[index];
+        }
+      }
+
+      // If user replies affirmative ("si", "sí", "dale", "quiero", "ok")
+      const isAffirmative = ["si", "sí", "dale", "quiero", "ok", "bueno", "confirmar", "continuar"].some(w => normalized === w || normalized.startsWith(w));
+      if (!prof && isAffirmative) {
+        if (availableProfs.length === 1) {
+          prof = availableProfs[0];
+        } else if (availableProfs.length > 1) {
+          const profList = availableProfs.map((p, idx) => `${idx + 1}️⃣ *${p.name}*`).join("\n");
+          await cloudSendText(from, `¡Buenísimo! Por favor decime con cuál de nuestras profesionales preferís atenderte:\n\n${profList}\n\n(Respondé con el número 1 o 2 👇)`);
+          return;
+        }
+      }
+
       if (!prof) {
         await cloudSendText(from, "No encontré esa profesional o no realiza este servicio. Elegí una opción 👇");
         await showProfessionals(from, session.serviceId!);
@@ -660,10 +682,14 @@ export async function handleBotMessage(from: string, text: string, interactiveId
       if (session.lastUpcomingDates && numIdx >= 1 && numIdx <= session.lastUpcomingDates.length) {
         dateStr = session.lastUpcomingDates[numIdx - 1].dateStr;
       } else {
+        const currentYear = new Date().getFullYear();
         const matchDDMM = input.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+        const matchDDMMShort = input.match(/^(\d{1,2})\/(\d{1,2})$/);
         const matchISO = input.match(/^(\d{4})-(\d{2})-(\d{2})$/);
         if (matchDDMM) {
           dateStr = `${matchDDMM[3]}-${matchDDMM[2].padStart(2, "0")}-${matchDDMM[1].padStart(2, "0")}`;
+        } else if (matchDDMMShort) {
+          dateStr = `${currentYear}-${matchDDMMShort[2].padStart(2, "0")}-${matchDDMMShort[1].padStart(2, "0")}`;
         } else if (matchISO) {
           dateStr = input;
         }
@@ -716,15 +742,23 @@ export async function handleBotMessage(from: string, text: string, interactiveId
 
     // ── CHOOSING TIME ────────────────────────────────────────────────────────
     if (session.step === "choosing_time") {
-      let timeStr = input.replace("time_", "");
-      if (!/^\d{1,2}:\d{2}$/.test(timeStr)) {
-        await cloudSendText(from, "Escribí el horario en formato HH:MM, ej: *10:00*");
+      let rawTime = input.replace("time_", "").trim().toLowerCase().replace("hs", "").replace("h", "").trim();
+      if (rawTime.includes(".")) rawTime = rawTime.replace(".", ":");
+      if (/^\d{1,2}$/.test(rawTime)) {
+        rawTime = `${rawTime.padStart(2, "0")}:00`;
+      } else if (/^\d{1,2}:\d{2}$/.test(rawTime)) {
+        const [h, m] = rawTime.split(":");
+        rawTime = `${h.padStart(2, "0")}:${m}`;
+      }
+
+      if (!/^\d{2}:\d{2}$/.test(rawTime)) {
+        await cloudSendText(from, "Escribí el horario en formato HH:MM (ej: *10:00* o *16:30*) 👇");
         return;
       }
-      session.time = timeStr;
+      session.time = rawTime;
       session.step = "asking_name";
       sessions.set(from, session);
-      await cloudSendText(from, `¡Perfecto! Turno para las *${timeStr}* ✅\n\n¿Cuál es tu nombre completo?`);
+      await cloudSendText(from, `¡Perfecto! Turno para las *${rawTime}* ✅\n\n¿Cuál es tu nombre completo?`);
       return;
     }
 
@@ -823,7 +857,23 @@ export async function handleBotMessage(from: string, text: string, interactiveId
 
     // ── CONFIRMING ────────────────────────────────────────────────────────────
     if (session.step === "confirming") {
-      if (input === "confirm_yes" || normalized.includes("sí") || normalized === "si" || normalized === "confirmar") {
+      const isConfirmYes = input === "confirm_yes" ||
+        normalized === "si" ||
+        normalized === "sí" ||
+        normalized === "1" ||
+        normalized === "ok" ||
+        normalized === "dale" ||
+        normalized.includes("confirmar") ||
+        normalized.includes("si") ||
+        normalized.includes("sí");
+
+      const isConfirmNo = input === "confirm_no" ||
+        normalized === "no" ||
+        normalized === "2" ||
+        normalized.includes("cancelar") ||
+        normalized.includes("no");
+
+      if (isConfirmYes) {
         // Re-validate that the time slot is still available!
         const availableTimes = await getAvailableTimes(session.professionalId!, session.date!, session.serviceDuration!);
         if (!availableTimes.includes(session.time!)) {
@@ -895,7 +945,7 @@ export async function handleBotMessage(from: string, text: string, interactiveId
           `✅ *¡Turno confirmado!*\n\n👤 ${session.clientName}\n💅 ${session.serviceName}\n👩‍🎨 ${session.professionalName}\n📅 ${dateDisplay}\n⏰ ${session.time}hs\n\n📍 Río Segundo, Córdoba\n\n*Tu turno quedó registrado* para el día ${dateDisplay} a las ${session.time}hs ✨\n\n¡Gracias por elegirnos! 💜 Si necesitás reprogramar, avisanos con 24hs de anticipación.`
         );
         logger.info({ from, appointmentId }, "[Bot] Turno creado desde WhatsApp");
-      } else if (input === "confirm_no") {
+      } else if (isConfirmNo) {
         await syncBotPresupuesto({
           from,
           clientName: session.clientName,
