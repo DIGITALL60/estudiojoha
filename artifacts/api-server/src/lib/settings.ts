@@ -9,6 +9,8 @@ export const DEFAULT_SETTINGS: Record<string, string> = {
   business_instagram: "@estudiojohamolinero",
   whatsapp_link: "https://wa.link/pga9u0",
   whatsapp_notif: "true",
+  notify_admin_turns: "false",
+  notify_staff_turns: "true",
   birthday_auto: "false",
   reminder_24h: "true",
   reminder_2h: "false",

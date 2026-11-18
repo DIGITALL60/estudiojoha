@@ -186,10 +186,12 @@ router.post("/", validate(createBookingSchema), async (req, res) => {
       `💅 Servicio/s: ${servicesListString}\n` +
       `👩‍🎨 A cargo de: ${professionalName}`;
 
+    const notifyAdminTurns = await getBoolSetting("notify_admin_turns");
+    const notifyStaffTurns = await getBoolSetting("notify_staff_turns");
+
     if (whatsappEnabled) {
-      Promise.all([
-        // Siempre usamos la plantilla primero para el cliente: funciona aunque
-        // nunca haya chateado con el negocio (ventana de 24hs no aplica a templates).
+      const promises: Promise<any>[] = [
+        // Notificar al cliente
         cloudSendTemplate(client.phone, "confirmacion_turno", "es_AR", [
           client.name,
           appointment.date,
@@ -202,10 +204,20 @@ router.post("/", validate(createBookingSchema), async (req, res) => {
             return cloudSendText(client.phone, clientMsg);
           }
           return true;
-        }),
-        prof?.phone && prof.phone !== admin?.phone ? cloudSendText(prof.phone, profMsg) : Promise.resolve(),
-        admin?.phone ? cloudSendText(admin.phone, adminMsg) : Promise.resolve()
-      ]).catch(err => {
+        })
+      ];
+
+      // Notificar a la profesional asignada ÚNICAMENTE sobre su turno
+      if (notifyStaffTurns && prof?.phone) {
+        promises.push(cloudSendText(prof.phone, profMsg));
+      }
+
+      // Notificar a la administradora SOLO si el switch está activado
+      if (notifyAdminTurns && admin?.phone && admin.phone !== prof?.phone) {
+        promises.push(cloudSendText(admin.phone, adminMsg));
+      }
+
+      Promise.all(promises).catch(err => {
         logger.error({ err }, "Error sending WhatsApp notifications");
       });
     }

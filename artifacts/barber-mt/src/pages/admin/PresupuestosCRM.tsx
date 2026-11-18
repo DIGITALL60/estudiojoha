@@ -27,6 +27,8 @@ export interface Presupuesto {
 interface ServiceOption {
   id: string;
   name: string;
+  category?: string;
+  duration?: number;
   price: number;
 }
 
@@ -505,6 +507,9 @@ function PresupuestoModal({
   const [saving, setSaving] = useState(false);
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [showClientSuggestions, setShowClientSuggestions] = useState(false);
+  const [serviceSearch, setServiceSearch] = useState(initial.serviceName || "");
+  const [showServiceSuggestions, setShowServiceSuggestions] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState("Todas");
   const [selectedServiceId, setSelectedServiceId] = useState("");
 
   useEffect(() => {
@@ -517,11 +522,35 @@ function PresupuestoModal({
   // Filter clients based on client name or phone search
   const matchingClients = useMemo(() => {
     const q = (form.clientName || "").trim().toLowerCase();
-    if (!q || q.length < 1) return [];
+    if (!q) {
+      return clients.slice(0, 6);
+    }
     return clients
       .filter(c => c.name.toLowerCase().includes(q) || (c.phone && c.phone.includes(q)))
-      .slice(0, 6);
+      .slice(0, 8);
   }, [clients, form.clientName]);
+
+  // Unique categories from services
+  const categories = useMemo(() => {
+    const cats = Array.from(new Set(services.map(s => s.category).filter(Boolean))) as string[];
+    return ["Todas", ...cats.sort()];
+  }, [services]);
+
+  // Fast filter for services based on search query and category
+  const matchingServices = useMemo(() => {
+    let list = services;
+    if (selectedCategory && selectedCategory !== "Todas") {
+      list = list.filter(s => s.category === selectedCategory);
+    }
+    const q = (serviceSearch || "").trim().toLowerCase();
+    if (q) {
+      list = list.filter(s =>
+        s.name.toLowerCase().includes(q) ||
+        (s.category && s.category.toLowerCase().includes(q))
+      );
+    }
+    return list;
+  }, [services, selectedCategory, serviceSearch]);
 
   const handleSelectClient = (c: ClientOption) => {
     setForm(f => ({
@@ -534,13 +563,16 @@ function PresupuestoModal({
 
   const handleSelectService = (s: ServiceOption) => {
     setSelectedServiceId(s.id);
+    setServiceSearch(s.name);
     const suggestedDeposit = Math.round(s.price * 0.5);
     setForm(f => ({
       ...f,
       serviceName: s.name,
+      category: s.category || f.category,
       amount: s.price,
       deposit: f.deposit && f.deposit > 0 ? f.deposit : suggestedDeposit,
     }));
+    setShowServiceSuggestions(false);
   };
 
   const setDepositPercent = (percent: number) => {
@@ -682,72 +714,158 @@ function PresupuestoModal({
             </div>
           </div>
 
-          {/* Service Quick Selector & Auto-fill */}
-          <div>
+          {/* Service Quick Search & Auto-fill */}
+          <div className="relative">
             <div className="flex items-center justify-between mb-1">
-              <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
+              <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase flex items-center gap-1">
                 Servicio o Tratamiento Solicitado *
               </label>
-              <span className="text-[10px] text-emerald-500 font-semibold flex items-center gap-1">
-                <Sparkles size={11} /> Auto-completa el monto
-              </span>
+              {form.amount > 0 ? (
+                <span className="text-[10px] text-emerald-500 font-bold flex items-center gap-1">
+                  <Sparkles size={11} /> ${form.amount.toLocaleString("es-AR")} (Seña sugerida: ${form.deposit?.toLocaleString("es-AR")})
+                </span>
+              ) : (
+                <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                  <Sparkles size={11} /> Auto-completa monto y seña
+                </span>
+              )}
             </div>
 
-            <div className="space-y-2">
-              {/* Dropdown de servicios con precio */}
-              <select
-                value={selectedServiceId}
-                onChange={e => {
-                  const s = services.find(srv => srv.id === e.target.value);
-                  if (s) handleSelectService(s);
-                }}
-                className="w-full bg-background border border-border rounded-sm px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none font-medium"
-              >
-                <option value="">-- Buscar / Elegir servicio del salón (auto-carga precio) --</option>
-                {services
-                  .slice()
-                  .sort((a, b) => a.name.localeCompare(b.name))
-                  .map(s => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} — ${s.price.toLocaleString("es-AR")}
-                    </option>
-                  ))}
-              </select>
+            {/* Category Filter Pills for ultra-fast filtering */}
+            {categories.length > 2 && (
+              <div className="flex items-center gap-1 overflow-x-auto pb-1.5 scrollbar-none mb-1">
+                {categories.map(cat => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => {
+                      setSelectedCategory(cat);
+                      setShowServiceSuggestions(true);
+                    }}
+                    className={`text-[10px] px-2 py-0.5 rounded font-medium transition-all whitespace-nowrap cursor-pointer ${
+                      selectedCategory === cat
+                        ? "bg-primary text-primary-foreground font-semibold shadow-xs"
+                        : "bg-muted/60 hover:bg-muted text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            )}
 
-              {/* Input libre para customizar o añadir extras */}
+            {/* Fast Search Input */}
+            <div className="relative">
               <input
                 type="text"
                 required
-                value={form.serviceName}
-                onChange={e => setForm(f => ({ ...f, serviceName: e.target.value }))}
-                placeholder="O editá el detalle (Ej: Kapping Gel con Francesita + Strass)"
-                className="w-full bg-background border border-border rounded-sm px-3 py-1.5 text-xs text-foreground focus:border-primary focus:outline-none"
+                value={serviceSearch}
+                onChange={e => {
+                  const val = e.target.value;
+                  setServiceSearch(val);
+                  setForm(f => ({ ...f, serviceName: val }));
+                  setShowServiceSuggestions(true);
+                }}
+                onFocus={() => setShowServiceSuggestions(true)}
+                placeholder="Escribí para buscar servicio (ej: kapping, semi, cama, depi...)"
+                className="w-full bg-background border border-border rounded-sm pl-8 pr-8 py-2 text-xs text-foreground focus:border-primary focus:outline-none font-medium"
               />
-
-              {/* Botones rápidos de 1 clic para servicios populares */}
-              {services.length > 0 && (
-                <div className="flex items-center gap-1.5 overflow-x-auto py-1 scrollbar-none">
-                  <span className="text-[9px] uppercase font-bold text-muted-foreground flex-shrink-0">
-                    Frecuentes:
-                  </span>
-                  {services.slice(0, 6).map(s => (
-                    <button
-                      type="button"
-                      key={s.id}
-                      onClick={() => handleSelectService(s)}
-                      className={`text-[10px] font-medium px-2 py-0.5 rounded border whitespace-nowrap transition-all flex items-center gap-1 ${
-                        form.serviceName === s.name
-                          ? "bg-primary text-primary-foreground border-primary shadow-xs"
-                          : "bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground border-border/40"
-                      }`}
-                    >
-                      <span>{s.name}</span>
-                      <strong className="text-foreground font-semibold">${s.price.toLocaleString("es-AR")}</strong>
-                    </button>
-                  ))}
-                </div>
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              {serviceSearch && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setServiceSearch("");
+                    setForm(f => ({ ...f, serviceName: "" }));
+                    setShowServiceSuggestions(true);
+                  }}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-0.5"
+                >
+                  <X size={12} />
+                </button>
               )}
             </div>
+
+            {/* Floating Suggestions Dropdown */}
+            {showServiceSuggestions && (
+              <div className="absolute left-0 right-0 top-full mt-1 z-40 bg-card border border-border rounded-md shadow-2xl max-h-56 overflow-y-auto divide-y divide-border/30">
+                <div className="px-2.5 py-1 text-[9px] font-bold text-muted-foreground uppercase bg-muted/60 flex items-center justify-between sticky top-0 backdrop-blur-xs">
+                  <span>
+                    {matchingServices.length} servicios {selectedCategory !== "Todas" ? `en ${selectedCategory}` : "disponibles"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowServiceSuggestions(false)}
+                    className="text-[9px] text-muted-foreground hover:text-foreground underline cursor-pointer"
+                  >
+                    Cerrar
+                  </button>
+                </div>
+
+                {matchingServices.length === 0 ? (
+                  <div className="p-3 text-center text-xs text-muted-foreground">
+                    No hay servicios que coincidan con "{serviceSearch}". Podés escribir un servicio personalizado libremente.
+                  </div>
+                ) : (
+                  matchingServices.map(s => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => handleSelectService(s)}
+                      className="w-full text-left px-3 py-2 text-xs hover:bg-primary/10 transition-colors flex items-center justify-between group cursor-pointer"
+                    >
+                      <div className="flex flex-col pr-2">
+                        <span className="font-semibold text-foreground group-hover:text-primary transition-colors">
+                          {s.name}
+                        </span>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          {s.category && (
+                            <span className="text-[9px] px-1.5 py-0.2 rounded bg-muted text-muted-foreground font-medium">
+                              {s.category}
+                            </span>
+                          )}
+                          {s.duration ? (
+                            <span className="text-[9px] text-muted-foreground">
+                              ⏱ {s.duration} min
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      <div className="text-right whitespace-nowrap">
+                        <span className="font-bold text-xs text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                          ${s.price.toLocaleString("es-AR")}
+                        </span>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+
+            {/* Quick Frequent Services Pills (1-click autofill) */}
+            {services.length > 0 && (
+              <div className="flex items-center gap-1.5 overflow-x-auto py-1.5 scrollbar-none mt-1">
+                <span className="text-[9px] uppercase font-bold text-muted-foreground flex-shrink-0">
+                  Frecuentes:
+                </span>
+                {services.slice(0, 6).map(s => (
+                  <button
+                    type="button"
+                    key={s.id}
+                    onClick={() => handleSelectService(s)}
+                    className={`text-[10px] font-medium px-2 py-0.5 rounded border whitespace-nowrap transition-all flex items-center gap-1 cursor-pointer ${
+                      form.serviceName === s.name
+                        ? "bg-primary text-primary-foreground border-primary shadow-xs font-semibold"
+                        : "bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground border-border/40"
+                    }`}
+                  >
+                    <span>{s.name}</span>
+                    <strong className="text-foreground font-semibold">${s.price.toLocaleString("es-AR")}</strong>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Monto Presupuestado y Seña */}

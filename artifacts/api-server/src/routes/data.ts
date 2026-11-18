@@ -580,7 +580,11 @@ router.post("/appointments", requireAuth, async (req, res) => {
           return true;
         });
 
-        if (prof.phone && prof.phone !== admin?.phone) {
+        const notifyAdminTurns = await getBoolSetting("notify_admin_turns");
+        const notifyStaffTurns = await getBoolSetting("notify_staff_turns");
+
+        // 1. Notificar a la profesional asignada ÚNICAMENTE de su turno
+        if (notifyStaffTurns && prof.phone) {
           const profMsg =
             `🔔 *Nuevo turno asignado (manual)*\n\n` +
             `👤 Cliente: ${client.name}\n` +
@@ -591,7 +595,8 @@ router.post("/appointments", requireAuth, async (req, res) => {
           await cloudSendText(prof.phone, profMsg);
         }
 
-        if (admin?.phone) {
+        // 2. Notificar a la administradora SOLO si el switch está activado
+        if (notifyAdminTurns && admin?.phone && admin.phone !== prof.phone) {
           const adminMsg =
             `🆕 *Nuevo turno cargado en agenda*\n\n` +
             `👤 Cliente: ${client.name} — ${client.phone}\n` +

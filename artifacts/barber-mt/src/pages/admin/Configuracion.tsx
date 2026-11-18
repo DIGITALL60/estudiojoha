@@ -11,8 +11,18 @@ const toggleSettings = [
     desc: "Activa o desactiva el bot completamente. Si está apagado, el bot no responderá ningún mensaje ni enviará recordatorios automáticos.",
   },
   {
+    id: "notify_admin_turns",
+    label: "🔕 Avisos de nuevos turnos a la administradora",
+    desc: "Si está apagado, la administradora (Joha) NO recibirá mensajes cuando entre un nuevo turno de cualquier profesional en el salón.",
+  },
+  {
+    id: "notify_staff_turns",
+    label: "👩‍🎨 Avisos a cada profesional de su propio turno",
+    desc: "Envía un mensaje al WhatsApp de la profesional únicamente cuando el turno sea con ella (a Guada García solo le llegan sus propios turnos, no los de Joha ni los del resto).",
+  },
+  {
     id: "reminder_24h",
-    label: "⏰ Recordatorio 24 hs antes",
+    label: "⏰ Recordatorio 24 hs antes a la clienta",
     desc: "El bot envía automáticamente un mensaje de confirmación a la cliente el día anterior al turno.",
   },
   {
@@ -56,6 +66,8 @@ export default function Configuracion() {
   const [whatsappLink, setWhatsappLink] = useState("");
   const [toggles, setToggles] = useState<Record<string, boolean>>({
     whatsapp_notif: true,
+    notify_admin_turns: false,
+    notify_staff_turns: true,
     birthday_auto: false,
     reminder_24h: true,
     reminder_2h: false,
@@ -75,6 +87,8 @@ export default function Configuracion() {
         setWhatsappLink(settings.whatsapp_link || "");
         setToggles({
           whatsapp_notif: settings.whatsapp_notif !== "false",
+          notify_admin_turns: settings.notify_admin_turns === "true",
+          notify_staff_turns: settings.notify_staff_turns !== "false",
           birthday_auto: settings.birthday_auto === "true",
           reminder_24h: settings.reminder_24h !== "false",
           reminder_2h: settings.reminder_2h === "true",
@@ -105,6 +119,8 @@ export default function Configuracion() {
           business_instagram: instagram,
           whatsapp_link: whatsappLink,
           whatsapp_notif: String(toggles.whatsapp_notif),
+          notify_admin_turns: String(toggles.notify_admin_turns),
+          notify_staff_turns: String(toggles.notify_staff_turns),
           birthday_auto: String(toggles.birthday_auto),
           reminder_24h: String(toggles.reminder_24h),
           reminder_2h: String(toggles.reminder_2h),
