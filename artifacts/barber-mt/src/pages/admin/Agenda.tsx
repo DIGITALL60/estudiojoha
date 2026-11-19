@@ -1,7 +1,7 @@
 import { fetchAPI } from "@/lib/api";
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, ChevronRight, Plus, X, Search, Calendar, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, X, Search, Calendar, Trash2, Clock } from "lucide-react";
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, startOfMonth, endOfMonth, isSameMonth, isSameDay } from "date-fns";
 import { es } from "date-fns/locale";
 import AdminLayout from "./AdminLayout";
