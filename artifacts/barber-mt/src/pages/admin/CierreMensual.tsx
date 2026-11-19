@@ -17,6 +17,7 @@ interface Expense {
   category: string;
   paymentMethod?: string;
   payment_method?: string;
+  expenseType?: string;
   date: string;
   supplierId?: string | null;
   supplierName?: string | null;
@@ -26,6 +27,7 @@ interface Appointment {
   id: string;
   date: string;
   time: string;
+  duration?: number;
   price: number;
   status: string;
   paymentMethod?: string;

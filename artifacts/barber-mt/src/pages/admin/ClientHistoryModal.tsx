@@ -38,6 +38,7 @@ export interface AppointmentItem {
   time: string;
   duration?: number;
   price?: number;
+  shopSales?: number | null;
   status: string; // 'agendado' | 'completado' | 'cancelado' | 'ausente'
   paymentMethod?: string | null;
   notes?: string | null;

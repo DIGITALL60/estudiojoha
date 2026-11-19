@@ -24,6 +24,8 @@ interface ExpenseRow {
   amount: number;
   category: string;
   paymentMethod?: string;
+  expenseType?: string;
+  expense_type?: string;
   date: string;
   professionalId?: string;
   supplierId?: string | null;
@@ -170,6 +172,8 @@ export default function Caja() {
     concept: string;
     amount: string;
     category: string;
+    expenseType?: string;
+    expense_type?: string;
     paymentMethod: string;
     wallet: string;
     date: string;

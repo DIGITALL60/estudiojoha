@@ -181,9 +181,9 @@ export async function syncBotPresupuesto({
     const cleanFrom = from.replace(/\D/g, "");
 
     // Search for existing open quote from this phone today or in progress
-    const allQuotes = await db.select().from(presupuestos).where(eq(presupuestos.clientPhone, cleanFrom));
+    const allQuotes = await db.select().from(presupuestos);
     const activeQuote = allQuotes.find(
-      q => (q.channel?.includes("Asistente") || q.channel?.includes("Bot")) && (q.date === today || q.status === "nuevo" || q.status === "enviado")
+      q => phonesMatch(q.clientPhone, from) && (q.date === today || q.status === "nuevo" || q.status === "enviado")
     );
 
     // Resolve client name if not provided or placeholder
@@ -480,20 +480,19 @@ export async function handleBotMessage(from: string, text: string, interactiveId
     // ── WELCOME OR RESUME PENDING CONSULTATION (ARM) ─────────────────────────
     if (session.step === "idle" || isGreeting) {
       // Check if client has a pending open consultation in CRM (e.g. they asked earlier and went cold)
-      const cleanFrom = from.replace(/\D/g, "");
-      const allQuotes = await db.select().from(presupuestos).where(eq(presupuestos.clientPhone, cleanFrom));
+      const allQuotes = await db.select().from(presupuestos);
       const openQuote = allQuotes.find(
-        q => (q.status === "enviado" || q.status === "nuevo") && q.serviceDetails
+        q => phonesMatch(q.clientPhone, from) && (q.status === "enviado" || q.status === "nuevo")
       );
 
-      if (openQuote && openQuote.serviceDetails) {
-        const isDecline = [
-          "no", "no gracias", "por ahora no", "cancelar", "cancelo", 
-          "no me interesa", "no quiero", "gracias no", "no por ahora", 
-          "ahora no", "dejar", "baja"
-        ].some(w => normalized === w || normalized.startsWith(w));
+      const isDecline = [
+        "no", "no gracias", "por ahora no", "cancelar", "cancelo", 
+        "no me interesa", "no quiero", "gracias no", "no por ahora", 
+        "ahora no", "dejar", "baja"
+      ].some(w => normalized === w || normalized.startsWith(w));
 
-        if (isDecline) {
+      if (isDecline) {
+        if (openQuote) {
           await syncBotPresupuesto({
             from,
             clientName: openQuote.clientName,
@@ -502,14 +501,17 @@ export async function handleBotMessage(from: string, text: string, interactiveId
             status: "rechazado",
             notes: (openQuote.notes ? openQuote.notes + "\n" : "") + `[Clienta indicó 'No' por WhatsApp — Marcado como No Concretado]`,
           });
-          sessions.delete(from);
-
-          await cloudSendText(
-            from,
-            `¡Entendido! Muchas gracias por avisarnos 💜\n\nSi más adelante querés consultar precios, cursos o reservar cualquier tratamiento, ¡acá estamos para cuando quieras! ✨\n\n¡Que tengas un hermoso día! 🌸`
-          );
-          return;
         }
+        sessions.delete(from);
+
+        await cloudSendText(
+          from,
+          `¡Entendido! Muchas gracias por avisarnos 💜\n\nSi más adelante querés consultar precios, cursos o reservar cualquier tratamiento, ¡acá estamos para cuando quieras! ✨\n\n¡Que tengas un hermoso día! 🌸`
+        );
+        return;
+      }
+
+      if (openQuote && openQuote.serviceDetails) {
 
         const allServices = await db.select().from(services);
         const srv = allServices.find(
@@ -573,9 +575,8 @@ export async function handleBotMessage(from: string, text: string, interactiveId
       ].some(w => normalized === w || normalized.startsWith(w));
 
       if (isDecline) {
-        const cleanFrom = from.replace(/\D/g, "");
-        const allQuotes = await db.select().from(presupuestos).where(eq(presupuestos.clientPhone, cleanFrom));
-        const openQuote = allQuotes.find(q => q.status === "enviado" || q.status === "nuevo");
+        const allQuotes = await db.select().from(presupuestos);
+        const openQuote = allQuotes.find(q => phonesMatch(q.clientPhone, from) && (q.status === "enviado" || q.status === "nuevo"));
         if (openQuote) {
           await syncBotPresupuesto({
             from,
