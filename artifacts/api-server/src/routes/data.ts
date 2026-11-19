@@ -1455,6 +1455,27 @@ router.get("/presupuestos", requireAuth, async (_req, res) => {
     }
 
     const data = await db.select().from(presupuestos);
+    const now = Date.now();
+
+    // Auto-marcar como No Concretado (cancelado) tras 24hs sin respuesta
+    for (const p of data) {
+      if (p.status === "enviado" || p.status === "nuevo") {
+        const createdMs = p.createdAt ? new Date(p.createdAt).getTime() : 0;
+        if (createdMs && (now - createdMs) >= 24 * 60 * 60 * 1000) {
+          const timestampStr = new Date().toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" });
+          const updatedNotes = (p.notes ? p.notes + "\n" : "") + `[Cancelado automáticamente tras 24 hs sin respuesta el ${timestampStr}]`;
+          p.status = "rechazado";
+          p.notes = updatedNotes;
+          p.followupSent = 1;
+          await db.update(presupuestos).set({
+            status: "rechazado",
+            notes: updatedNotes,
+            followupSent: 1,
+          } as any).where(eq(presupuestos.id, p.id)).catch(() => {});
+        }
+      }
+    }
+
     const mapped = (data || []).map(p => ({
       ...p,
       serviceName: p.serviceDetails || "Servicio",

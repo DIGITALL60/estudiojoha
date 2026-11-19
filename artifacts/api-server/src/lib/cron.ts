@@ -241,6 +241,29 @@ export function initCronJobs() {
           logger.error({ itemErr, quoteId: quote.id }, "[ARM] Error sending auto follow-up");
         }
       }
+
+      // ── Auto-close quotes inactive after 24hs ────────────────────────────
+      const expiredQuotes = allQuotes.filter(q => {
+        if (q.status !== "enviado" && q.status !== "nuevo") return false;
+        const createdTime = q.createdAt ? new Date(q.createdAt).getTime() : 0;
+        if (!createdTime) return false;
+        return (now - createdTime) >= 24 * 60 * 60 * 1000;
+      });
+
+      for (const expired of expiredQuotes) {
+        try {
+          const timestampStr = new Date().toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" });
+          const updatedNotes = (expired.notes ? expired.notes + "\n" : "") + `[Cancelado automáticamente tras 24 hs sin respuesta el ${timestampStr}]`;
+          await db.update(presupuestos).set({
+            status: "rechazado",
+            notes: updatedNotes,
+            followupSent: 1,
+          } as any).where(eq(presupuestos.id, expired.id));
+          logger.info({ quoteId: expired.id, client: expired.clientName }, "[ARM] Presupuesto auto-marcado como No Concretado tras 24hs");
+        } catch (closeErr) {
+          logger.error({ closeErr, quoteId: expired.id }, "[ARM] Error auto-cancelling 24h expired quote");
+        }
+      }
     } catch (err) {
       logger.error({ err }, "Error running ARM auto follow-up job");
     }
