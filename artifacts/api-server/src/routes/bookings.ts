@@ -116,13 +116,13 @@ router.post("/", validate(createBookingSchema), async (req, res) => {
       const appId = randomUUID();
       appointmentIds.push(appId);
       serviceNames.push(srv.name);
-      
+
       let priceForThisService = srv.price;
       if (i === selectedServicesDB.length - 1) {
-         priceForThisService = remainingPrice;
+        priceForThisService = remainingPrice;
       } else {
-         priceForThisService = Math.min(priceForThisService, remainingPrice);
-         remainingPrice -= priceForThisService;
+        priceForThisService = Math.min(priceForThisService, remainingPrice);
+        remainingPrice -= priceForThisService;
       }
 
       db.insert(appointments).values({
@@ -138,7 +138,7 @@ router.post("/", validate(createBookingSchema), async (req, res) => {
         notes: finalNotes || null,
         createdAt: new Date(),
       }).run();
-      
+
       currentStartTime = addMinutes(currentStartTime, srv.duration);
     }
 
@@ -294,21 +294,21 @@ router.get("/upsell-suggestion", async (req, res) => {
 router.get("/availability", async (req, res) => {
   try {
     const { date, professionalId, serviceDuration } = req.query;
-    
+
     if (!date || !professionalId || !serviceDuration) {
       return res.status(400).json({ error: "Missing required query parameters: date, professionalId, serviceDuration" });
     }
 
     const requestedDate = String(date);
     const duration = Number(serviceDuration);
-    
+
     // Parse date to get day of week (0 = Sunday, 1 = Monday, ..., 6 = Saturday)
     const [yyyy, mm, dd] = requestedDate.split("-").map(Number);
     const dateObj = new Date(Date.UTC(yyyy, mm - 1, dd));
     if (isNaN(dateObj.getTime())) {
       return res.status(400).json({ error: "Invalid date format" });
     }
-    
+
     const dayOfWeek = dateObj.getUTCDay();
 
     // Sunday is closed
@@ -330,9 +330,9 @@ router.get("/availability", async (req, res) => {
     const schedules = await db.select().from(professional_schedules).where(
       eq(professional_schedules.professionalId, String(professionalId))
     );
-    
+
     let daySchedules = schedules.filter(s => s.dayOfWeek === dayOfWeek);
-    
+
     // Fallback to default salon schedule if no schedule rows exist for this professional
     if (schedules.length === 0) {
       daySchedules = [{ id: "def", professionalId: String(professionalId), dayOfWeek, startTime: "09:00", endTime: "20:00" }];
@@ -350,7 +350,7 @@ router.get("/availability", async (req, res) => {
       })
       .from(appointments)
       .where(eq(appointments.professionalId, String(professionalId)));
-    
+
     const dayAppointments = existingAppointments.filter(a => a.date === requestedDate && a.status !== "cancelado");
 
     // Helper to parse HH:mm to minutes from midnight
@@ -358,7 +358,7 @@ router.get("/availability", async (req, res) => {
       const [h, m] = timeStr.split(":").map(Number);
       return h * 60 + m;
     };
-    
+
     // Helper to format minutes to HH:mm
     const formatTime = (mins: number) => {
       const h = Math.floor(mins / 60).toString().padStart(2, "0");
@@ -456,7 +456,7 @@ router.post("/cancel/:id", async (req, res) => {
   try {
     const { id } = req.params as { id: string };
     const [app] = await db.select().from(appointments).where(eq(appointments.id, id)).limit(1);
-    
+
     if (!app) return res.status(404).json({ error: "Turno no encontrado" });
     if (app.status !== "agendado") return res.status(400).json({ error: "El turno ya no puede ser cancelado" });
 
@@ -470,7 +470,7 @@ router.post("/cancel/:id", async (req, res) => {
     }
 
     await db.update(appointments).set({ status: "cancelado" }).where(eq(appointments.id, id));
-    
+
     // Optional: Send cancellation WhatsApp to professional/admin here
 
     return res.json({ success: true });

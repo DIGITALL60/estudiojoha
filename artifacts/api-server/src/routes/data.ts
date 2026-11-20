@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db, professionals, services, clients, appointments, professional_schedules, professional_services, products, service_products, expenses, app_settings, blocked_dates, vouchers, suppliers, consumed_supplies, presupuestos } from "@workspace/db";
 
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { cloudSendText, cloudSendTemplate } from "../lib/whatsapp-cloud.js";
 import { logger } from "../lib/logger.js";
@@ -493,9 +493,172 @@ router.get("/appointments", requireAuth, async (req, res) => {
 
 router.post("/appointments", requireAuth, async (req, res) => {
   try {
-    const { clientId, professionalId, serviceId, date, time, duration, price, status, notes } = req.body;
+    const { clientId, professionalId, serviceId, serviceIds, date, time, duration, price, status, notes } = req.body;
+    const sIds: string[] = (Array.isArray(serviceIds) && serviceIds.length > 0)
+      ? serviceIds
+      : (serviceId ? [serviceId] : []);
+
+    if (sIds.length === 0) {
+      return res.status(400).json({ error: "Al menos un servicio es obligatorio" });
+    }
+
     const dur = Number(duration);
 
+    // Multi-service flow (ej: semi + capping, manos y pies)
+    if (sIds.length > 1) {
+      if (status !== "completado") {
+        const availability = await isTimeSlotAvailable(date, professionalId, dur, time);
+        if (!availability.available) {
+          return res.status(409).json({ error: availability.reason || "Horario no disponible para la duración total seleccionada" });
+        }
+      }
+
+      const allSelectedServices = await db.select().from(services).where(inArray(services.id, sIds));
+      const orderedServices = sIds
+        .map(id => allSelectedServices.find(s => s.id === id))
+        .filter((s): s is typeof allSelectedServices[number] => Boolean(s));
+
+      const addMinutes = (timeStr: string, minutes: number) => {
+        const [h, m] = timeStr.split(":").map(Number);
+        const total = h * 60 + m + minutes;
+        return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+      };
+
+      let currentStartTime = time;
+      let remainingPrice = Number(price);
+      let remainingDuration = dur || orderedServices.reduce((acc, s) => acc + (s.duration || 60), 0);
+      const createdAppointments = [];
+      const serviceNames: string[] = [];
+
+      for (let i = 0; i < orderedServices.length; i++) {
+        const srv = orderedServices[i];
+        const appId = randomUUID();
+        serviceNames.push(srv.name);
+
+        let srvPrice = srv.price;
+        if (i === orderedServices.length - 1) {
+          srvPrice = remainingPrice;
+        } else {
+          srvPrice = Math.min(srv.price, remainingPrice);
+          remainingPrice -= srvPrice;
+        }
+
+        let srvDur = srv.duration || 60;
+        if (i === orderedServices.length - 1) {
+          srvDur = remainingDuration;
+        } else {
+          srvDur = Math.min(srvDur, remainingDuration);
+          remainingDuration -= srvDur;
+        }
+
+        const appointmentNotes = notes
+          ? `${notes}\n(Combo: ${srv.name})`
+          : `(Combo: ${srv.name})`;
+
+        await db.insert(appointments).values({
+          id: appId,
+          clientId,
+          professionalId,
+          serviceId: srv.id,
+          date,
+          time: currentStartTime,
+          duration: srvDur,
+          price: Math.max(0, srvPrice),
+          status: status ?? "agendado",
+          paymentMethod: req.body.paymentMethod || "Efectivo",
+          notes: appointmentNotes,
+          shopSales: i === 0 && req.body.shopSales ? Number(req.body.shopSales) : 0,
+          createdAt: new Date(),
+        });
+
+        const [created] = await db.select().from(appointments).where(eq(appointments.id, appId)).limit(1);
+        createdAppointments.push(created);
+
+        if (status === "completado") {
+          const recipes = await db.select().from(service_products).where(eq(service_products.serviceId, srv.id));
+          for (const recipe of recipes) {
+            const [product] = await db.select().from(products).where(eq(products.id, recipe.productId));
+            if (product) {
+              await db.update(products).set({ stock: product.stock - recipe.amount }).where(eq(products.id, product.id));
+            }
+          }
+        }
+
+        currentStartTime = addMinutes(currentStartTime, srvDur);
+      }
+
+      if (status === "completado" && notes) {
+        const match = notes.match(/\[SHOP_SALES\](.*?)\[\/SHOP_SALES\]/);
+        if (match) {
+          try {
+            const shopItems = JSON.parse(match[1]);
+            for (const item of shopItems) {
+              const [product] = await db.select().from(products).where(eq(products.id, item.id));
+              if (product) {
+                await db.update(products).set({ stock: product.stock - item.qty }).where(eq(products.id, product.id));
+              }
+            }
+          } catch(e) {}
+        }
+      }
+
+      // WhatsApp unified notification
+      try {
+        const [client] = await db.select().from(clients).where(eq(clients.id, clientId)).limit(1);
+        const [prof] = await db.select().from(professionals).where(eq(professionals.id, professionalId)).limit(1);
+        const allProfessionals = await db.select().from(professionals);
+        const admin = allProfessionals.find(p => p.role.toLowerCase() === "admin");
+        const whatsappEnabled = await getBoolSetting("whatsapp_notif");
+        const businessAddress = await getSetting("business_address", "Río Segundo, Córdoba");
+
+        if (client && prof && whatsappEnabled) {
+          const joinedServices = serviceNames.join(" + ");
+          const clientMsg =
+            `¡Hola ${client.name}! 👋\n\n` +
+            `Tu turno en *Estudio Joha Molinero* está confirmado ✅\n\n` +
+            `📅 Fecha: *${date}*\n` +
+            `⏰ Horario: *${time} a ${currentStartTime}hs* (${dur} min)\n` +
+            `💅 Servicios: *${joinedServices}*\n` +
+            `💰 Total: *$${Number(price).toLocaleString("es-AR")}*\n` +
+            `👩‍🎨 Profesional: ${prof.name}\n\n` +
+            `📍 ${businessAddress}\n\n` +
+            `Si necesitás cancelar o reprogramar, avisanos con anticipación.\n¡Gracias por elegirnos! 💜`;
+
+          await cloudSendText(client.phone, clientMsg);
+
+          const notifyAdminTurns = await getBoolSetting("notify_admin_turns");
+          const notifyStaffTurns = await getBoolSetting("notify_staff_turns");
+
+          if (notifyStaffTurns && prof.phone) {
+            const profMsg =
+              `🔔 *Nuevo turno asignado (manual)*\n\n` +
+              `👤 Cliente: ${client.name}\n` +
+              `📱 Teléfono: ${client.phone}\n` +
+              `📅 Fecha: ${date}\n` +
+              `⏰ Horario: ${time} a ${currentStartTime}hs (${dur} min)\n` +
+              `💅 Servicios: ${joinedServices}`;
+            await cloudSendText(prof.phone, profMsg);
+          }
+
+          if (notifyAdminTurns && admin?.phone && admin.phone !== prof.phone) {
+            const adminMsg =
+              `🆕 *Nuevo turno cargado en agenda*\n\n` +
+              `👤 Cliente: ${client.name} — ${client.phone}\n` +
+              `📅 Fecha: ${date} a las ${time}hs\n` +
+              `💅 Servicios: ${joinedServices}\n` +
+              `👩‍🎨 A cargo de: ${prof.name}`;
+            await cloudSendText(admin.phone, adminMsg);
+          }
+        }
+      } catch (msgErr) {
+        logger.error({ msgErr }, "Error sending WhatsApp notifications for multi-service manual appointment");
+      }
+
+      return res.status(201).json(createdAppointments[0]);
+    }
+
+    // Single-service flow
+    const singleServiceId = sIds[0];
     if (status !== "completado") {
       const availability = await isTimeSlotAvailable(date, professionalId, dur, time);
       if (!availability.available) {
@@ -505,7 +668,7 @@ router.post("/appointments", requireAuth, async (req, res) => {
 
     const id = randomUUID();
     await db.insert(appointments).values({
-      id, clientId, professionalId, serviceId,
+      id, clientId, professionalId, serviceId: singleServiceId,
       date, time,
       duration: Number(duration),
       price: Number(price),
@@ -519,7 +682,7 @@ router.post("/appointments", requireAuth, async (req, res) => {
 
     // If created as completado (manual sale), deduct stock immediately
     if (status === "completado") {
-      const recipes = await db.select().from(service_products).where(eq(service_products.serviceId, serviceId));
+      const recipes = await db.select().from(service_products).where(eq(service_products.serviceId, singleServiceId));
       for (const recipe of recipes) {
         const [product] = await db.select().from(products).where(eq(products.id, recipe.productId));
         if (product) {
@@ -548,7 +711,7 @@ router.post("/appointments", requireAuth, async (req, res) => {
       const { cloudSendText, cloudSendTemplate } = await import("../lib/whatsapp-cloud.js");
       const [client] = await db.select().from(clients).where(eq(clients.id, clientId)).limit(1);
       const [prof] = await db.select().from(professionals).where(eq(professionals.id, professionalId)).limit(1);
-      const [srv] = await db.select().from(services).where(eq(services.id, serviceId)).limit(1);
+      const [srv] = await db.select().from(services).where(eq(services.id, singleServiceId)).limit(1);
       
       const allProfessionals = await db.select().from(professionals);
       const admin = allProfessionals.find(p => p.role.toLowerCase() === "admin");
@@ -668,7 +831,7 @@ router.delete("/appointments/:id", requireAuth, async (req, res) => {
 router.patch("/appointments/:id", requireAuth, async (req, res) => {
   try {
     const { id } = req.params as { id: string };
-    const { status, notes, price, paymentMethod, professionalId, date, time, serviceId } = req.body;
+    const { status, notes, price, duration, paymentMethod, professionalId, date, time, serviceId, notifyWhatsApp } = req.body;
 
     const [current] = await db.select().from(appointments).where(eq(appointments.id, id));
     if (!current) return res.status(404).json({ error: "Appointment not found" });
@@ -726,10 +889,16 @@ router.patch("/appointments/:id", requireAuth, async (req, res) => {
       }
     }
 
+    const isRescheduled = 
+      (date !== undefined && date !== current.date) || 
+      (time !== undefined && time !== current.time) || 
+      (professionalId !== undefined && professionalId !== current.professionalId);
+
     await db.update(appointments).set({ 
       status: status !== undefined ? status : undefined, 
       notes: notes !== undefined ? notes : undefined, 
       price: price !== undefined ? Number(price) : undefined,
+      duration: duration !== undefined ? Number(duration) : undefined,
       shopSales: req.body.shopSales !== undefined ? Number(req.body.shopSales) : undefined,
       paymentMethod: paymentMethod !== undefined ? paymentMethod : undefined,
       professionalId: professionalId !== undefined ? professionalId : undefined,
@@ -738,6 +907,36 @@ router.patch("/appointments/:id", requireAuth, async (req, res) => {
       serviceId: serviceId !== undefined ? serviceId : undefined,
     }).where(eq(appointments.id, id));
     const [updated] = await db.select().from(appointments).where(eq(appointments.id, id)).limit(1);
+
+    // If reschedule occurred and notifyWhatsApp is requested
+    if (notifyWhatsApp && isRescheduled && updated) {
+      try {
+        const [client] = await db.select().from(clients).where(eq(clients.id, updated.clientId)).limit(1);
+        const [prof] = await db.select().from(professionals).where(eq(professionals.id, updated.professionalId)).limit(1);
+        const [srv] = await db.select().from(services).where(eq(services.id, updated.serviceId)).limit(1);
+        const whatsappEnabled = await getBoolSetting("whatsapp_notif");
+        const businessAddress = await getSetting("business_address", "Río Segundo, Córdoba");
+
+        if (client?.phone && whatsappEnabled && prof && srv) {
+          const [y, m, d] = (updated.date || "").split("-");
+          const dateDisplay = (d && m && y) ? `${d}/${m}/${y}` : updated.date;
+          const rescheduleMsg =
+            `¡Hola ${client.name}! 👋\n\n` +
+            `Tu turno en *Estudio Joha Molinero* fue reprogramado con éxito ✅\n\n` +
+            `📅 Nueva fecha: *${dateDisplay}*\n` +
+            `⏰ Nueva hora: *${updated.time}hs*\n` +
+            `💅 Servicio: ${srv.name}\n` +
+            `👩‍🎨 Profesional: ${prof.name}\n\n` +
+            `📍 ${businessAddress}\n\n` +
+            `Si necesitás hacer algún cambio adicional, avisanos.\n¡Te esperamos! 💜`;
+
+          await cloudSendText(client.phone, rescheduleMsg);
+        }
+      } catch (waErr) {
+        logger.error({ waErr }, "Error enviando notificación de turno reprogramado por WhatsApp");
+      }
+    }
+
     return res.json(updated);
   } catch (err) {
     return res.status(500).json({ error: "Failed to update appointment" });

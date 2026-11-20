@@ -1,20 +1,21 @@
 import { fetchAPI } from "@/lib/api";
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, ChevronRight, Plus, X, Search, Calendar, Trash2, Clock } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, X, Search, Calendar, Trash2, Clock, Check, Edit3 } from "lucide-react";
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, startOfMonth, endOfMonth, isSameMonth, isSameDay } from "date-fns";
 import { es } from "date-fns/locale";
 import AdminLayout from "./AdminLayout";
 
-interface Professional { id: string; name: string; color: string; initial: string; }
+interface Professional { id: string; name: string; color: string; initial: string; role?: string; }
 interface Client { id: string; name: string; phone: string; }
-interface Service { id: string; name: string; duration: number; price: number; }
+interface Service { id: string; name: string; duration: number; price: number; category?: string; }
 interface Product { id: string; name: string; price: number; stock: number; }
 interface Appointment {
   id: string; date: string; time: string; duration: number; price: number;
   status: string; clientName: string; professionalColor: string;
   professionalName: string; serviceName: string; notes?: string;
   clientId: string; clientNotes?: string;
+  professionalId?: string; serviceId?: string;
 }
 
 const hours = Array.from({ length: 14 }, (_, i) => `${String(i + 7).padStart(2, "0")}:00`);
@@ -38,7 +39,9 @@ function NewTurnModal({ onClose, defaultDate, defaultTime = "10:00", onCreated, 
   const [newClientName, setNewClientName] = useState("");
   const [newClientPhone, setNewClientPhone] = useState("");
   const [professionalId, setProfessionalId] = useState("");
-  const [serviceId, setServiceId] = useState("");
+  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
+  const [serviceSearch, setServiceSearch] = useState("");
+  const [showServiceDropdown, setShowServiceDropdown] = useState(false);
   const [date, setDate] = useState(defaultDate);
   const [time, setTime] = useState(defaultTime);
   const [price, setPrice] = useState("0");
@@ -54,30 +57,53 @@ function NewTurnModal({ onClose, defaultDate, defaultTime = "10:00", onCreated, 
     fetchAPI("/api/data/professional-services").then(r => r.json()).then(setProfessionalServices).catch(console.error);
   }, []);
 
-  const selectedService = services.find(s => s.id === serviceId);
+  const selectedServicesList = services.filter(s => selectedServiceIds.includes(s.id));
 
   const eligibleProfessionals = professionals.filter(p => {
     if (p.role?.toLowerCase() === "admin") return false;
-    if (!serviceId) return true;
-    const explicit = professionalServices.some(ps => ps.professionalId === p.id && ps.serviceId === serviceId);
-    if (explicit) return true;
-    const hasAny = professionalServices.some(ps => ps.professionalId === p.id);
-    if (!hasAny && selectedService) {
-      const cats = (p.role || "").split(",").map(r => r.trim().toLowerCase());
-      return cats.includes((selectedService.category ?? "").toLowerCase());
-    }
-    return false;
+    if (selectedServiceIds.length === 0) return true;
+    return selectedServiceIds.every(sId => {
+      const explicit = professionalServices.some(ps => ps.professionalId === p.id && ps.serviceId === sId);
+      if (explicit) return true;
+      const hasAny = professionalServices.some(ps => ps.professionalId === p.id);
+      if (!hasAny) {
+        const srv = services.find(s => s.id === sId);
+        if (srv) {
+          const cats = (p.role || "").split(",").map(r => r.trim().toLowerCase());
+          return cats.includes((srv.category ?? "").toLowerCase());
+        }
+      }
+      return false;
+    });
   });
 
   const filteredClients = clients.filter(c =>
     c.name.toLowerCase().includes(clientSearch.toLowerCase()) || c.phone.includes(clientSearch)
   );
 
-  const handleServiceChange = (id: string) => {
-    setServiceId(id);
-    setProfessionalId("");
-    const srv = services.find(s => s.id === id);
-    if (srv) { setPrice(String(srv.price)); setDuration(String(srv.duration)); }
+  const handleToggleService = (s: Service & { category?: string }) => {
+    let nextIds: string[];
+    if (selectedServiceIds.includes(s.id)) {
+      nextIds = selectedServiceIds.filter(id => id !== s.id);
+    } else {
+      nextIds = [...selectedServiceIds, s.id];
+    }
+    setSelectedServiceIds(nextIds);
+    const nextServices = services.filter(item => nextIds.includes(item.id));
+    const totalDur = nextServices.reduce((sum, item) => sum + (item.duration || 60), 0);
+    const totalPrice = nextServices.reduce((sum, item) => sum + (item.price || 0), 0);
+    setDuration(String(totalDur || 60));
+    setPrice(String(totalPrice || 0));
+  };
+
+  const handleRemoveService = (idToRemove: string) => {
+    const nextIds = selectedServiceIds.filter(id => id !== idToRemove);
+    setSelectedServiceIds(nextIds);
+    const nextServices = services.filter(item => nextIds.includes(item.id));
+    const totalDur = nextServices.reduce((sum, item) => sum + (item.duration || 60), 0);
+    const totalPrice = nextServices.reduce((sum, item) => sum + (item.price || 0), 0);
+    setDuration(String(totalDur || 60));
+    setPrice(String(totalPrice || 0));
   };
 
   const handleCreate = async () => {
@@ -107,15 +133,26 @@ function NewTurnModal({ onClose, defaultDate, defaultTime = "10:00", onCreated, 
       }
     }
 
-    if (!clientId || !professionalId || !serviceId || !date || !time) {
-      setError("Completá todos los campos obligatorios"); return;
+    if (!clientId || !professionalId || selectedServiceIds.length === 0 || !date || !time) {
+      setError("Completá todos los campos obligatorios (cliente, profesional, al menos un servicio, fecha y hora)");
+      return;
     }
     setSaving(true); setError("");
     try {
       const res = await fetchAPI("/api/data/appointments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clientId, professionalId, serviceId, date, time, duration, price, notes }),
+        body: JSON.stringify({
+          clientId,
+          professionalId,
+          serviceId: selectedServiceIds[0],
+          serviceIds: selectedServiceIds,
+          date,
+          time,
+          duration,
+          price,
+          notes,
+        }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -197,14 +234,116 @@ function NewTurnModal({ onClose, defaultDate, defaultTime = "10:00", onCreated, 
               </div>
             )}
           </div>
-          {/* Service */}
-          <div>
-            <label className="text-[9px] font-bold tracking-[0.2em] uppercase text-muted-foreground block mb-1.5">Servicio *</label>
-            <select value={serviceId} onChange={e => handleServiceChange(e.target.value)}
-              className="w-full bg-background border border-border rounded-sm px-3 py-2.5 text-xs text-foreground focus:outline-none focus:border-primary">
-              <option value="">Elegí un servicio</option>
-              {services.map(s => <option key={s.id} value={s.id}>{s.name} — ${s.price.toLocaleString("es-AR")}</option>)}
-            </select>
+          {/* Service (Multi-servicio) */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-[9px] font-bold tracking-[0.2em] uppercase text-muted-foreground">
+                Servicio(s) * (podés elegir varios, ej: semi + capping)
+              </label>
+              {selectedServiceIds.length > 0 && (
+                <span className="text-[10px] font-bold text-primary">
+                  {selectedServiceIds.length} {selectedServiceIds.length === 1 ? "servicio" : "servicios"}
+                </span>
+              )}
+            </div>
+
+            {/* Chips de servicios seleccionados */}
+            {selectedServicesList.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 p-2 bg-primary/5 border border-primary/20 rounded-sm">
+                {selectedServicesList.map(s => (
+                  <span
+                    key={s.id}
+                    className="inline-flex items-center gap-1.5 bg-background border border-primary/30 text-foreground px-2 py-1 rounded text-xs shadow-2xs font-medium"
+                  >
+                    <span>{s.name}</span>
+                    <span className="text-[10px] text-muted-foreground font-mono">
+                      ${s.price.toLocaleString("es-AR")} · {s.duration}m
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveService(s.id)}
+                      className="text-muted-foreground hover:text-red-400 p-0.5 rounded transition-colors"
+                      title="Quitar servicio"
+                    >
+                      <X size={12} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Buscador y dropdown de servicios */}
+            <div className="relative">
+              <div className="relative flex items-center">
+                <Search size={12} className="absolute left-3 text-muted-foreground pointer-events-none" />
+                <input
+                  type="text"
+                  value={serviceSearch}
+                  onFocus={() => setShowServiceDropdown(true)}
+                  onChange={e => {
+                    setServiceSearch(e.target.value);
+                    if (!showServiceDropdown) setShowServiceDropdown(true);
+                  }}
+                  placeholder={
+                    selectedServiceIds.length > 0
+                      ? "+ Agregar otro servicio (ej: capping, pies)..."
+                      : "Buscar y elegir servicio (ej: semi, capping, pies)..."
+                  }
+                  className="w-full bg-background border border-border rounded-sm pl-8 pr-8 py-2.5 text-xs text-foreground focus:outline-none focus:border-primary"
+                />
+                {showServiceDropdown && (
+                  <button
+                    type="button"
+                    onClick={() => setShowServiceDropdown(false)}
+                    className="absolute right-2 text-muted-foreground hover:text-foreground text-xs p-1"
+                  >
+                    <X size={13} />
+                  </button>
+                )}
+              </div>
+
+              {showServiceDropdown && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-md shadow-xl z-50 max-h-52 overflow-y-auto">
+                  {services
+                    .filter(s => {
+                      const q = serviceSearch.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                      const name = s.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                      const cat = (s.category || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                      return !q || name.includes(q) || cat.includes(q);
+                    })
+                    .map(s => {
+                      const isSel = selectedServiceIds.includes(s.id);
+                      return (
+                        <div
+                          key={s.id}
+                          onClick={() => handleToggleService(s)}
+                          className={`flex items-center justify-between px-3 py-2 text-xs cursor-pointer hover:bg-accent/15 transition-colors border-b border-border/30 last:border-0 ${
+                            isSel ? "bg-primary/10 font-semibold" : ""
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0 ${
+                              isSel ? "bg-primary border-primary text-primary-foreground" : "border-muted-foreground/40"
+                            }`}>
+                              {isSel && <Check size={10} strokeWidth={3} />}
+                            </div>
+                            <span className="truncate">{s.name}</span>
+                            {s.category && (
+                              <span className="text-[9px] text-muted-foreground px-1.5 py-0.5 rounded bg-muted/40 uppercase">
+                                {s.category}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0 text-muted-foreground text-[11px]">
+                            <span>⏱️ {s.duration}m</span>
+                            <span className="font-mono font-bold text-foreground">${s.price.toLocaleString("es-AR")}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
+            </div>
           </div>
           {/* Professional */}
           <div>
@@ -263,6 +402,12 @@ function NewTurnModal({ onClose, defaultDate, defaultTime = "10:00", onCreated, 
 
 function EditTurnModal({ app, onClose, onUpdated, isAdmin }: { app: Appointment; onClose: () => void; onUpdated: () => void; isAdmin: boolean }) {
   const [status, setStatus] = useState(app.status || "agendado");
+  const [date, setDate] = useState(app.date);
+  const [time, setTime] = useState(app.time);
+  const [professionalId, setProfessionalId] = useState(app.professionalId || "");
+  const [isEditingSchedule, setIsEditingSchedule] = useState(false);
+  const [notifyWhatsApp, setNotifyWhatsApp] = useState(true);
+  const [professionals, setProfessionals] = useState<(Professional & { role?: string })[]>([]);
   const [duration, setDuration] = useState<number>(app.duration || 60);
   const [notes, setNotes] = useState(app.notes || "");
   const [clientNotes, setClientNotes] = useState(app.clientNotes || "");
@@ -282,6 +427,7 @@ function EditTurnModal({ app, onClose, onUpdated, isAdmin }: { app: Appointment;
   const [selectedProducts, setSelectedProducts] = useState<{id: string, name: string, price: number, qty: number}[]>([]);
 
   useEffect(() => {
+    fetchAPI("/api/data/professionals").then(r => r.json()).then(setProfessionals).catch(console.error);
     fetchAPI("/api/data/products").then(r => r.json()).then(setProducts).catch(console.error);
     
     let currentNotes = app.notes || "";
@@ -302,6 +448,13 @@ function EditTurnModal({ app, onClose, onUpdated, isAdmin }: { app: Appointment;
     
     setNotes(currentNotes.trim());
   }, [app]);
+
+  useEffect(() => {
+    if (!professionalId && professionals.length > 0 && app.professionalName) {
+      const match = professionals.find(p => p.name === app.professionalName);
+      if (match) setProfessionalId(match.id);
+    }
+  }, [professionals, app]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -355,15 +508,21 @@ function EditTurnModal({ app, onClose, onUpdated, isAdmin }: { app: Appointment;
         finalNotes += `\n\n[COMPROBANTE]${receiptBase64}`;
       }
 
+      const hasRescheduled = date !== app.date || time !== app.time || (professionalId && professionalId !== app.professionalId);
+
       await fetchAPI(`/api/data/appointments/${app.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           status, 
+          date,
+          time,
+          professionalId: professionalId || undefined,
           duration: Number(duration) || app.duration || 60,
           notes: finalNotes,
           paymentMethod: paymentMethod === "Transferencia" ? `Transferencia (${bankAccount})` : paymentMethod,
-          shopSales: Number(shopSales)
+          shopSales: Number(shopSales),
+          notifyWhatsApp: notifyWhatsApp && hasRescheduled,
         })
       });
 
@@ -426,17 +585,102 @@ function EditTurnModal({ app, onClose, onUpdated, isAdmin }: { app: Appointment;
               <p className="text-xs text-foreground font-medium">{app.serviceName}</p>
             </div>
             <div>
-              <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted-foreground mb-1">Profesional</p>
-              <p className="text-xs text-foreground font-medium">{app.professionalName}</p>
-            </div>
-            <div>
-              <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted-foreground mb-1">Fecha y Hora</p>
-              <p className="text-xs text-foreground font-medium">{app.date} a las {app.time}hs</p>
-            </div>
-            <div>
               <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted-foreground mb-1">Precio Servicio</p>
               <p className="text-xs text-foreground font-bold">${app.price?.toLocaleString("es-AR")}</p>
             </div>
+          </div>
+
+          {/* Section: Editar Día, Hora y Profesional */}
+          <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <Calendar className="text-primary" size={13} />
+                <span className="text-[10px] font-bold tracking-[0.2em] uppercase text-muted-foreground">
+                  Fecha y Horario
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditingSchedule(!isEditingSchedule)}
+                className="text-xs font-semibold text-primary hover:underline flex items-center gap-1 px-2 py-0.5 rounded hover:bg-primary/10 transition-colors"
+              >
+                <Edit3 size={11} />
+                {isEditingSchedule ? "Cerrar edición" : "Editar día y hora"}
+              </button>
+            </div>
+
+            {!isEditingSchedule ? (
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-foreground">
+                    📅 {date.split("-").reverse().join("/")}
+                  </span>
+                  <span className="font-bold text-primary">
+                    ⏰ {time}hs
+                  </span>
+                  <span className="text-muted-foreground text-[11px]">
+                    ({duration} min)
+                  </span>
+                </div>
+                <div className="text-[11px] text-muted-foreground">
+                  👩‍🎨 Profesional: <span className="font-medium text-foreground">{professionals.find(p => p.id === professionalId)?.name || app.professionalName}</span>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3 pt-1 border-t border-primary/10 animate-in fade-in duration-150">
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="text-[9px] font-bold tracking-wider uppercase text-muted-foreground block mb-1">
+                      Fecha *
+                    </label>
+                    <input
+                      type="date"
+                      value={date}
+                      onChange={e => setDate(e.target.value)}
+                      className="w-full bg-background border border-primary/40 rounded-sm px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:border-primary font-medium"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] font-bold tracking-wider uppercase text-muted-foreground block mb-1">
+                      Hora *
+                    </label>
+                    <input
+                      type="time"
+                      value={time}
+                      onChange={e => setTime(e.target.value)}
+                      className="w-full bg-background border border-primary/40 rounded-sm px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:border-primary font-medium"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[9px] font-bold tracking-wider uppercase text-muted-foreground block mb-1">
+                    Profesional a cargo
+                  </label>
+                  <select
+                    value={professionalId}
+                    onChange={e => setProfessionalId(e.target.value)}
+                    className="w-full bg-background border border-border rounded-sm px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:border-primary"
+                  >
+                    {professionals.filter(p => p.role?.toLowerCase() !== "admin").map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {(date !== app.date || time !== app.time || (professionalId && professionalId !== app.professionalId)) && (app as any).clientPhone && (
+                  <label className="flex items-center gap-2 pt-1 text-xs text-emerald-600 dark:text-emerald-400 font-medium cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={notifyWhatsApp}
+                      onChange={e => setNotifyWhatsApp(e.target.checked)}
+                      className="rounded text-emerald-500 focus:ring-emerald-500 h-3.5 w-3.5"
+                    />
+                    <span>📲 Enviar aviso de reprogramación a la clienta por WhatsApp</span>
+                  </label>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -814,6 +1058,27 @@ export default function Agenda() {
 
   const appsWithPos = calculateOverlaps(dayApps);
 
+  const handleMoveAppointment = async (appId: string, targetDate: string, targetTime: string) => {
+    const targetApp = appointments.find(a => a.id === appId);
+    if (!targetApp) return;
+    if (targetApp.date === targetDate && targetApp.time === targetTime) return;
+
+    try {
+      const res = await fetchAPI(`/api/data/appointments/${appId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: targetDate, time: targetTime }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "No se pudo mover el turno");
+      }
+      fetchAll(true);
+    } catch (err: any) {
+      alert(err.message || "Error al mover el turno");
+    }
+  };
+
   return (
     <AdminLayout title="Agenda" subtitle="Turnos del día"
       actions={
@@ -895,6 +1160,18 @@ export default function Agenda() {
                 const dayApps = appointments.filter(a => a.date === dayStr && (activeProfessional === "all" || a.professionalName === professionals.find(p => p.id === activeProfessional)?.name));
                 return (
                   <div key={i} onClick={() => { setCurrentDate(day); setViewMode("dia"); }}
+                    onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
+                    onDragEnter={(e) => { e.currentTarget.classList.add("bg-primary/20"); }}
+                    onDragLeave={(e) => { e.currentTarget.classList.remove("bg-primary/20"); }}
+                    onDrop={async (e) => {
+                      e.preventDefault();
+                      e.currentTarget.classList.remove("bg-primary/20");
+                      const appId = e.dataTransfer.getData("text/plain");
+                      const app = appointments.find(a => a.id === appId);
+                      if (appId && app) {
+                        await handleMoveAppointment(appId, dayStr, app.time);
+                      }
+                    }}
                     className={`border-b border-r border-border p-1.5 overflow-y-auto cursor-pointer hover:bg-accent/10 transition-colors ${!isSameMonth(day, currentDate) ? "bg-muted/10 opacity-50" : ""}`}>
                     <div className={`text-[10px] font-medium mb-1.5 w-6 h-6 flex items-center justify-center rounded-full ${isSameDay(day, new Date()) ? "bg-primary text-primary-foreground shadow-sm" : "text-foreground"}`}>
                       {format(day, "d")}
@@ -903,11 +1180,17 @@ export default function Agenda() {
                       {dayApps.map(app => {
                         const statusInfo = getStatusCardStyle(app.status);
                         return (
-                          <div key={app.id} onClick={(e) => { e.stopPropagation(); setEditingApp(app); }}
+                          <div key={app.id}
+                            draggable
+                            onDragStart={(e) => {
+                              e.dataTransfer.setData("text/plain", app.id);
+                              e.dataTransfer.effectAllowed = "move";
+                            }}
+                            onClick={(e) => { e.stopPropagation(); setEditingApp(app); }}
                             onMouseEnter={(e) => setHoveredApp({ app, x: e.clientX, y: e.clientY })}
                             onMouseMove={(e) => setHoveredApp(prev => prev ? { ...prev, x: e.clientX, y: e.clientY } : null)}
                             onMouseLeave={() => setHoveredApp(null)}
-                            className="text-[9px] px-1.5 py-1 rounded-sm truncate cursor-pointer hover:opacity-90 transition-opacity font-medium shadow-xs"
+                            className="text-[9px] px-1.5 py-1 rounded-sm truncate cursor-grab active:cursor-grabbing hover:opacity-90 transition-opacity font-medium shadow-xs"
                             style={statusInfo.style}>
                             <span className={statusInfo.textClass}>{app.time}</span>{" "}
                             <span className="font-bold">{app.clientName}</span>
@@ -945,7 +1228,20 @@ export default function Agenda() {
                       </div>
                       <div className="absolute inset-0 flex flex-col z-0">
                         {hours.map((h, j) => (
-                          <div key={h} className="h-16 hover:bg-accent/5 cursor-pointer group" onClick={() => { setSelectedSlotDate(dayStr); setSelectedSlotTime(h); setShowModal(true); }} />
+                          <div key={h} className="h-16 hover:bg-accent/5 cursor-pointer group transition-colors"
+                            onClick={() => { setSelectedSlotDate(dayStr); setSelectedSlotTime(h); setShowModal(true); }}
+                            onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
+                            onDragEnter={(e) => { e.currentTarget.classList.add("bg-primary/20"); }}
+                            onDragLeave={(e) => { e.currentTarget.classList.remove("bg-primary/20"); }}
+                            onDrop={async (e) => {
+                              e.preventDefault();
+                              e.currentTarget.classList.remove("bg-primary/20");
+                              const appId = e.dataTransfer.getData("text/plain");
+                              if (appId) {
+                                await handleMoveAppointment(appId, dayStr, h);
+                              }
+                            }}
+                          />
                         ))}
                       </div>
                        {dAppsWithPos.map(app => {
@@ -954,11 +1250,16 @@ export default function Agenda() {
                            const statusInfo = getStatusCardStyle(app.status);
                            return (
                              <div key={app.id}
+                               draggable
+                               onDragStart={(e) => {
+                                 e.dataTransfer.setData("text/plain", app.id);
+                                 e.dataTransfer.effectAllowed = "move";
+                               }}
                                onClick={(e) => { e.stopPropagation(); setEditingApp(app); }}
                                onMouseEnter={(e) => setHoveredApp({ app, x: e.clientX, y: e.clientY })}
                                onMouseMove={(e) => setHoveredApp(prev => prev ? { ...prev, x: e.clientX, y: e.clientY } : null)}
                                onMouseLeave={() => setHoveredApp(null)}
-                               className="absolute rounded-sm overflow-hidden shadow-sm transition-all hover:z-20 z-10 cursor-pointer flex flex-col justify-start px-1.5 py-1"
+                               className="absolute rounded-sm overflow-hidden shadow-sm transition-all hover:z-20 z-10 cursor-grab active:cursor-grabbing flex flex-col justify-start px-1.5 py-1"
                                style={{ 
                                  top: `${app.top}px`, 
                                  height: `${app.height}px`, 
@@ -999,8 +1300,20 @@ export default function Agenda() {
               {/* Interactive slots */}
               <div className="absolute inset-0 flex flex-col z-0">
                 {hours.map((h, i) => (
-                  <div key={h} className="h-16 hover:bg-accent/5 cursor-pointer flex items-center justify-center group"
-                    onClick={() => { setSelectedSlotDate(todayStr); setSelectedSlotTime(h); setShowModal(true); }}>
+                  <div key={h} className="h-16 hover:bg-accent/5 cursor-pointer flex items-center justify-center group transition-colors"
+                    onClick={() => { setSelectedSlotDate(todayStr); setSelectedSlotTime(h); setShowModal(true); }}
+                    onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
+                    onDragEnter={(e) => { e.currentTarget.classList.add("bg-primary/20"); }}
+                    onDragLeave={(e) => { e.currentTarget.classList.remove("bg-primary/20"); }}
+                    onDrop={async (e) => {
+                      e.preventDefault();
+                      e.currentTarget.classList.remove("bg-primary/20");
+                      const appId = e.dataTransfer.getData("text/plain");
+                      if (appId) {
+                        await handleMoveAppointment(appId, todayStr, h);
+                      }
+                    }}
+                  >
                     <span className="opacity-0 group-hover:opacity-100 text-[10px] text-muted-foreground">+ Nuevo turno</span>
                   </div>
                 ))}
@@ -1014,11 +1327,16 @@ export default function Agenda() {
                 
                 return (
                   <div key={app.id}
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData("text/plain", app.id);
+                      e.dataTransfer.effectAllowed = "move";
+                    }}
                     onClick={(e) => { e.stopPropagation(); setEditingApp(app); }}
                     onMouseEnter={(e) => setHoveredApp({ app, x: e.clientX, y: e.clientY })}
                     onMouseMove={(e) => setHoveredApp(prev => prev ? { ...prev, x: e.clientX, y: e.clientY } : null)}
                     onMouseLeave={() => setHoveredApp(null)}
-                    className="absolute rounded-sm overflow-hidden shadow-sm transition-all hover:z-20 z-10 cursor-pointer flex flex-col justify-start px-2 py-1"
+                    className="absolute rounded-sm overflow-hidden shadow-sm transition-all hover:z-20 z-10 cursor-grab active:cursor-grabbing flex flex-col justify-start px-2 py-1"
                     style={{
                       top: `${app.top}px`,
                       height: `${app.height}px`,
@@ -1082,9 +1400,9 @@ export default function Agenda() {
               <span className="text-xs font-medium text-foreground">📅 {app.date.split("-").reverse().join("/")}</span>
               <span className="text-xs font-medium text-foreground">⏰ {app.time}hs</span>
             </div>
-            <div className="flex items-center justify-between mt-2 pt-1">
+            <div className="flex items-center justify-between mt-2 pt-1 border-t border-border/40">
               <span className="text-xs font-semibold text-foreground">${app.price?.toLocaleString("es-AR")}</span>
-              <span className="text-[10px] text-muted-foreground/60 italic">Clic para editar</span>
+              <span className="text-[10px] text-primary/80 font-medium italic">Clic para editar día y hora · Arrastrá para mover</span>
             </div>
           </div>
         );
